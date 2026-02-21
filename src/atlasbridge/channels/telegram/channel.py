@@ -367,8 +367,8 @@ class TelegramChannel(BaseChannel):
         ttl_min = event.ttl_seconds // 60
 
         lines = [
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━",
-            "<b>AtlasBridge</b> — Input Required\n",
+            "\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501",
+            "<b>AtlasBridge</b> \u2014 Input Required\n",
             f"Session: <code>{event.session_id[:8]}</code>",
         ]
 
@@ -383,9 +383,11 @@ class TelegramChannel(BaseChannel):
         if instruction:
             lines.append(f"\nHow to respond:\n{instruction}")
 
-        lines.append(f"\n⏱ Expires in {ttl_min} minutes.")
+        lines.append(f"\n\u23f1 Expires in {ttl_min} minutes.")
         lines.append(f"Type: {label} | Confidence: {conf}")
-        lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        lines.append(
+            "\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501"
+        )
 
         return "\n".join(lines)
 
@@ -411,8 +413,11 @@ class TelegramChannel(BaseChannel):
         if event.prompt_type == PromptType.TYPE_MULTIPLE_CHOICE:
             return [
                 [
-                    {"text": str(i + 1), "callback_data": f"{base}:{i + 1}"}
-                    for i in range(len(event.choices))
+                    {
+                        "text": f"{i + 1}. {c[:30]}" if c else str(i + 1),
+                        "callback_data": f"{base}:{i + 1}",
+                    }
+                    for i, c in enumerate(event.choices)
                 ]
             ]
         return []  # FREE_TEXT: no buttons; user replies via message

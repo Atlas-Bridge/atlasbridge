@@ -435,11 +435,14 @@ class SlackChannel(BaseChannel):
             elements = [
                 {
                     "type": "button",
-                    "text": {"type": "plain_text", "text": str(i + 1)},
+                    "text": {
+                        "type": "plain_text",
+                        "text": f"{i + 1}. {c[:40]}" if c else str(i + 1),
+                    },
                     "value": f"{base}:{i + 1}",
                     "action_id": f"atlasbridge_choice_{i + 1}",
                 }
-                for i in range(len(event.choices))
+                for i, c in enumerate(event.choices)
             ]
             blocks.append({"type": "actions", "elements": elements})
 

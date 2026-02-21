@@ -26,6 +26,7 @@ from dataclasses import dataclass, field
 from re import Pattern
 
 from atlasbridge.core.prompt.models import Confidence, PromptEvent, PromptType
+from atlasbridge.core.prompt.sanitize import extract_choices, is_meaningful, strip_ansi
 
 # ---------------------------------------------------------------------------
 # Pattern library
@@ -126,9 +127,11 @@ class PromptDetector:
         if self._in_echo_suppress_window():
             return None
 
-        text = self._strip_ansi(raw.decode("utf-8", errors="replace"))
+        text = strip_ansi(raw.decode("utf-8", errors="replace"))
         self._state.last_output_time = time.monotonic()
-        if text.strip():
+
+        # Only update stable_excerpt with meaningful content (not ANSI junk remnants)
+        if text.strip() and is_meaningful(text):
             self._state.stable_excerpt = text
 
         # Signal 1 — pattern match
@@ -156,11 +159,15 @@ class PromptDetector:
             return None
         elapsed = time.monotonic() - self._state.last_output_time
         if elapsed >= self._state.silence_threshold_s:
+            excerpt = self._state.stable_excerpt[-200:]
+            # Guard: don't fire Signal 3 if stable_excerpt is empty or not meaningful
+            if not excerpt or not is_meaningful(excerpt):
+                return None
             return PromptEvent.create(
                 session_id=self.session_id,
                 prompt_type=PromptType.TYPE_FREE_TEXT,
                 confidence=Confidence.LOW,
-                excerpt=self._state.stable_excerpt[-200:] or "(no output)",
+                excerpt=excerpt,
             )
         return None
 
@@ -197,11 +204,13 @@ class PromptDetector:
                 )
         for pat in _MULTIPLE_CHOICE_PATTERNS:
             if pat.search(text):
+                choices = extract_choices(text)
                 return PromptEvent.create(
                     session_id=self.session_id,
                     prompt_type=PromptType.TYPE_MULTIPLE_CHOICE,
                     confidence=Confidence.HIGH,
                     excerpt=text[-200:],
+                    choices=choices,
                 )
         for pat in _FREE_TEXT_PATTERNS:
             if pat.search(text):
@@ -212,9 +221,3 @@ class PromptDetector:
                     excerpt=text[-200:],
                 )
         return None
-
-    @staticmethod
-    def _strip_ansi(text: str) -> str:
-        """Remove ANSI escape codes; handle carriage-return line rebuilding."""
-        ansi_escape = re.compile(r"\x1b\[[0-9;]*[A-Za-z]|\x1b\][^\x07]*\x07|\r")
-        return ansi_escape.sub("", text)
