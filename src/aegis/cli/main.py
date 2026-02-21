@@ -220,6 +220,7 @@ def adapter_list(as_json: bool) -> None:
     """Show available tool adapters."""
     # Ensure all adapters are registered by importing them
     import aegis.adapters.claude_code  # noqa: F401
+    import aegis.adapters.gemini_cli  # noqa: F401
     import aegis.adapters.openai_cli  # noqa: F401
     from aegis.adapters.base import AdapterRegistry
 

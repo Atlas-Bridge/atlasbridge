@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aegis-cli"
-version = "0.2.0"
+version = "0.3.0"
 description = "Universal human-in-the-loop control plane for AI developer agents — forward prompts to your phone, reply from anywhere"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -16,6 +16,7 @@ classifiers = [
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -120,7 +121,7 @@ ignore = [
 "src/aegis/cli/*.py" = ["ANN", "E501"]  # CLI glue — annotations deferred; Rich strings can be long
 "src/aegis/core/daemon/*.py" = ["ANN"] # daemon orchestration
 "src/aegis/os/**/*.py" = ["ANN"]       # PTY platform code
-"src/aegis/adapters/*.py" = ["ANN"]    # adapter glue
+"src/aegis/adapters/*.py" = ["ANN", "E501"]  # adapter glue — regex patterns can exceed 100 chars
 "src/aegis/channels/**/*.py" = ["ANN"] # channel implementations
 
 [tool.mypy]
