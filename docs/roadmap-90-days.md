@@ -1,6 +1,6 @@
 # AtlasBridge Roadmap
 
-**Version:** 0.8.3
+**Version:** 0.8.4
 **Status:** Active
 **Last updated:** 2026-02-21
 
@@ -46,6 +46,7 @@ The positioning is settled: **policy-driven autonomous runtime for AI CLI agents
 | v0.8.1 | Policy DSL v1 — any_of/none_of, session_tag, max_confidence, extends, trace rotation | Released |
 | v0.8.2 | Redesigned Telegram + Slack prompt messages with structured layout | Released |
 | v0.8.3 | Enterprise architecture foundation — Phase A scaffold + Phase B/C specs | Released |
+| v0.8.4 | Core product stability fixes — adapter resilience, Telegram error handling, UX | Released |
 
 ### v0.7.1 — Policy Engine Hardening (Released)
 
@@ -112,6 +113,22 @@ The positioning is settled: **policy-driven autonomous runtime for AI CLI agents
 - **CLI commands** — `atlasbridge edition`, `atlasbridge features`, `atlasbridge cloud status`
 - **66 new tests** — edition detection, risk classification, trace integrity, policy pinning, cloud disabled stubs
 - **6 design documents** — enterprise architecture, SaaS architecture, transition contracts, trust boundaries, implementation prompts, enterprise roadmap
+
+### v0.8.4 — Stability Fixes (Released)
+
+**Theme:** Harden the core product for day-to-day reliability.
+
+**Delivered:**
+
+- **Resilient adapter discovery** — each built-in adapter import wrapped in try/except; one broken module no longer prevents all adapters from loading
+- **Telegram chat-not-found handling** — 400 "chat not found" errors now log an actionable message telling the user to send `/start` to the bot
+- **Telegram 409 conflict handling** — `TelegramConflictError` raised on 409 with method name and error code in log output
+- **Silent stale/unknown reply handling** — replies for unknown, duplicate, or already-resolved prompts dropped at debug level (no channel spam); added free-text reply resolution to active prompt
+- **Doctor path handling** — `_config_path()` always returns `pathlib.Path`; improved next-steps output when checks fail
+- **Setup config preservation** — `atlasbridge setup` detects existing `config.toml` and offers "Keep existing" before reconfiguring
+- **On-screen run instructions** — `atlasbridge run` prints how-it-works summary, channel info, and useful commands
+- **New documentation** — `telegram-setup.md`, `troubleshooting.md`, `upgrade.md`; docs index updated
+- **22 regression tests** — adapter discovery, Telegram errors, stale reply handling, doctor paths, setup detection, poller lock
 
 ---
 
@@ -242,6 +259,7 @@ Under high-volume output (100k+ lines/session), `PromptDetector.detect()` could 
 | v0.8.1 | Policy DSL v1 | Released |
 | v0.8.2 | Redesigned prompt messages | Released |
 | v0.8.3 | Enterprise architecture foundation | Released |
+| v0.8.4 | Core product stability fixes | Released |
 | v0.9.0 | Windows ConPTY (experimental) | Planned |
 | v1.0.0 | GA — stable, multi-platform, multi-agent | Planned |
 
