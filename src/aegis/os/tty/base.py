@@ -118,7 +118,7 @@ class BaseTTY(ABC):
 
     async def _drain_reply_queue(self) -> None:
         """Coroutine: consume reply queue and inject each item."""
-        while self._running:
+        while self._running and self.is_alive():
             try:
                 data = await asyncio.wait_for(self._reply_queue.get(), timeout=0.1)
                 await self.inject_reply(data)

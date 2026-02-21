@@ -22,6 +22,7 @@ import asyncio
 import logging
 import os
 import signal
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -161,20 +162,138 @@ class DaemonManager:
         )
 
     # ------------------------------------------------------------------
+    # Adapter session
+    # ------------------------------------------------------------------
+
+    async def _run_adapter_session(self) -> None:
+        """
+        Launch the adapter/PTY for the configured tool, run until the child
+        process exits, then trigger daemon shutdown.
+
+        This is the critical wiring between the PTY supervisor and the
+        PromptRouter:
+
+            PTY output bytes
+              → PromptDetector.analyse()
+                → PromptEvent
+                  → PromptRouter.route_event()
+                    → Channel (Telegram / Slack)
+                      → Reply
+                        → PromptRouter.handle_reply()
+                          → adapter.inject_reply()
+                            → PTY stdin
+        """
+        tool = self._config.get("tool", "")
+        command = self._config.get("command", [])
+        if not tool or not command:
+            logger.info("No tool/command configured — running in channel-only mode")
+            return
+
+        from aegis.adapters.base import AdapterRegistry
+        from aegis.core.session.models import Session
+
+        try:
+            adapter_cls = AdapterRegistry.get(tool)
+        except KeyError as exc:
+            logger.error("Cannot start adapter: %s", exc)
+            return
+
+        adapter = adapter_cls()
+        session_id = str(uuid.uuid4())
+
+        session = Session(session_id=session_id, tool=tool, command=list(command))
+        if self._session_manager is None:
+            logger.error("Session manager not initialised — cannot start session")
+            return
+        self._session_manager.register(session)
+        self._adapters[session_id] = adapter
+
+        logger.info("Starting %r session %s", tool, session_id[:8])
+        await adapter.start_session(session_id=session_id, command=list(command))
+
+        # Mark the session as running once the child PID is known
+        ctx = adapter.snapshot_context(session_id)
+        pid = ctx.get("pid", -1)
+        if pid and pid > 0:
+            self._session_manager.mark_running(session_id, pid)
+
+        # Re-use the detector the adapter already created for this session.
+        # This ensures inject_reply() → mark_injected() shares the same state
+        # as our analyse() calls (echo suppression depends on this).
+        detector = adapter._detectors.get(session_id)  # type: ignore[attr-defined]
+        if detector is None:
+            from aegis.core.prompt.detector import PromptDetector
+
+            detector = PromptDetector(session_id)
+
+        event_q: asyncio.Queue[Any] = asyncio.Queue()
+        eof_reached = asyncio.Event()
+
+        async def _read_loop() -> None:
+            try:
+                while True:
+                    chunk = await adapter.read_stream(session_id)
+                    if not chunk:
+                        break
+                    tty_blocked = await adapter.await_input_state(session_id)
+                    ev = detector.analyse(chunk, tty_blocked=tty_blocked)
+                    if ev is not None and self._router is not None:
+                        await event_q.put(ev)
+            finally:
+                eof_reached.set()
+
+        async def _route_events() -> None:
+            while not eof_reached.is_set() or not event_q.empty():
+                try:
+                    ev = await asyncio.wait_for(event_q.get(), timeout=0.2)
+                    if self._router is not None:
+                        await self._router.route_event(ev)
+                except TimeoutError:
+                    continue
+
+        async def _silence_watchdog() -> None:
+            interval = 1.0
+            while not eof_reached.is_set():
+                await asyncio.sleep(interval)
+                try:
+                    running = await adapter.await_input_state(session_id)
+                except Exception:  # noqa: BLE001
+                    running = False
+                ev = detector.check_silence(process_running=running)
+                if ev is not None and self._router is not None:
+                    await self._router.route_event(ev)
+
+        try:
+            async with asyncio.TaskGroup() as tg:
+                tg.create_task(_read_loop(), name="pty_read")
+                tg.create_task(_route_events(), name="route_events")
+                tg.create_task(_silence_watchdog(), name="silence_watchdog")
+        except* asyncio.CancelledError:
+            pass
+        finally:
+            logger.info("Session %s ended — requesting daemon shutdown", session_id[:8])
+            self._session_manager.mark_ended(session_id)
+            await adapter.terminate_session(session_id)
+            await self.stop()
+
+    # ------------------------------------------------------------------
     # Main loop
     # ------------------------------------------------------------------
 
     async def _run_loop(self) -> None:
-        """Run the reply consumer and TTL sweeper until shutdown."""
-        tasks = []
+        """Run the reply consumer, TTL sweeper, and adapter session until shutdown."""
+        tasks: list[asyncio.Task[Any]] = []
         if self._channel and self._router:
             tasks.append(asyncio.create_task(self._reply_consumer(), name="reply_consumer"))
         tasks.append(asyncio.create_task(self._ttl_sweeper(), name="ttl_sweeper"))
+        if self._config.get("tool") and self._config.get("command"):
+            tasks.append(asyncio.create_task(self._run_adapter_session(), name="adapter_session"))
 
         await self._shutdown_event.wait()
 
         for t in tasks:
             t.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
 
     async def _reply_consumer(self) -> None:
         """Consume replies from the channel and hand them to the router."""

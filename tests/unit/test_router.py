@@ -94,15 +94,17 @@ class TestRouteEvent:
         mock_channel.send_prompt.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_low_confidence_not_dispatched(
+    async def test_low_confidence_dispatched_as_ambiguous(
         self,
         router: PromptRouter,
         session: Session,
         mock_channel: AsyncMock,
     ) -> None:
+        # LOW confidence prompts are routed to the channel so the user can decide;
+        # the channel labels them as ambiguous in the message text.
         event = _event(session.session_id, Confidence.LOW)
         await router.route_event(event)
-        mock_channel.send_prompt.assert_not_called()
+        mock_channel.send_prompt.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_unknown_session_drops_event(

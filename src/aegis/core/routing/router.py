@@ -79,14 +79,13 @@ class PromptRouter:
             )
             return
 
-        # Confidence gate
+        # Confidence gate: LOW is routed to the channel so the user can decide.
+        # The channel message labels it as "low (ambiguous)" so the user knows.
         if event.confidence == Confidence.LOW:
-            logger.debug(
-                "LOW confidence prompt %s — deferring (ambiguity protocol)",
+            logger.info(
+                "LOW confidence prompt %s — routing as ambiguous (silence fallback)",
                 event.prompt_id,
             )
-            # TODO v0.3.0: implement ambiguity protocol (SEND_ENTER / CANCEL)
-            return
 
         await self._dispatch(event)
 
