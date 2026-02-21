@@ -266,7 +266,12 @@ Policy module layout:
 | v0.6.0 | Autopilot | Released | Policy DSL v0, autopilot engine, kill switch, decision trace |
 | v0.6.1 | Docs | Released | Policy authoring guide + 5 preset policies |
 | v0.6.2 | Positioning | Released | Product tagline, pyproject.toml description/keywords |
-| v0.7.0 | Windows | Planned | ConPTY experimental (behind --experimental flag) |
-| v0.7.1 | Hardening | Planned | Per-rule rate limits, policy hot-reload, Slack kill switch |
-| v0.8.0 | Policy v1 | Planned | Policy DSL v1 — compound conditions, session context, inheritance |
+| v0.7.1 | Hardening | Released | Per-rule rate limits, policy hot-reload, Slack kill switch |
+| v0.7.2 | Bugfixes | Released | Doctor + polling path fixes, config path normalization |
+| v0.7.3 | Adapters | Released | Adapter auto-registration, `run claude-code` alias |
+| v0.7.4 | Stability | Released | Telegram singleton poller (no 409 conflicts) |
+| v0.7.5 | UX | Released | Dynamic guidance panel on welcome screen |
+| v0.8.0 | Setup | Released | Zero-touch setup — config migration, env bootstrap, keyring, config CLI |
+| v0.8.1 | Policy v1 | Released | Policy DSL v1 — any_of/none_of, session_tag, max_confidence, extends, trace rotation |
+| v0.9.0 | Windows | Planned | ConPTY experimental (behind --experimental flag) |
 | v1.0.0 | GA | Planned | Stable adapter + channel API, all platforms, all agents |
