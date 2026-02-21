@@ -41,7 +41,8 @@ import logging
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Coroutine
+from collections.abc import Callable
+from typing import Any
 
 from aegis.core.prompt.detector import PromptDetector
 from aegis.core.prompt.models import PromptEvent
@@ -138,7 +139,9 @@ class TelegramStub:
 
         return {"ok": True, "result": {"message_id": msg_id}}
 
-    async def get_updates(self, offset: int = 0, timeout: int = 30, **kwargs: Any) -> dict[str, Any]:
+    async def get_updates(  # noqa: E501
+        self, offset: int = 0, timeout: int = 30, **kwargs: Any
+    ) -> dict[str, Any]:
         """Stub for getUpdates (long-poll)."""
         if time.monotonic() < self._outage_until:
             await asyncio.sleep(1.0)

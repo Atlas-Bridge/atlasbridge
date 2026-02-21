@@ -117,6 +117,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["S101", "ANN", "S105", "S106", "S108"]
+"tests/prompt_lab/**/*.py" = ["S101", "ANN", "F401", "E501", "UP", "I", "B"]
 "aegis/policy/detector.py" = ["E501"]         # regex patterns are inherently long
 # New src/aegis design stubs — full lint enforcement deferred to v0.2.0 implementation
 "src/**/*.py" = ["ANN", "I", "F401", "E501", "N", "UP", "B", "C4", "S", "W"]
