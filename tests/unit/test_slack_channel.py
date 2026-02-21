@@ -203,7 +203,7 @@ class TestBuildBlocks:
         elements = actions["elements"]
         assert len(elements) == 3
         labels = [e["text"]["text"] for e in elements]
-        assert labels == ["1", "2", "3"]
+        assert labels == ["1. alpha", "2. beta", "3. gamma"]
 
     def test_free_text_has_no_actions_block(self) -> None:
         blocks = SlackChannel._build_blocks(

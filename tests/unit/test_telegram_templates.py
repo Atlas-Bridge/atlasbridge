@@ -173,6 +173,8 @@ class TestBuildKeyboard:
         event = _event(PromptType.TYPE_MULTIPLE_CHOICE, choices=["Alpha", "Beta", "Gamma"])
         kb = ch._build_keyboard(event)
         assert len(kb[0]) == 3
+        labels = [b["text"] for b in kb[0]]
+        assert labels == ["1. Alpha", "2. Beta", "3. Gamma"]
 
     def test_free_text_no_buttons(self) -> None:
         ch = _channel()

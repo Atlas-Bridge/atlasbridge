@@ -162,10 +162,65 @@ class TestSilenceFallback:
 
     def test_event_fires_after_threshold(self) -> None:
         d = PromptDetector(session_id="silence-test", silence_threshold_s=0.01)
+        # Feed meaningful output first so stable_excerpt is populated
+        d.analyse(b"Waiting for your input...")
         d._state.last_output_time = time.monotonic() - 1.0  # well past threshold
         event = d.check_silence(process_running=True)
         assert event is not None
         assert event.confidence == Confidence.LOW
+
+    def test_no_event_when_excerpt_empty(self) -> None:
+        d = PromptDetector(session_id="silence-empty", silence_threshold_s=0.01)
+        d._state.last_output_time = time.monotonic() - 1.0
+        # stable_excerpt is "" (no output fed) → should NOT fire
+        event = d.check_silence(process_running=True)
+        assert event is None
+
+
+# ---------------------------------------------------------------------------
+# ANSI junk regression — private-mode CSI sequences
+# ---------------------------------------------------------------------------
+
+
+class TestAnsiJunkRegression:
+    def test_private_mode_csi_no_event(self, detector: PromptDetector) -> None:
+        """Root cause: \\x1b[?1004l was not stripped, polluting stable_excerpt."""
+        event = detector.analyse(b"\x1b[?1004l\x1b[?2004l")
+        assert event is None
+
+    def test_ansi_junk_does_not_pollute_stable_excerpt(self) -> None:
+        d = PromptDetector(session_id="ansi-junk", silence_threshold_s=0.01)
+        d.analyse(b"\x1b[?1004l\x1b[?2004l")
+        d._state.last_output_time = time.monotonic() - 1.0
+        # stable_excerpt should still be empty → Signal 3 should not fire
+        event = d.check_silence(process_running=True)
+        assert event is None
+
+    def test_real_prompt_after_ansi_junk(self) -> None:
+        d = PromptDetector(session_id="junk-then-real")
+        d.analyse(b"\x1b[?1004l\x1b[?2004l")
+        event = d.analyse(b"Delete all files? [y/N]")
+        assert event is not None
+        assert event.prompt_type == PromptType.TYPE_YES_NO
+
+    def test_mixed_ansi_junk_and_real_text(self, detector: PromptDetector) -> None:
+        event = detector.analyse(b"\x1b[?1004l\x1b[?2004l\x1b[32mContinue?\x1b[0m (yes/no)")
+        assert event is not None
+        assert event.prompt_type == PromptType.TYPE_YES_NO
+
+
+# ---------------------------------------------------------------------------
+# MULTIPLE_CHOICE — choice extraction
+# ---------------------------------------------------------------------------
+
+
+class TestMultipleChoiceChoices:
+    def test_numbered_choices_populated(self, detector: PromptDetector) -> None:
+        text = b"Choose an option:\n1) Install\n2) Update\n3) Remove"
+        event = detector.analyse(text)
+        assert event is not None
+        assert event.prompt_type == PromptType.TYPE_MULTIPLE_CHOICE
+        assert event.choices == ["Install", "Update", "Remove"]
 
 
 # ---------------------------------------------------------------------------
