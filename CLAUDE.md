@@ -273,5 +273,6 @@ Policy module layout:
 | v0.7.5 | UX | Released | Dynamic guidance panel on welcome screen |
 | v0.8.0 | Setup | Released | Zero-touch setup — config migration, env bootstrap, keyring, config CLI |
 | v0.8.1 | Policy v1 | Released | Policy DSL v1 — any_of/none_of, session_tag, max_confidence, extends, trace rotation |
+| v0.8.2 | UX | Released | Redesigned Telegram + Slack prompt messages with structured layout |
 | v0.9.0 | Windows | Planned | ConPTY experimental (behind --experimental flag) |
 | v1.0.0 | GA | Planned | Stable adapter + channel API, all platforms, all agents |

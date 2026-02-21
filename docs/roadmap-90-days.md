@@ -1,6 +1,6 @@
 # AtlasBridge Roadmap
 
-**Version:** 0.8.1
+**Version:** 0.8.2
 **Status:** Active
 **Last updated:** 2026-02-21
 
@@ -8,7 +8,7 @@
 
 ## Where We Are
 
-AtlasBridge v0.8.1 is released and available on PyPI. The core autonomous runtime is production-capable on macOS and Linux with a mature policy engine and zero-touch setup experience.
+AtlasBridge v0.8.2 is released and available on PyPI. The core autonomous runtime is production-capable on macOS and Linux with a mature policy engine and zero-touch setup experience.
 
 Key capabilities shipped:
 
@@ -44,6 +44,7 @@ The positioning is settled: **policy-driven autonomous runtime for AI CLI agents
 | v0.7.5 | Dynamic guidance panel on welcome screen | Released |
 | v0.8.0 | Zero-touch setup — config migration, env bootstrap, keyring, config CLI | Released |
 | v0.8.1 | Policy DSL v1 — any_of/none_of, session_tag, max_confidence, extends, trace rotation | Released |
+| v0.8.2 | Redesigned Telegram + Slack prompt messages with structured layout | Released |
 
 ### v0.7.1 — Policy Engine Hardening (Released)
 
@@ -80,6 +81,18 @@ The positioning is settled: **policy-driven autonomous runtime for AI CLI agents
 - **Policy inheritance** — `extends: base-policy.yaml` for composing shared rules with overrides
 - **Decision trace rotation** — configurable rotation of `autopilot_decisions.jsonl` by size or age
 - **Backward compatibility** — `policy_version: "0"` policies parse and evaluate identically to v0.6.x
+
+### v0.8.2 — Redesigned Prompt Messages (Released)
+
+**Theme:** Make channel notifications actionable at a glance.
+
+**Delivered:**
+
+- **Structured message layout** — Telegram and Slack prompts now show session ID, tool name, workspace path, question excerpt, response instructions, and TTL countdown in a clear, scannable format
+- **Session context enrichment** — `PromptEvent` carries `tool`, `cwd`, and `session_label` fields populated by the router before dispatch
+- **Per-type response instructions** — each prompt type (Yes/No, Confirm Enter, Multiple Choice, Free Text) shows specific guidance on how to respond
+- **TTL visibility** — expiry countdown displayed in every prompt message
+- **Slack Block Kit upgrade** — dividers, header/question/instruction sections, context block for metadata
 
 ---
 
@@ -208,6 +221,7 @@ Under high-volume output (100k+ lines/session), `PromptDetector.detect()` could 
 | v0.7.5 | Dynamic guidance panel | Released |
 | v0.8.0 | Zero-touch setup | Released |
 | v0.8.1 | Policy DSL v1 | Released |
+| v0.8.2 | Redesigned prompt messages | Released |
 | v0.9.0 | Windows ConPTY (experimental) | Planned |
 | v1.0.0 | GA — stable, multi-platform, multi-agent | Planned |
 
