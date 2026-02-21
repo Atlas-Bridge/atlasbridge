@@ -144,6 +144,11 @@ AtlasBridge is a relay, not a firewall. It does not interpret commands, score ri
 
 ## Changelog
 
+### v0.5.1 — Branding fix + lab import fix
+
+- All CLI output now shows "AtlasBridge" — `doctor`, `status`, `setup`, `daemon`, `sessions`, `run`, and `lab` were still printing "Aegis" / "aegis"
+- `atlasbridge lab list/run` no longer crashes with `ModuleNotFoundError` when installed from PyPI; now shows a clear message pointing to editable install
+
 ### v0.5.0 — Interactive Terminal UI
 
 - **`atlasbridge` (no args)** — launches the built-in TUI when run in an interactive terminal; prints help otherwise
