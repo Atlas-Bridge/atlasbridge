@@ -51,9 +51,9 @@ def cloud_group():
 @click.option("--json", "as_json", is_flag=True, default=False)
 def cloud_status(as_json):
     """Show cloud integration status."""
-    from atlasbridge.cloud import CloudConfig, is_cloud_enabled
+    from atlasbridge.cloud import is_cloud_enabled
 
-    config = CloudConfig()  # Default disabled config
+    config = _load_cloud_config()
     enabled = is_cloud_enabled(config)
     status = {
         "enabled": enabled,
@@ -61,6 +61,7 @@ def cloud_status(as_json):
         "control_channel": config.control_channel,
         "audit_streaming": config.stream_audit,
         "connected": False,
+        "phase": "B (scaffolding only)",
     }
     if as_json:
         import json
@@ -74,4 +75,26 @@ def cloud_status(as_json):
             else:
                 label = str(val)
             console.print(f"  {key:<22} {label}")
+        console.print("  [yellow]Phase B is scaffolding only — no cloud calls are made.[/yellow]")
         console.print()
+
+
+def _load_cloud_config():
+    """Load CloudConfig from user config, falling back to defaults."""
+    from atlasbridge.cloud import CloudConfig
+
+    try:
+        from atlasbridge.core.config import _config_file_path, load_config
+
+        cfg_path = _config_file_path()
+        if not cfg_path.exists():
+            return CloudConfig()
+        cfg = load_config(cfg_path)
+        cloud_section = getattr(cfg, "cloud", None)
+        if cloud_section and isinstance(cloud_section, dict):
+            return CloudConfig(
+                **{k: v for k, v in cloud_section.items() if hasattr(CloudConfig, k)}
+            )
+    except Exception:  # noqa: BLE001
+        pass
+    return CloudConfig()

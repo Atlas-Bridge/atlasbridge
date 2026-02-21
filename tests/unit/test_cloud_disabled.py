@@ -1,6 +1,17 @@
-"""Unit tests for cloud disabled mode safety."""
+"""Unit tests for cloud disabled mode safety.
+
+Tests that verify:
+- Cloud module defaults to disabled (no network calls)
+- All disabled stubs return safe no-op values
+- No HTTP libraries are imported in the cloud module
+- Protocol spec constants are correct
+"""
 
 from __future__ import annotations
+
+import ast
+import importlib
+from pathlib import Path
 
 import pytest
 
@@ -119,3 +130,90 @@ class TestDisabledTransport:
     async def test_disconnect_succeeds(self) -> None:
         transport = DisabledTransport()
         await transport.disconnect()  # Should not raise
+
+
+# ---------------------------------------------------------------------------
+# Network isolation guard — ensures cloud module has zero HTTP dependencies
+# ---------------------------------------------------------------------------
+
+_BANNED_MODULES = {"httpx", "requests", "aiohttp", "urllib3"}
+
+
+class TestCloudNetworkIsolation:
+    """Guard tests that the cloud module never imports HTTP libraries."""
+
+    def _get_cloud_source_files(self) -> list[Path]:
+        cloud_pkg = importlib.import_module("atlasbridge.cloud")
+        cloud_dir = Path(cloud_pkg.__file__).parent
+        return list(cloud_dir.glob("*.py"))
+
+    def test_no_http_imports_in_cloud_module(self) -> None:
+        """Scan all cloud/*.py files for banned HTTP library imports."""
+        for py_file in self._get_cloud_source_files():
+            source = py_file.read_text()
+            tree = ast.parse(source, filename=str(py_file))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        root = alias.name.split(".")[0]
+                        assert root not in _BANNED_MODULES, (
+                            f"{py_file.name} imports banned module '{alias.name}'"
+                        )
+                elif isinstance(node, ast.ImportFrom):
+                    if node.module:
+                        root = node.module.split(".")[0]
+                        assert root not in _BANNED_MODULES, (
+                            f"{py_file.name} imports from banned module '{node.module}'"
+                        )
+
+    def test_cloud_module_files_exist(self) -> None:
+        """Verify all expected cloud module files are present."""
+        files = {f.name for f in self._get_cloud_source_files()}
+        expected = {
+            "__init__.py",
+            "auth.py",
+            "transport.py",
+            "client.py",
+            "protocol.py",
+            "registry.py",
+            "audit_stream.py",
+        }
+        assert expected.issubset(files), f"Missing cloud files: {expected - files}"
+
+
+class TestProtocolSpec:
+    """Verify protocol specification constants are sensible."""
+
+    def test_protocol_version(self) -> None:
+        from atlasbridge.cloud.protocol import ProtocolSpec
+
+        spec = ProtocolSpec()
+        assert spec.version == "1.0"
+        assert spec.transport == "wss"
+        assert spec.encoding == "json"
+        assert spec.signature_algorithm == "Ed25519"
+
+    def test_message_types_exist(self) -> None:
+        from atlasbridge.cloud.protocol import MessageType
+
+        # Runtime → Cloud
+        assert MessageType.HEARTBEAT == "heartbeat"
+        assert MessageType.SESSION_STARTED == "session_started"
+        assert MessageType.DECISION_MADE == "decision_made"
+        # Cloud → Runtime (advisory)
+        assert MessageType.POLICY_UPDATE_AVAILABLE == "policy_update_available"
+        assert MessageType.KILL_SWITCH == "kill_switch"
+
+    def test_control_message_fields(self) -> None:
+        from atlasbridge.cloud.protocol import ControlMessage, MessageType
+
+        msg = ControlMessage(
+            message_id="test-1",
+            message_type=MessageType.HEARTBEAT,
+            timestamp="2026-01-01T00:00:00Z",
+            org_id="org-1",
+            runtime_id="rt-1",
+            sequence=1,
+        )
+        assert msg.payload == {}
+        assert msg.signature == ""
