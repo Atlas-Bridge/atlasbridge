@@ -129,6 +129,7 @@ ignore = [
 "src/atlasbridge/adapters/*.py" = ["ANN", "E501"]
 "src/atlasbridge/channels/**/*.py" = ["ANN"]
 "src/atlasbridge/tui/**/*.py" = ["ANN", "E501"]
+"src/atlasbridge/ui/**/*.py" = ["ANN", "E501"]
 
 [tool.mypy]
 python_version = "3.11"
@@ -157,6 +158,7 @@ module = [
     "atlasbridge.channels.*",
     "atlasbridge.cli.*",
     "atlasbridge.tui.*",
+    "atlasbridge.ui.*",
 ]
 ignore_errors = true
 
@@ -183,6 +185,7 @@ omit = [
     "*/atlasbridge/channels/*",
     "*/atlasbridge/cli/*",
     "*/atlasbridge/tui/*",
+    "*/atlasbridge/ui/*",
 ]
 
 [tool.coverage.report]

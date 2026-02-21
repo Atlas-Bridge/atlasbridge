@@ -48,7 +48,7 @@ def cli(ctx: click.Context) -> None:
     """AtlasBridge — universal human-in-the-loop control plane for AI developer agents."""
     if ctx.invoked_subcommand is None:
         if sys.stdout.isatty():
-            from atlasbridge.tui.app import run as tui_run
+            from atlasbridge.ui.app import run as tui_run
 
             tui_run()
         else:
@@ -68,7 +68,7 @@ def ui() -> None:
             "[red]Error:[/red] 'atlasbridge ui' requires an interactive terminal (TTY)."
         )
         raise SystemExit(1)
-    from atlasbridge.tui.app import run as tui_run
+    from atlasbridge.ui.app import run as tui_run
 
     tui_run()
 

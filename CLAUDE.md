@@ -56,7 +56,10 @@ src/atlasbridge/         ← installed package (where = ["src"])
   os/systemd/            — service.py (Linux systemd user service)
   adapters/              — base.py, claude_code.py, openai_cli.py, gemini_cli.py
   channels/              — base.py, multi.py, telegram/channel.py, slack/channel.py
-  tui/                   — app.py, state.py, services.py, app.tcss, screens/
+  tui/                   — app.py, state.py, services.py, app.tcss, screens/ (v0.5.x, preserved)
+  ui/                    — app.py, state.py, polling.py, css/atlasbridge.tcss
+                           components/status_cards.py
+                           screens/: welcome, wizard, complete, sessions, logs, doctor
   cli/                   — main.py + _setup/_daemon/_run/_status/etc.
 tests/
   unit/                  — pure unit tests (no I/O)
@@ -75,7 +78,11 @@ docs/                    — all design documents
 | Path | Purpose |
 |------|---------|
 | `src/atlasbridge/cli/main.py` | All CLI commands (Click group) + TUI launch |
-| `src/atlasbridge/tui/app.py` | AtlasBridgeApp (Textual App + `run()` entry) |
+| `src/atlasbridge/ui/app.py` | AtlasBridgeApp (Textual App + `run()` entry) — active TUI |
+| `src/atlasbridge/ui/state.py` | Re-exports AppState, WizardState from tui.state |
+| `src/atlasbridge/ui/polling.py` | poll_state() → AppState, POLL_INTERVAL_SECONDS=5.0 |
+| `src/atlasbridge/ui/components/status_cards.py` | StatusCards widget (4-card row) |
+| `src/atlasbridge/ui/css/atlasbridge.tcss` | Global TCSS for all 6 screens |
 | `src/atlasbridge/tui/state.py` | AppState, WizardState — pure Python, testable without Textual |
 | `src/atlasbridge/tui/services.py` | ConfigService, DoctorService, DaemonService, SessionService, LogsService |
 | `src/atlasbridge/core/prompt/detector.py` | Tri-signal prompt detector |
