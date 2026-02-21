@@ -145,6 +145,16 @@ AtlasBridge is a relay, not a firewall. It does not interpret commands, score ri
 
 ## Changelog
 
+### v0.6.0 — Autonomous Agent Runtime (Policy-Driven)
+
+- **Policy DSL v0** — YAML-based, strictly typed, first-match-wins rule engine; `atlasbridge policy validate` and `atlasbridge policy test --explain`
+- **Autopilot Engine** — policy-driven prompt handler with three autonomy modes: Off / Assist / Full
+- **Kill switch** — `atlasbridge pause` / `atlasbridge resume` (or `/pause`, `/resume` from Telegram/Slack)
+- **Decision trace** — append-only JSONL audit log at `~/.atlasbridge/autopilot_decisions.jsonl`
+- **Autopilot CLI** — `atlasbridge autopilot enable|disable|status|mode|explain`
+- **56 new tests** (policy model, parser, evaluator, decision trace); 341 total
+- New design docs: `docs/autopilot.md`, `docs/policy-dsl.md`, `docs/autonomy-modes.md`
+
 ### v0.5.3 — CSS packaging hotfix
 
 - **fix(ui):** `atlasbridge ui` no longer crashes with `StylesheetError` when installed from a wheel
@@ -154,7 +164,6 @@ AtlasBridge is a relay, not a firewall. It does not interpret commands, score ri
 - Added `__init__.py` to `ui/css/` so `importlib.resources` can locate assets
 - `atlasbridge doctor` now checks that UI assets are loadable
 - 4 new regression tests for CSS resource loading
-
 ### v0.5.2 — Production UI skeleton
 
 - New `atlasbridge.ui` package: 6 screens with exact widget IDs, `StatusCards` component, `polling.py` (`poll_state()`), and full TCSS
@@ -216,8 +225,9 @@ AtlasBridge is a relay, not a firewall. It does not interpret commands, score ri
 | v0.4.0 | Released | Slack channel, MultiChannel fan-out, renamed to AtlasBridge |
 | v0.5.0 | Released | Interactive terminal UI — setup wizard, sessions, logs, doctor |
 | v0.5.1 | Released | Branding fix (Aegis→AtlasBridge in CLI output) + lab import fix |
-| **v0.5.2** | **Released** | Production UI skeleton — 6 screens, StatusCards, polling, TCSS |
-| v0.6.0 | Planned | Windows (ConPTY, experimental) |
+| v0.5.2 | Released | Production UI skeleton — 6 screens, StatusCards, polling, TCSS |
+| **v0.6.0** | **Released** | Autonomous Agent Runtime — Policy DSL v0, autopilot engine, kill switch |
+| v0.7.0 | Planned | Windows (ConPTY, experimental) |
 
 ---
 
@@ -232,6 +242,9 @@ See the `docs/` directory:
 | [adapters.md](docs/adapters.md) | BaseAdapter interface, Claude Code adapter |
 | [channels.md](docs/channels.md) | BaseChannel interface, Telegram and Slack implementations |
 | [cli-ux.md](docs/cli-ux.md) | All CLI commands, output formats, exit codes |
+| [autopilot.md](docs/autopilot.md) | Autopilot engine architecture, kill switch, escalation protocol |
+| [policy-dsl.md](docs/policy-dsl.md) | AtlasBridge Policy DSL v0 full reference |
+| [autonomy-modes.md](docs/autonomy-modes.md) | Off / Assist / Full mode specs and behavior |
 | [roadmap-90-days.md](docs/roadmap-90-days.md) | 6-phase roadmap |
 | [qa-top-20-failure-scenarios.md](docs/qa-top-20-failure-scenarios.md) | 20 mandatory QA scenarios |
 | [dev-workflow-multi-agent.md](docs/dev-workflow-multi-agent.md) | Branch model, agent roles, CI pipeline |
@@ -249,6 +262,8 @@ src/atlasbridge/
     store/      — SQLite database
     audit/      — append-only audit log with hash chaining
     daemon/     — daemon manager (orchestrates all subsystems)
+    policy/     — Policy DSL v0: model, parser, evaluator, explain
+    autopilot/  — AutopilotEngine, kill switch, decision trace
   os/tty/       — PTY supervisors (macOS, Linux, Windows stub)
   os/systemd/   — Linux systemd user service integration
   adapters/     — CLI tool adapters (Claude Code, OpenAI CLI, Gemini CLI)
@@ -256,10 +271,12 @@ src/atlasbridge/
   cli/          — Click CLI entry point and subcommands
 tests/
   unit/         — pure unit tests (no I/O)
+  policy/       — policy model, parser, evaluator tests + fixtures
   integration/  — SQLite + mocked HTTP
   prompt_lab/   — deterministic QA scenario runner
     scenarios/  — QA-001 through QA-020 scenario implementations
 docs/           — design documents
+config/         — policy.example.yaml, policy.schema.json
 ```
 
 ---

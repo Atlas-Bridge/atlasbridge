@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "atlasbridge"
-version = "0.5.3"
+version = "0.6.0"
 description = "Universal human-in-the-loop control plane for AI developer agents — forward prompts to your phone, reply from anywhere"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -48,6 +48,8 @@ dependencies = [
     "psutil>=5.9",
     # Secret detection (doctor check)
     "detect-secrets>=1.5",
+    # Policy DSL YAML parsing
+    "PyYAML>=6.0",
 ]
 
 [project.optional-dependencies]
@@ -126,13 +128,16 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["S101", "ANN", "S105", "S106", "S108"]
 "tests/prompt_lab/**/*.py" = ["S101", "ANN", "F401", "E501", "UP", "I", "B"]
-"src/atlasbridge/cli/*.py" = ["ANN", "E501"]
+"src/atlasbridge/cli/*.py" = ["ANN", "E501", "E402"]
 "src/atlasbridge/core/daemon/*.py" = ["ANN"]
 "src/atlasbridge/os/**/*.py" = ["ANN"]
 "src/atlasbridge/adapters/*.py" = ["ANN", "E501"]
 "src/atlasbridge/channels/**/*.py" = ["ANN"]
 "src/atlasbridge/tui/**/*.py" = ["ANN", "E501"]
 "src/atlasbridge/ui/**/*.py" = ["ANN", "E501"]
+"src/atlasbridge/core/policy/**/*.py" = ["ANN", "E501", "UP042"]
+"src/atlasbridge/core/autopilot/**/*.py" = ["ANN", "UP042"]
+"tests/policy/**/*.py" = ["S101", "ANN", "E501", "B017", "F841"]
 
 [tool.mypy]
 python_version = "3.11"

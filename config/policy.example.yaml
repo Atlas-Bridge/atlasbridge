@@ -1,0 +1,263 @@
+# AtlasBridge Policy DSL v0 — Example Policy
+#
+# This file demonstrates the full range of policy rule patterns.
+# Copy it, trim it down to the rules you need, and point AtlasBridge at it:
+#
+#   atlasbridge policy validate policy.yaml
+#   atlasbridge run claude --policy policy.yaml
+#
+# Evaluation is FIRST-MATCH-WINS. Rules are checked in list order.
+# The first rule whose ALL match criteria are satisfied wins.
+# If no rule matches, the defaults block applies.
+#
+# See docs/policy-dsl.md for the full schema reference.
+
+policy_version: "0"
+name: "example-policy"
+
+# Global action gate.
+#   off    — no automatic actions; all prompts go to require_human
+#   assist — require_human and notify_only only; auto_reply and deny are blocked
+#   full   — all action types enabled
+autonomy_mode: assist
+
+rules:
+
+  # ---------------------------------------------------------------------------
+  # R-01: YES/NO prompt with high confidence → auto-reply "y"
+  #
+  # Matches: any tool, any repo, yes_no type, HIGH confidence only,
+  #          excerpt must contain "Continue"
+  #
+  # The allowed_choices constraint means that only "y" or "n" will ever be
+  # injected by this rule, even if the value field were changed to something
+  # unexpected during editing.
+  # ---------------------------------------------------------------------------
+  - id: "R-01"
+    description: "High-confidence Continue prompts → auto-approve"
+    match:
+      prompt_type:
+        - yes_no
+      contains: "Continue"
+      contains_is_regex: false
+      min_confidence: high
+    action:
+      type: auto_reply
+      value: "y"
+      constraints:
+        allowed_choices:
+          - "y"
+          - "n"
+
+  # ---------------------------------------------------------------------------
+  # R-02: CONFIRM_ENTER prompt → inject Enter
+  #
+  # "Press Enter to continue", "[Press Enter]", "-- More --", etc.
+  # The detector emits confirm_enter for these with HIGH confidence.
+  # Injecting "\n" is always safe here; the only choice is Enter.
+  # ---------------------------------------------------------------------------
+  - id: "R-02"
+    description: "Press-Enter prompts → send Enter"
+    match:
+      prompt_type:
+        - confirm_enter
+      min_confidence: medium
+    action:
+      type: auto_reply
+      value: "\n"
+      constraints:
+        allowed_choices:
+          - "\n"
+
+  # ---------------------------------------------------------------------------
+  # R-03: FREE_TEXT asking for a branch name → route to human
+  #
+  # Branch names are user-specific. Never auto-reply.
+  # The message field is forwarded to the Telegram/Slack channel
+  # alongside the prompt excerpt to give the operator context.
+  # ---------------------------------------------------------------------------
+  - id: "R-03"
+    description: "Branch name prompts → require human input"
+    match:
+      prompt_type:
+        - free_text
+      contains: "branch"
+      contains_is_regex: false
+    action:
+      type: require_human
+      message: "The agent is asking for a Git branch name. Please provide one."
+
+  # ---------------------------------------------------------------------------
+  # R-04: FREE_TEXT asking for a password, token, or API key → deny
+  #
+  # Credential prompts must never be auto-replied. Block and log.
+  # The supervised process will remain paused until the operator
+  # manually unblocks the session via `atlasbridge sessions`.
+  #
+  # Uses a regex to match multiple credential-related keywords.
+  # ---------------------------------------------------------------------------
+  - id: "R-04"
+    description: "Credential prompts → deny (never auto-reply to secrets)"
+    match:
+      prompt_type:
+        - free_text
+      contains: "password|token|api.?key|secret|passphrase"
+      contains_is_regex: true
+      min_confidence: low
+    action:
+      type: deny
+      reason: >
+        Credential prompts are never auto-replied. Operator must supply
+        the credential directly. Unblock via `atlasbridge sessions`.
+
+  # ---------------------------------------------------------------------------
+  # R-05: MULTIPLE_CHOICE from npm/pip/yarn install → auto-select option 1
+  #
+  # Package installers often present numbered option menus during
+  # dependency resolution or conflict handling. Auto-selecting the
+  # first option (the recommended/default) is safe for non-destructive
+  # package operations.
+  #
+  # Scoped to repos under the user's workspaces directory to avoid
+  # firing in unrelated projects.
+  # ---------------------------------------------------------------------------
+  - id: "R-05"
+    description: "Package manager option menus → select option 1"
+    match:
+      prompt_type:
+        - multiple_choice
+      contains: "npm|pip|yarn|pnpm"
+      contains_is_regex: true
+      min_confidence: high
+    action:
+      type: auto_reply
+      value: "1"
+      constraints:
+        numeric_only: true
+        allowed_choices:
+          - "1"
+          - "2"
+          - "3"
+
+  # ---------------------------------------------------------------------------
+  # R-06: "Are you sure" in any prompt type → require human
+  #
+  # This is a broadly applicable safety rule. Any prompt asking
+  # "are you sure" regardless of type (yes/no, free text, etc.)
+  # must go to a human. This rule intentionally has no prompt_type
+  # filter to catch edge cases.
+  # ---------------------------------------------------------------------------
+  - id: "R-06"
+    description: "'Are you sure' in any prompt → require human"
+    match:
+      contains: "are you sure"
+      contains_is_regex: false
+      min_confidence: low
+    action:
+      type: require_human
+      message: "This prompt is asking for explicit confirmation. Please review before proceeding."
+
+  # ---------------------------------------------------------------------------
+  # R-07: Prompts containing "delete" or "destroy" → require human
+  #
+  # Destructive operations warrant human oversight regardless of
+  # the prompt type or confidence level. A regex matches multiple
+  # destructive keywords.
+  # ---------------------------------------------------------------------------
+  - id: "R-07"
+    description: "Destructive operation prompts → require human"
+    match:
+      contains: "delete|destroy|drop|purge|wipe|truncate|rm -rf"
+      contains_is_regex: true
+      min_confidence: low
+    action:
+      type: require_human
+      message: "This prompt involves a potentially destructive operation. Review carefully."
+
+  # ---------------------------------------------------------------------------
+  # R-08: LOW confidence FREE_TEXT → require human
+  #
+  # Low-confidence free_text events are produced by the stall watchdog
+  # when the process is silent but no pattern matched. The excerpt may
+  # be ambiguous. Route to human rather than injecting blindly.
+  # ---------------------------------------------------------------------------
+  - id: "R-08"
+    description: "Low-confidence free_text → require human (ambiguous)"
+    match:
+      prompt_type:
+        - free_text
+      min_confidence: low
+    action:
+      type: require_human
+      message: >
+        AtlasBridge detected a possible free-text input prompt with low confidence.
+        Last output is shown above. Please respond or dismiss.
+
+  # ---------------------------------------------------------------------------
+  # R-09: Claude Code tool, YES/NO → auto-reply "y" with strict constraints
+  #
+  # Scoped specifically to the claude adapter. Claude Code frequently
+  # emits yes/no prompts for tool-use permission requests. This rule
+  # fires only for high-confidence yes/no events from claude sessions,
+  # without the "Continue" keyword restriction that R-01 uses.
+  #
+  # Note: R-01 would also fire for claude sessions, but this rule is
+  # more specific (tool_id: claude + no contains requirement). Ordering
+  # matters: place tool-specific rules BEFORE broader wildcard rules
+  # if you want the tool-specific rule to win.
+  #
+  # This rule is ordered after R-01 intentionally: R-01 handles "Continue"
+  # prompts for all tools; R-09 handles remaining high-confidence yes/no
+  # prompts that are specific to claude.
+  # ---------------------------------------------------------------------------
+  - id: "R-09"
+    description: "Claude Code high-confidence YES/NO → auto-reply y"
+    match:
+      tool_id: "claude"
+      prompt_type:
+        - yes_no
+      min_confidence: high
+    action:
+      type: auto_reply
+      value: "y"
+      constraints:
+        allowed_choices:
+          - "y"
+          - "n"
+        allow_free_text: false
+
+  # ---------------------------------------------------------------------------
+  # R-10: Catch-all → require human
+  #
+  # Any prompt that has not been matched by a more specific rule above
+  # must be reviewed by a human. This rule should always be the last
+  # entry in the rules list. It has no match constraints, so it matches
+  # every PromptEvent that reaches it.
+  #
+  # Functionally equivalent to defaults.no_match, but explicit here so
+  # that the audit trace shows "matched_rule_id: R-10" rather than null,
+  # making it clear that the catch-all was intentionally reached.
+  # ---------------------------------------------------------------------------
+  - id: "R-10"
+    description: "Catch-all: any unmatched prompt → require human"
+    match: {}
+    action:
+      type: require_human
+      message: >
+        No specific policy rule matched this prompt. Please review and respond.
+        Consider adding a more specific rule to policy.yaml if this pattern
+        appears frequently.
+
+# ---------------------------------------------------------------------------
+# Defaults
+#
+# Applied when no rule matches AND the catch-all above is somehow not
+# reached (e.g. if R-10 is removed). Both fields default to require_human
+# which is the safest possible fallback.
+#
+# Never set no_match: deny — that silently blocks execution with no
+# operator notification and no way to recover without manual intervention.
+# ---------------------------------------------------------------------------
+defaults:
+  no_match: require_human
+  low_confidence: require_human

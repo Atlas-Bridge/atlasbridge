@@ -1,0 +1,208 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://atlasbridge.dev/schemas/policy/v0.json",
+  "title": "AtlasBridge Policy DSL v0",
+  "description": "Schema for AtlasBridge autopilot policy files. Evaluation is first-match-wins across the rules list. See docs/policy-dsl.md for full semantics.",
+  "type": "object",
+  "required": ["policy_version"],
+  "additionalProperties": false,
+  "properties": {
+    "policy_version": {
+      "type": "string",
+      "description": "Policy DSL version. Must be the string \"0\". Required.",
+      "const": "0"
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable policy name. Shown in explain output and decision traces. No uniqueness constraint.",
+      "maxLength": 128
+    },
+    "autonomy_mode": {
+      "type": "string",
+      "description": "Global action gate. 'off' routes all prompts to require_human regardless of rules. 'assist' permits require_human and notify_only only. 'full' permits all action types. Defaults to 'off'.",
+      "enum": ["off", "assist", "full"],
+      "default": "off"
+    },
+    "rules": {
+      "type": "array",
+      "description": "Ordered list of PolicyRule objects. Evaluated in list order; first match wins. Empty list is valid.",
+      "items": {
+        "$ref": "#/definitions/PolicyRule"
+      },
+      "default": []
+    },
+    "defaults": {
+      "type": "object",
+      "description": "Fallback actions applied when no rule matches.",
+      "additionalProperties": false,
+      "properties": {
+        "no_match": {
+          "type": "string",
+          "description": "Action when no rule matches a medium or high confidence prompt. Defaults to 'require_human'. Never set to 'deny': that silently blocks execution.",
+          "enum": ["require_human", "deny"],
+          "default": "require_human"
+        },
+        "low_confidence": {
+          "type": "string",
+          "description": "Action when the prompt confidence is LOW and no rule explicitly matches it (i.e. no rule has min_confidence: low). Defaults to 'require_human'.",
+          "enum": ["require_human", "deny"],
+          "default": "require_human"
+        }
+      }
+    }
+  },
+  "definitions": {
+    "PolicyRule": {
+      "type": "object",
+      "description": "A single policy rule. The rule fires when all criteria in the 'match' block are satisfied. The first rule to fire wins.",
+      "required": ["id", "match", "action"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for this rule. Used in decision traces and explain output. Must be unique across all rules in the policy.",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9\\-_]{0,63}$",
+          "examples": ["R-01", "deny-credentials", "confirm_enter_auto"]
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional human-readable label for this rule. Shown in explain output alongside the rule id.",
+          "maxLength": 256
+        },
+        "match": {
+          "$ref": "#/definitions/MatchBlock"
+        },
+        "action": {
+          "$ref": "#/definitions/ActionBlock"
+        }
+      }
+    },
+    "MatchBlock": {
+      "type": "object",
+      "description": "All specified match criteria must be satisfied for the rule to fire. Fields that are absent are not constraints (they always match). An empty match block {} matches every prompt.",
+      "additionalProperties": false,
+      "properties": {
+        "tool_id": {
+          "type": "string",
+          "description": "Exact tool name to match against session.tool (the adapter name, e.g. 'claude', 'openai', 'gemini'). The special value '*' matches any tool. Defaults to '*'.",
+          "default": "*",
+          "examples": ["claude", "openai", "gemini", "*"]
+        },
+        "repo": {
+          "type": "string",
+          "description": "String prefix match against session.cwd (the working directory at session start). '/home/user/project' matches '/home/user/project/src' but not '/home/user/project2'. No path normalisation or symlink resolution is applied.",
+          "examples": ["/home/alice/workspaces/backend", "/Users/bob/projects"]
+        },
+        "prompt_type": {
+          "type": "array",
+          "description": "List of prompt types to match. The rule fires if event.prompt_type is in this list. Omit to match any prompt type.",
+          "items": {
+            "type": "string",
+            "enum": ["yes_no", "confirm_enter", "multiple_choice", "free_text"],
+            "description": "A PromptType value. 'yes_no': binary yes/no prompt. 'confirm_enter': press-Enter prompt. 'multiple_choice': numbered option menu. 'free_text': arbitrary text input."
+          },
+          "minItems": 1,
+          "uniqueItems": true,
+          "examples": [
+            ["yes_no"],
+            ["yes_no", "confirm_enter"],
+            ["free_text"]
+          ]
+        },
+        "contains": {
+          "type": "string",
+          "description": "Substring or regex to search for in event.excerpt (ANSI-stripped, 200-char truncated terminal output). Case-insensitive. When contains_is_regex is false (default), this is a literal substring search. When contains_is_regex is true, this is a Python regex evaluated with re.search().",
+          "maxLength": 200,
+          "examples": ["Continue?", "are you sure", "password|token|api.?key"]
+        },
+        "contains_is_regex": {
+          "type": "boolean",
+          "description": "If true, the 'contains' value is treated as a Python regex (re.search, case-insensitive). Subject to safety limits: max 200 chars, 100ms timeout, no backreferences, no quantified lookahead/lookbehind, must not match empty string. Defaults to false.",
+          "default": false
+        },
+        "min_confidence": {
+          "type": "string",
+          "description": "Minimum confidence level for the rule to fire. Confidence ordering: low < medium < high. A rule with min_confidence 'low' matches events at any confidence level. Defaults to 'low'.",
+          "enum": ["low", "medium", "high"],
+          "default": "low"
+        }
+      }
+    },
+    "ActionBlock": {
+      "type": "object",
+      "description": "Action to execute when this rule matches. The 'type' field is required; other fields depend on the action type.",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Action type. 'auto_reply': inject value into PTY stdin. 'require_human': route to channel and wait for operator. 'deny': block and pause without notification. 'notify_only': send notification, then fall through to defaults.no_match.",
+          "enum": ["auto_reply", "require_human", "deny", "notify_only"]
+        },
+        "value": {
+          "type": "string",
+          "description": "Literal string to inject into PTY stdin. Required when type is 'auto_reply'. A carriage return (\\r) is appended after the value. No interpolation or shell expansion occurs.",
+          "examples": ["y", "n", "\n", "1", "main"]
+        },
+        "message": {
+          "type": "string",
+          "description": "Optional context message forwarded to the operator channel alongside the prompt excerpt. Only meaningful for 'require_human' actions.",
+          "maxLength": 1024
+        },
+        "reason": {
+          "type": "string",
+          "description": "Human-readable reason string for 'deny' actions. Written to the audit log and shown in atlasbridge sessions output.",
+          "maxLength": 512
+        },
+        "constraints": {
+          "$ref": "#/definitions/ReplyConstraints"
+        }
+      },
+      "if": {
+        "properties": {
+          "type": { "const": "auto_reply" }
+        }
+      },
+      "then": {
+        "required": ["value"]
+      }
+    },
+    "ReplyConstraints": {
+      "type": "object",
+      "description": "Constraints applied to auto_reply values. The engine validates that 'action.value' satisfies all constraints at policy load time. Constraint violations are validation errors.",
+      "additionalProperties": false,
+      "properties": {
+        "max_length": {
+          "type": "integer",
+          "description": "Maximum byte length of the injected value string. Values exceeding this length are rejected at validation time.",
+          "minimum": 1,
+          "maximum": 4096
+        },
+        "numeric_only": {
+          "type": "boolean",
+          "description": "If true, the value must be a string representation of an integer (e.g. '1', '42'). Useful for multiple_choice prompts where the reply is a numbered option.",
+          "default": false
+        },
+        "allowed_choices": {
+          "type": "array",
+          "description": "If set, action.value must be one of these strings. The engine validates this at policy load time: a value not in the list is a validation error.",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "uniqueItems": true,
+          "examples": [
+            ["y", "n"],
+            ["1", "2", "3"],
+            ["\n"]
+          ]
+        },
+        "allow_free_text": {
+          "type": "boolean",
+          "description": "If false and allowed_choices is set, values not in allowed_choices are rejected. If true (default), allowed_choices is advisory only and does not block values outside the list.",
+          "default": true
+        }
+      }
+    }
+  }
+}

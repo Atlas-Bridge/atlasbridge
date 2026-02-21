@@ -1,0 +1,32 @@
+policy_version: "0"
+name: escalation
+autonomy_mode: assist
+
+rules:
+  - id: deny-destructive
+    description: Deny prompts that mention rm -rf or DROP TABLE.
+    match:
+      contains: "(rm -rf|DROP TABLE)"
+      contains_is_regex: true
+    action:
+      type: deny
+      reason: Destructive operation requires manual review.
+
+  - id: notify-deploy
+    description: Notify on deploy-related prompts without blocking.
+    match:
+      contains: deploy
+    action:
+      type: notify_only
+      message: "Deploy prompt detected — review recommended."
+
+  - id: free-text-require-human
+    description: Always route free-text prompts to human.
+    match:
+      prompt_type: [free_text]
+    action:
+      type: require_human
+
+defaults:
+  no_match: require_human
+  low_confidence: require_human

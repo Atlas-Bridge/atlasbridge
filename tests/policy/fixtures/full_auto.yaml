@@ -1,0 +1,45 @@
+policy_version: "0"
+name: full-auto
+autonomy_mode: full
+
+rules:
+  - id: claude-yes-no
+    description: Auto-reply 'y' to yes/no prompts from Claude Code with high confidence.
+    match:
+      tool_id: claude_code
+      prompt_type: [yes_no]
+      min_confidence: high
+    action:
+      type: auto_reply
+      value: "y"
+      constraints:
+        allowed_choices: ["y", "n"]
+
+  - id: project-confirm
+    description: Auto-confirm Enter prompts in the project repo.
+    match:
+      repo: /home/user/project
+      prompt_type: [confirm_enter]
+    action:
+      type: auto_reply
+      value: "\n"
+
+  - id: multiple-choice-first
+    description: Auto-select option 1 for multiple-choice prompts.
+    match:
+      prompt_type: [multiple_choice]
+      min_confidence: medium
+    action:
+      type: auto_reply
+      value: "1"
+
+  - id: catch-all-human
+    description: Route everything else to the human operator.
+    match:
+      prompt_type: ["*"]
+    action:
+      type: require_human
+
+defaults:
+  no_match: require_human
+  low_confidence: require_human

@@ -355,6 +355,45 @@ def version(as_json: bool, verbose: bool, experimental: bool) -> None:
 
 
 # ---------------------------------------------------------------------------
+# policy
+# ---------------------------------------------------------------------------
+
+from atlasbridge.cli._policy_cmd import policy_group  # noqa: E402
+
+cli.add_command(policy_group)
+
+
+# ---------------------------------------------------------------------------
+# autopilot
+# ---------------------------------------------------------------------------
+
+from atlasbridge.cli._autopilot import autopilot_group  # noqa: E402
+
+cli.add_command(autopilot_group)
+
+
+# ---------------------------------------------------------------------------
+# pause / resume (convenience aliases for autopilot disable / enable)
+# ---------------------------------------------------------------------------
+
+
+@cli.command()
+def pause() -> None:
+    """Pause the autopilot — all prompts will be forwarded to you."""
+    from atlasbridge.cli._autopilot import autopilot_disable
+
+    autopilot_disable.main(standalone_mode=False)
+
+
+@cli.command()
+def resume() -> None:
+    """Resume the autopilot after a pause."""
+    from atlasbridge.cli._autopilot import autopilot_enable
+
+    autopilot_enable.main(standalone_mode=False)
+
+
+# ---------------------------------------------------------------------------
 # lab (Prompt Lab — dev/CI only)
 # ---------------------------------------------------------------------------
 

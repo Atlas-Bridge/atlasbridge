@@ -1,0 +1,25 @@
+policy_version: "0"
+name: basic
+autonomy_mode: full
+
+rules:
+  - id: yes-no-auto-yes
+    description: Auto-reply 'y' to all yes/no prompts.
+    match:
+      prompt_type: [yes_no]
+      min_confidence: medium
+    action:
+      type: auto_reply
+      value: "y"
+
+  - id: confirm-enter-auto
+    description: Auto-confirm all Enter-key prompts.
+    match:
+      prompt_type: [confirm_enter]
+    action:
+      type: auto_reply
+      value: "\n"
+
+defaults:
+  no_match: require_human
+  low_confidence: require_human
