@@ -75,10 +75,14 @@ class ClaudeCodeAdapter(BaseAdapter):
         tty_class = get_tty_class()
         tty = tty_class(cfg, session_id)
         self._supervisors[session_id] = tty
-        self._detectors[session_id] = PromptDetector(session_id)
+        self._detectors[session_id] = self._make_detector(session_id)
         self._output_buffers[session_id] = bytearray()
 
         await tty.start()
+
+    def _make_detector(self, session_id: str) -> PromptDetector:
+        """Return the PromptDetector to use for this adapter. Override in subclasses."""
+        return PromptDetector(session_id)
 
     async def terminate_session(self, session_id: str, timeout_s: float = 5.0) -> None:
         tty = self._supervisors.pop(session_id, None)
