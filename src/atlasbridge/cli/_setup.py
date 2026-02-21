@@ -153,6 +153,20 @@ def _setup_telegram(
         console.print("Expected format: [dim]<8-12 digits>:<35+ alphanumeric chars>[/dim]")
         sys.exit(1)
 
+    # Pre-flight: verify the token against Telegram API (interactive only)
+    if not non_interactive:
+        console.print("\nVerifying bot token with Telegram...")
+        from atlasbridge.channels.telegram.verify import verify_telegram_token
+
+        ok, detail = verify_telegram_token(token)
+        if ok:
+            console.print(f"  [green]\u2713[/green] {detail}")
+        else:
+            console.print(
+                f"  [yellow]\u26a0[/yellow] Could not reach Telegram: {detail}. "
+                "Token saved \u2014 verify later with: [cyan]atlasbridge doctor[/cyan]"
+            )
+
     if not users:
         users = _env("ATLASBRIDGE_TELEGRAM_ALLOWED_USERS", "AEGIS_TELEGRAM_ALLOWED_USERS")
 
