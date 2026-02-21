@@ -279,6 +279,15 @@ You can also send `/pause` or `/resume` from Telegram or Slack.
 
 ## Changelog
 
+### v0.6.3 — Roadmap rewrite
+
+- **Updated**: [`docs/roadmap-90-days.md`](docs/roadmap-90-days.md) — replaced stale 90-day phase plan (all phases shipped) with a milestone-based roadmap anchored at v0.6.2; covers v0.7.0 through v1.0.0 GA with definitions of done
+
+### v0.6.2 — Product positioning
+
+- **Updated**: `pyproject.toml` description → "Policy-driven autonomous runtime for AI CLI agents — deterministic rule evaluation, built-in human escalation"
+- **Updated**: `pyproject.toml` keywords — added `policy`, `autonomous`, `agent`, `escalation`; removed stale relay/interactive/remote terms
+
 ### v0.6.1 — Policy Authoring Documentation
 
 - **New**: [`docs/policy-authoring.md`](docs/policy-authoring.md) — 10-section guide: quick start (5 min), core concepts, syntax reference, CLI usage, 8 authoring patterns, debugging, FAQ, and safety notes
@@ -368,8 +377,9 @@ You can also send `/pause` or `/resume` from Telegram or Slack.
 | v0.5.1 | Released | Branding fix (Aegis→AtlasBridge in CLI output) + lab import fix |
 | v0.5.2 | Released | Production UI skeleton — 6 screens, StatusCards, polling, TCSS |
 | v0.6.0 | Released | Autonomous Agent Runtime — Policy DSL v0, autopilot engine, kill switch |
-| **v0.6.1** | **Released** | Policy authoring guide, 5 policy presets, docs/policy-authoring.md |
+| v0.6.1 | Released | Policy authoring guide, 5 policy presets, docs/policy-authoring.md |
 | v0.6.2 | Released | Product positioning — autonomy-first tagline, pyproject.toml keywords |
+| **v0.6.3** | **Released** | Roadmap rewrite — milestone-based, aligned with autonomy-first positioning |
 | v0.7.0 | Planned | Windows (ConPTY, experimental) |
 | v0.7.1 | Planned | Policy engine hardening — per-rule rate limits, hot-reload, Slack kill switch |
 | v0.8.0 | Planned | Policy DSL v1 — compound conditions, session context, policy inheritance |
