@@ -1,6 +1,6 @@
 # AtlasBridge
 
-> **Universal human-in-the-loop control plane for AI developer agents.**
+> **The universal control plane for autonomous AI developer agents.**
 
 [![CI](https://github.com/abdulraoufatia/atlasbridge/actions/workflows/ci.yml/badge.svg)](https://github.com/abdulraoufatia/atlasbridge/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/atlasbridge.svg)](https://pypi.org/project/atlasbridge/)
@@ -9,20 +9,29 @@
 
 ---
 
-AtlasBridge sits between you and your AI coding agent. Whenever your agent pauses and requires human input — approval, confirmation, a choice, or clarification — AtlasBridge forwards that prompt to your phone.
+AtlasBridge sits between you and your AI coding agent. It detects every prompt your agent produces — approvals, confirmations, choices, clarifications — and decides what happens next.
 
-You respond from your phone via Telegram or Slack. AtlasBridge relays your decision back to the CLI. Execution resumes.
+**In relay mode**, prompts go straight to your phone via Telegram or Slack. You reply from anywhere. AtlasBridge injects your answer and the agent continues. No walking back to your desk, no missed prompts.
 
-No walking back to your desk. No missed prompts. You stay in control.
+**In autopilot mode** (v0.6.0+), AtlasBridge uses a policy you define in YAML to handle prompts automatically — auto-approving safe operations, escalating risky ones to your phone, and denying anything you've blocked. Every decision is logged. You can pause autopilot instantly with a single command or a message from your phone.
+
+Three autonomy modes let you dial in the level of control:
+
+| Mode | Behaviour |
+|------|-----------|
+| **Off** | Every prompt forwarded to you (classic relay) |
+| **Assist** | Policy suggests a reply; you confirm or override |
+| **Full** | Policy auto-replies where rules match; escalates the rest to you |
 
 ```
 ┌──────────────┐        ┌───────────────┐        ┌─────────────────┐
 │  AI Agent    │──────► │  AtlasBridge  │──────► │   Your Phone    │
-│ (Claude CLI) │        │  Prompt Relay │        │ (Telegram/Slack)│
-│              │◄────── │               │◄────── │                 │
-└──────────────┘        └───────────────┘        └─────────────────┘
-   paused waiting           detects &                you reply
-   for input                forwards prompt          from anywhere
+│ (Claude CLI) │        │               │        │ (Telegram/Slack)│
+│              │◄────── │  Policy Engine │◄────── │                 │
+└──────────────┘        │  + Autopilot  │        └─────────────────┘
+   paused waiting       └───────────────┘          you reply — or
+   for input              auto-replies when          policy handles it
+                          policy matches             for you
 ```
 
 ---
@@ -100,14 +109,74 @@ You'll need a Slack App with Socket Mode enabled, a bot token (`xoxb-*`), and an
 atlasbridge run claude
 ```
 
-AtlasBridge wraps Claude Code in a PTY supervisor. When it detects a prompt waiting for input, it forwards it to your phone. Tap a button or send a reply — AtlasBridge injects your answer and the agent continues.
+AtlasBridge wraps Claude Code in a PTY supervisor. When it detects a prompt waiting for input, it either forwards it to your phone or handles it per your policy. Tap a button, send a reply, or let autopilot take care of it.
 
-### 3. Check status
+### 3. Enable autopilot (optional)
+
+Create a policy file to tell AtlasBridge which prompts to handle automatically:
+
+```yaml
+# ~/.atlasbridge/policy.yaml
+policy_version: "0"
+name: my-policy
+autonomy_mode: full
+
+rules:
+  - id: auto-approve-yes-no
+    description: Auto-reply 'y' to yes/no prompts
+    match:
+      prompt_type: [yes_no]
+      min_confidence: medium
+    action:
+      type: auto_reply
+      value: "y"
+
+  - id: auto-confirm-enter
+    description: Auto-press Enter on confirmation prompts
+    match:
+      prompt_type: [confirm_enter]
+    action:
+      type: auto_reply
+      value: "\n"
+
+defaults:
+  no_match: require_human
+  low_confidence: require_human
+```
+
+Then enable it:
 
 ```bash
-atlasbridge status
-atlasbridge sessions
+atlasbridge autopilot enable
+atlasbridge autopilot mode full      # or: assist, off
 ```
+
+Validate and test your policy before going live:
+
+```bash
+atlasbridge policy validate policy.yaml
+atlasbridge policy test policy.yaml --prompt "Continue? [y/n]" --type yes_no --explain
+```
+
+### 4. Check status
+
+```bash
+atlasbridge status                   # daemon + channel status
+atlasbridge sessions                 # active and recent sessions
+atlasbridge autopilot status         # autopilot state + recent decisions
+atlasbridge autopilot explain        # last 20 decisions with explanations
+```
+
+### 5. Pause and resume
+
+Instantly pause autopilot and route all prompts to your phone:
+
+```bash
+atlasbridge pause                    # from your terminal
+atlasbridge resume                   # re-enable autopilot
+```
+
+You can also send `/pause` or `/resume` from Telegram or Slack.
 
 ---
 
@@ -115,12 +184,12 @@ atlasbridge sessions
 
 1. `atlasbridge run claude` wraps your AI CLI in a PTY supervisor
 2. The **tri-signal prompt detector** watches the output stream
-3. When a prompt is detected, AtlasBridge sends it to your Telegram or Slack
-4. You tap a button or send a reply on your phone
-5. AtlasBridge injects your answer into the CLI's stdin
-6. The agent continues
-
-AtlasBridge is a relay, not a firewall. It does not interpret commands, score risks, or block actions. It asks you — and only you — at the exact moment the agent needs human input.
+3. When a prompt is detected:
+   - **Autopilot off** — prompt is forwarded to Telegram/Slack; you reply from your phone
+   - **Autopilot assist** — policy suggests a reply; you confirm or override from your phone
+   - **Autopilot full** — policy auto-replies if a rule matches; unmatched prompts escalate to your phone
+4. AtlasBridge injects the answer (yours or the policy's) into the CLI's stdin
+5. Every decision is recorded in an append-only audit log
 
 ---
 
@@ -164,6 +233,7 @@ AtlasBridge is a relay, not a firewall. It does not interpret commands, score ri
 - Added `__init__.py` to `ui/css/` so `importlib.resources` can locate assets
 - `atlasbridge doctor` now checks that UI assets are loadable
 - 4 new regression tests for CSS resource loading
+
 ### v0.5.2 — Production UI skeleton
 
 - New `atlasbridge.ui` package: 6 screens with exact widget IDs, `StatusCards` component, `polling.py` (`poll_state()`), and full TCSS

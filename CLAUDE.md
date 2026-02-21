@@ -6,11 +6,15 @@ This file is read by Claude Code automatically. It provides project context for 
 
 ## What AtlasBridge is
 
-AtlasBridge is the **universal human-in-the-loop control plane for AI developer agents**.
+AtlasBridge is the **universal control plane for autonomous AI developer agents**.
 
-AtlasBridge sits between you and your AI coding agent. Whenever your agent pauses and requires human input — approval, confirmation, a choice, or clarification — AtlasBridge forwards that prompt to your phone. You respond from your phone, from a channel such as Telegram or Slack. AtlasBridge relays your decision back to the CLI. Execution resumes.
+AtlasBridge sits between you and your AI coding agent. It detects every prompt your agent produces and decides what happens next — relay it to your phone, auto-reply per your policy, or deny it. You stay in control from anywhere.
 
-That's the entire product. It is NOT a security tool, firewall, policy engine, or risk classifier.
+**Two operating modes:**
+- **Relay mode** (v0.2.0+) — every prompt forwarded to Telegram/Slack; you reply from your phone
+- **Autopilot mode** (v0.6.0+) — a YAML policy defines which prompts to auto-handle, which to escalate, and which to deny; every decision is audited
+
+**Three autonomy levels:** Off (pure relay), Assist (policy suggests, you confirm), Full (policy auto-replies, escalates the rest).
 
 ---
 
@@ -18,8 +22,6 @@ That's the entire product. It is NOT a security tool, firewall, policy engine, o
 
 - Not a security product
 - Not a CLI firewall
-- Not an operation risk classifier
-- Not a "dangerous command" gatekeeper
 - Not a cloud service
 
 ---
@@ -216,5 +218,6 @@ Override with `ATLASBRIDGE_CONFIG` env var. Legacy `AEGIS_CONFIG` is also honour
 | v0.3.0 | Linux  | Released | Linux PTY, systemd integration |
 | v0.4.0 | Slack  | Released | Slack channel, multi-channel routing, renamed to AtlasBridge |
 | v0.5.0 | TUI    | Released | Interactive Textual TUI — setup wizard, sessions, logs, doctor |
-| v0.6.0 | Windows | Planned | ConPTY experimental |
+| v0.6.0 | Autopilot | Released | Policy DSL v0, autopilot engine, kill switch, decision trace |
+| v0.7.0 | Windows | Planned | ConPTY experimental |
 | v1.0.0 | GA | Planned | Stable adapter + channel API |
