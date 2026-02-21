@@ -398,6 +398,17 @@ cli.add_command(autopilot_group)
 
 
 # ---------------------------------------------------------------------------
+# enterprise (edition, features, cloud)
+# ---------------------------------------------------------------------------
+
+from atlasbridge.cli._enterprise import cloud_group, edition_cmd, features_cmd  # noqa: E402
+
+cli.add_command(edition_cmd)
+cli.add_command(features_cmd)
+cli.add_command(cloud_group)
+
+
+# ---------------------------------------------------------------------------
 # pause / resume (convenience aliases for autopilot disable / enable)
 # ---------------------------------------------------------------------------
 

@@ -380,6 +380,46 @@ You can also send `/pause` or `/resume` from Telegram or Slack.
 
 ---
 
+## Enterprise Governance (Experimental)
+
+AtlasBridge follows an **open-core** model:
+
+- **Core runtime** (public, MIT) — policy engine, PTY supervisor, prompt detection, channel relay, audit log. Fully functional. Always free.
+- **Enterprise local governance** (public, MIT) — decision trace v2 with hash chaining, deterministic risk classification, policy pinning, RBAC. Phase A — shipping now.
+- **Cloud governance + dashboard** (private, future) — SaaS backend, multi-tenant policy management, web dashboard. Phase B/C — design only.
+
+### What's available now
+
+| Feature | Edition | Maturity |
+|---------|---------|----------|
+| Policy DSL v1 | Community | Stable |
+| Autopilot engine | Community | Stable |
+| Decision trace (JSONL) | Community | Stable |
+| Hash-chained audit log | Community | Stable |
+| Decision trace v2 (hash-chained) | Pro | Experimental |
+| Deterministic risk classifier | Pro | Experimental |
+| Policy pinning (session-level) | Pro | Experimental |
+| RBAC (local) | Pro | Experimental |
+| Cloud policy sync | Enterprise | Specification |
+| Web dashboard | Enterprise | Design only |
+
+### Key principles
+
+- **Execution stays local.** The AI CLI agent always runs on your machine. Cloud features observe; they never execute.
+- **Deterministic, not heuristic.** Risk classification uses a fixed decision table. No ML. No guesswork.
+- **Offline-first.** The runtime works without any cloud connection. Cloud features degrade gracefully.
+- **Correctness over marketing.** We don't call invariants "security features." They are correctness guarantees.
+
+```bash
+atlasbridge edition     # Show current edition
+atlasbridge features    # List all feature flags
+atlasbridge cloud status  # Cloud integration status
+```
+
+See [Enterprise Architecture](docs/enterprise-architecture.md) and [Enterprise Roadmap](docs/roadmap-enterprise-90-days.md) for the full plan.
+
+---
+
 ## Status
 
 | Version | Status | Description |
@@ -417,6 +457,10 @@ See the `docs/` directory:
 | [policy-dsl.md](docs/policy-dsl.md) | AtlasBridge Policy DSL v0 full reference |
 | [autonomy-modes.md](docs/autonomy-modes.md) | Off / Assist / Full mode specs and behavior |
 | [roadmap-90-days.md](docs/roadmap-90-days.md) | 6-phase roadmap |
+| [enterprise-architecture.md](docs/enterprise-architecture.md) | Enterprise governance architecture |
+| [roadmap-enterprise-90-days.md](docs/roadmap-enterprise-90-days.md) | Enterprise evolution roadmap (Phase A/B/C) |
+| [enterprise-trust-boundaries.md](docs/enterprise-trust-boundaries.md) | Trust domains and security boundaries |
+| [enterprise-saas-architecture.md](docs/enterprise-saas-architecture.md) | Phase C SaaS design (design only) |
 | [qa-top-20-failure-scenarios.md](docs/qa-top-20-failure-scenarios.md) | 20 mandatory QA scenarios |
 | [dev-workflow-multi-agent.md](docs/dev-workflow-multi-agent.md) | Branch model, agent roles, CI pipeline |
 
@@ -439,6 +483,8 @@ src/atlasbridge/
   os/systemd/   — Linux systemd user service integration
   adapters/     — CLI tool adapters (Claude Code, OpenAI CLI, Gemini CLI)
   channels/     — notification channels (Telegram, Slack, MultiChannel)
+  enterprise/   — enterprise governance (Phase A: local risk, RBAC, trace v2)
+  cloud/        — cloud integration interfaces (Phase B: spec only, no implementation)
   cli/          — Click CLI entry point and subcommands
 tests/
   unit/         — pure unit tests (no I/O)
