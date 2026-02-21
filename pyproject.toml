@@ -193,6 +193,7 @@ show_missing = true
 exclude_dirs = ["tests"]
 skips = [
     "B101",
+    "B105",  # hardcoded_password_string — false positive on empty default token fields
     "B110",
     "B404",
     "B602",
