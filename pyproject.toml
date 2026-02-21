@@ -1,11 +1,11 @@
 [build-system]
-requires = ["setuptools>=68", "setuptools-scm>=8"]
+requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "aegis-cli"
 version = "0.1.0"
-description = "Remote interactive prompt relay for AI CLI tools — forward prompts to your phone, reply from anywhere"
+description = "Universal human-in-the-loop control plane for AI developer agents — forward prompts to your phone, reply from anywhere"
 readme = "README.md"
 license = { file = "LICENSE" }
 authors = [{ name = "Aegis Contributors" }]
@@ -82,6 +82,8 @@ Security = "https://github.com/abdulraoufatia/aegis-cli/blob/main/SECURITY.md"
 # ---------------------------------------------------------------------------
 
 [tool.setuptools.packages.find]
+# Root package (aegis/) is the installed distribution for now.
+# src/aegis/ stubs will become the primary package in v0.2.0.
 where = ["."]
 include = ["aegis*"]
 
@@ -103,8 +105,6 @@ select = [
     "ANN", # flake8-annotations
 ]
 ignore = [
-    "ANN101",  # Missing type annotation for `self`
-    "ANN102",  # Missing type annotation for `cls`
     "ANN401",  # Dynamically typed Any — needed for generic helpers and callback dispatch
     "S101",    # Use of assert (ok in tests)
     "S110",    # try-except-pass — intentional in cleanup/signal handlers
@@ -117,7 +117,10 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["S101", "ANN", "S105", "S106", "S108"]
-"aegis/policy/detector.py" = ["E501"]  # regex patterns are inherently long
+"tests/prompt_lab/**/*.py" = ["S101", "ANN", "F401", "E501", "UP", "I", "B"]
+"aegis/policy/detector.py" = ["E501"]         # regex patterns are inherently long
+# New src/aegis design stubs — full lint enforcement deferred to v0.2.0 implementation
+"src/**/*.py" = ["ANN", "I", "F401", "E501", "N", "UP", "B", "C4", "S", "W"]
 
 [tool.mypy]
 python_version = "3.11"
@@ -143,6 +146,11 @@ module = [
 # Pre-existing strict-mode issues in modules that require real I/O to type correctly
 ignore_errors = true
 
+[[tool.mypy.overrides]]
+# New src/aegis package — design stubs; strict mode applied incrementally
+module = ["aegis.os.*", "aegis.adapters.*", "aegis.core.daemon.*", "aegis.core.routing.*", "aegis.core.session.*", "aegis.core.store.*", "aegis.core.audit.*", "aegis.channels.*", "aegis.cli.*"]
+ignore_errors = true
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
@@ -164,6 +172,11 @@ omit = [
     "aegis/core/github_client.py",         # requires live GitHub API
     "aegis/core/fix_engine.py",            # requires subprocess + Anthropic API
     "aegis/core/daemon_services/*.py",     # daemon fork/signal code not unit-testable
+    # New src/aegis design stubs — coverage added in v0.2.0 implementation
+    "src/aegis/os/*",
+    "src/aegis/core/daemon/*",
+    "src/aegis/channels/*",
+    "src/aegis/cli/*",
 ]
 
 [tool.coverage.report]

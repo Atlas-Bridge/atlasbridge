@@ -1,62 +1,64 @@
-# Aegis CLI UX Design
+# Aegis CLI UX Specification
 
-**Version:** 0.1.0
+**Version:** 0.2.0
 **Status:** Design
-**Last updated:** 2026-02-20
+**Last updated:** 2026-02-21
 
 ---
 
-## Overview
+## 1. Design Principles
 
-Aegis is a CLI-first tool. Every interaction should feel fast, clear, and recoverable. This document defines the complete UX specification for all Aegis commands, flags, prompts, output formats, and error handling.
+Aegis is a CLI-first tool. Every interaction must feel fast, clear, and recoverable. The following principles govern all command design decisions.
 
-### Design Principles
+### Simple
 
-1. **Fail safe, fail loudly** — errors produce clear messages with a suggested fix
-2. **Progressive disclosure** — defaults work; advanced flags unlock more control
-3. **Structured by default, human-readable always** — `--json` available everywhere
-4. **Recoverable** — every command can be re-run safely
-5. **No surprises** — destructive or side-effecting actions require confirmation
-6. **Quiet mode** — scripts can suppress all non-error output with `--quiet`
-7. **Debug mode** — `--debug` shows full stack traces and internal state
+The default invocation of every command does the right thing without flags. A new user who has just run `aegis setup` should be able to run `aegis start` and `aegis run claude` without reading documentation.
+
+Advanced control (dry runs, custom session names, JSON output) is available through flags, but flags are never required for normal use.
+
+### Discoverable
+
+`aegis --help` shows every command. `aegis <command> --help` shows every flag for that command. The help text is the spec — if the help text says something works, it works. If a command is experimental or platform-limited, the help text says so.
+
+`aegis doctor` is always the answer when something is wrong. The user should never have to guess what to check. Every error message ends with a suggested next step, usually `Run aegis doctor to diagnose.`
+
+### Self-healing (`doctor --fix`)
+
+`aegis doctor --fix` attempts to automatically repair common configuration problems: wrong file permissions, missing directories, stale lock files, expired tokens in the environment. It is safe to run at any time. It never makes destructive changes without confirmation.
+
+### No hidden state
+
+Aegis does not have hidden global state beyond the files in `~/.aegis/`. The location of every relevant file is shown by `aegis status` and `aegis doctor`. There are no undocumented environment variables. There are no magic fallback behaviors that only activate under specific conditions.
+
+### Additional principles
+
+- **Fail loudly**: errors produce clear messages to stderr with a suggested fix.
+- **Recoverable**: every command can be re-run safely.
+- **No surprises**: destructive or side-effecting actions require confirmation (unless `--yes` is passed).
+- **Quiet mode**: scripts can suppress all non-error output with `--quiet`.
+- **Debug mode**: `--debug` shows full stack traces and internal state.
+- **JSON everywhere**: `--json` is available on every command that produces structured output.
 
 ---
 
-## Global Flags
+## 2. Command Reference
+
+### Global Flags
 
 Available on every command:
 
 | Flag | Short | Description |
-|------|-------|-------------|
+|---|---|---|
 | `--help` | `-h` | Show help and exit |
 | `--version` | `-V` | Show version and exit |
 | `--json` | | Output as JSON (machine-readable) |
 | `--quiet` | `-q` | Suppress non-error output |
-| `--debug` | | Show debug output and stack traces |
+| `--debug` | | Show debug output and full stack traces |
 | `--config PATH` | | Override config file path |
 | `--no-color` | | Disable colored output |
+| `--yes` | `-y` | Skip confirmation prompts; assume yes |
 
 ---
-
-## Exit Codes
-
-| Code | Name | Meaning |
-|------|------|---------|
-| `0` | `SUCCESS` | Command completed successfully |
-| `1` | `ERROR` | General / unhandled error |
-| `2` | `CONFIG_ERROR` | Configuration invalid or missing |
-| `3` | `ENV_ERROR` | Environment problem (Python version, missing deps) |
-| `4` | `NETWORK_ERROR` | Network failure (Telegram unreachable) |
-| `5` | `PERMISSION_ERROR` | File permissions or access denied |
-| `6` | `SECURITY_VIOLATION` | Policy block, unauthorized operation, unauthorized user |
-| `7` | `DEPENDENCY_MISSING` | Required tool or library not found |
-| `8` | `STATE_CORRUPTION` | Database, lock file, or audit log corrupted |
-
-All error output goes to `stderr`. Exit codes are consistent and documented.
-
----
-
-## Commands
 
 ### `aegis setup`
 
@@ -70,24 +72,23 @@ aegis setup [OPTIONS]
 **Flags:**
 
 | Flag | Description |
-|------|-------------|
-| `--non-interactive` | Skip all prompts; require flags and env vars |
-| `--telegram-token TOKEN` | Telegram bot token |
-| `--allowed-users IDS` | Comma-separated Telegram user IDs |
-| `--config-path PATH` | Custom config directory (default: `~/.aegis/`) |
+|---|---|
+| `--token TOKEN` | Telegram bot token (skips Step 1 prompt) |
+| `--users IDS` | Comma-separated Telegram user IDs (skips Step 2 prompt) |
+| `--channel TYPE` | Channel to configure: `telegram` (default), `slack` |
+| `--non-interactive` | Skip all prompts; require `--token` and `--users` |
 | `--force` | Re-run setup even if already configured |
+| `--config-path PATH` | Custom config directory (default: `~/.aegis/`) |
 | `--json` | Output result as JSON |
 
 **Interactive flow:**
 
 ```
-╔══════════════════════════════════════════════╗
-║           Welcome to Aegis Setup            ║
-╚══════════════════════════════════════════════╝
+Welcome to Aegis Setup
 
-Aegis protects your machine by intercepting AI agent
-tool calls and routing dangerous operations to your
-phone for approval.
+Aegis is a remote interactive prompt relay for AI developer agents.
+When your AI agent pauses and waits for your input, Aegis forwards
+the prompt to your phone via Telegram and injects your reply.
 
 Let's get you set up. This takes about 2 minutes.
 
@@ -98,67 +99,55 @@ You need a Telegram bot. If you don't have one:
   2. Send /newbot and follow the prompts
   3. Copy the token BotFather gives you
 
-Enter your Telegram bot token: █
+Enter your Telegram bot token: _
 
 Step 2/5: Allowed Telegram Users
 ──────────────────────────────────
-Only these Telegram user IDs can approve operations.
+Only these Telegram user IDs can send replies to your agent.
+To find your ID: open Telegram, search @userinfobot, send /start.
 
-To find your ID:
-  1. Open Telegram and search for @userinfobot
-  2. Send /start — it will reply with your ID
-
-Enter your Telegram user ID(s) [comma-separated]: █
+Enter your Telegram user ID(s) [comma-separated]: _
 
 Step 3/5: Testing Telegram Connectivity
 ──────────────────────────────────────────
-  ⏳ Connecting to Telegram API...
-  ✓  Bot token valid — bot name: @YourAegisBot
-  ⏳ Sending test message to user 123456789...
-  ✓  Test message delivered
+  Connecting to Telegram API...
+  Bot token valid — bot name: @YourAegisBot
+  Sending test message to user 123456789...
+  Test message delivered
 
 Check Telegram — you should see a message from your bot.
+Did you receive the test message? [Y/n]: _
 
-Did you receive the test message? [Y/n]: █
+Step 4/5: Channel
+──────────────────
+  1. Telegram (configured)
+  2. Add Slack (optional)
+  3. Skip
 
-Step 4/5: Default Policy
-──────────────────────────
-Choose your default policy:
-
-  1. Strict (recommended)
-     Require approval for all writes, deletes, and shell commands
-  2. Balanced
-     Allow safe reads; require approval for writes and deletes
-  3. Custom
-     I'll configure policy manually in ~/.aegis/policy.toml
-
-Select policy [1]: █
+Select [1]: _
 
 Step 5/5: Summary
 ──────────────────
-  Config:   ~/.aegis/config.toml       ✓
-  Database: ~/.aegis/aegis.db          ✓
-  Policy:   ~/.aegis/policy.toml       ✓
-  Telegram: @YourAegisBot              ✓
-  Users:    [123456789]                ✓
+  Config:   ~/.aegis/config.toml    OK
+  Database: ~/.aegis/aegis.db       OK
+  Telegram: @YourAegisBot           OK
+  Users:    [123456789]             OK
 
 Aegis is ready. Start it with:
-
   aegis start
 
 Then wrap your AI tool:
+  aegis run claude
 
-  aegis wrap claude
-
-Setup complete. ✓
+Setup complete.
 ```
 
 **Non-interactive mode:**
 ```bash
 aegis setup \
   --non-interactive \
-  --telegram-token "$(AEGIS_TELEGRAM_BOT_TOKEN)" \
-  --allowed-users "123456789"
+  --token "$AEGIS_TELEGRAM_BOT_TOKEN" \
+  --users "123456789"
 ```
 
 **JSON output (`--json`):**
@@ -167,16 +156,15 @@ aegis setup \
   "status": "success",
   "config_path": "/Users/ara/.aegis/config.toml",
   "db_path": "/Users/ara/.aegis/aegis.db",
-  "policy_path": "/Users/ara/.aegis/policy.toml",
   "telegram_bot": "@YourAegisBot",
   "allowed_users": [123456789]
 }
 ```
 
-**Error handling:**
-- Invalid token → exit 2, message: "Invalid Telegram bot token. Check the token from @BotFather."
-- Network failure → exit 4, message: "Cannot reach Telegram API. Check your internet connection."
-- Config already exists → prompt to confirm overwrite (unless `--force`)
+**Error cases:**
+- Invalid token: exit 2. `Error: Invalid Telegram bot token. Verify the token from @BotFather.`
+- Network failure: exit 4. `Error: Cannot reach Telegram API. Check your internet connection.`
+- Already configured: prompt to confirm overwrite, or use `--force`.
 
 ---
 
@@ -192,27 +180,19 @@ aegis start [OPTIONS]
 **Flags:**
 
 | Flag | Description |
-|------|-------------|
-| `--foreground` | Run in foreground (don't daemonize); useful for debugging |
+|---|---|
+| `--foreground` | Run in foreground; do not daemonize. Useful for debugging. |
 | `--port PORT` | Override daemon port (default: 39000) |
-| `--log-level LEVEL` | Set log level: DEBUG, INFO, WARNING, ERROR |
-| `--json` | Output status as JSON on start |
-
-**Behavior:**
-- Checks that setup has been completed (`~/.aegis/config.toml` exists)
-- Runs `aegis doctor` lightweight check before starting
-- Starts daemon process (background by default)
-- Writes PID to `~/.aegis/aegis.pid`
-- Polls Telegram for approval responses
-- Exits 0 immediately (PID returned); daemon continues in background
+| `--log-level LEVEL` | Set log level: DEBUG, INFO, WARNING, ERROR (default: INFO) |
+| `--json` | Output start result as JSON |
 
 **Output:**
 ```
 Starting Aegis daemon...
-  ✓  Config loaded
-  ✓  Database initialized
-  ✓  Telegram bot connected (@YourAegisBot)
-  ✓  Daemon started (PID 12345)
+  Config loaded
+  Database initialized
+  Telegram bot connected (@YourAegisBot)
+  Daemon started (PID 12345)
 
 Aegis is running. To stop it:
   aegis stop
@@ -221,25 +201,8 @@ Aegis is running. To stop it:
 **Already running:**
 ```
 Aegis daemon is already running (PID 12345).
-Use 'aegis stop' to stop it first, or 'aegis status' to check it.
+Use 'aegis stop' to stop it first.
 ```
-
-**Foreground mode:**
-```
-aegis start --foreground
-[2026-02-20 19:00:00] INFO  Aegis daemon starting
-[2026-02-20 19:00:00] INFO  Telegram polling started
-[2026-02-20 19:00:01] INFO  Listening for tool calls on port 39000
-^C
-[2026-02-20 19:05:00] INFO  Received SIGINT — shutting down
-[2026-02-20 19:05:00] INFO  Daemon stopped
-```
-
-**Error handling:**
-- Setup not complete → exit 2, suggest `aegis setup`
-- Doctor check fails → exit 3, show failing checks
-- Port in use → exit 1, suggest `--port`
-- Already running → exit 1 (idempotent option via `--json` check)
 
 ---
 
@@ -255,7 +218,7 @@ aegis stop [OPTIONS]
 **Flags:**
 
 | Flag | Description |
-|------|-------------|
+|---|---|
 | `--force` | Send SIGKILL instead of SIGTERM |
 | `--timeout SECONDS` | Wait this long for graceful shutdown (default: 10) |
 | `--json` | Output result as JSON |
@@ -263,102 +226,22 @@ aegis stop [OPTIONS]
 **Output:**
 ```
 Stopping Aegis daemon (PID 12345)...
-  ✓  Daemon stopped
-
-Pending approvals: 0
+  Daemon stopped
 ```
 
-**If pending approvals exist:**
+**If sessions are active:**
 ```
-Stopping Aegis daemon (PID 12345)...
-  ⚠  Warning: 2 approvals are pending. They will expire on stop.
-  Continue? [y/N]: █
-```
-
-**Not running:**
-```
-Aegis daemon is not running.
-```
-Exit 0 (idempotent).
-
----
-
-### `aegis wrap <tool>`
-
-**Purpose:** Wrap an AI CLI tool through the Aegis interception layer.
-
-**Usage:**
-```
-aegis wrap <tool> [-- <tool-args>...]
+Warning: 1 active session will be terminated (claude, PID 9876).
+Continue? [y/N]: _
 ```
 
-**Examples:**
-```bash
-aegis wrap claude
-aegis wrap claude -- --no-cache --model claude-opus-4-6
-aegis wrap openai -- api chat.completions.create
-aegis wrap python -- my_agent.py
-```
-
-**Flags:**
-
-| Flag | Description |
-|------|-------------|
-| `--dry-run` | Show what interception would do; don't execute the tool |
-| `--log-level LEVEL` | Override log level for this session |
-| `--timeout SECONDS` | Override approval timeout for this session |
-| `--policy PATH` | Override policy file for this session |
-| `--passthrough` | Disable interception; run tool directly (emergency bypass) |
-
-**Behavior:**
-- Requires daemon to be running (auto-starts if `--auto-start` is configured)
-- Launches tool with PTY (preserves interactive behavior, colors, etc.)
-- Intercepts tool call events from the AI agent's tool use protocol
-- Routes each tool call through the policy engine
-- For `allow` — executes immediately, tool call proceeds
-- For `deny` — blocks execution, returns error to agent
-- For `require_approval` — suspends tool call, sends Telegram notification, waits
-
-**Not-running warning:**
-```
-Aegis daemon is not running.
-
-Start it with:
-  aegis start
-
-Or run this session with auto-start:
-  aegis wrap claude --auto-start
-```
-
-**Dry run output:**
-```
-DRY RUN — tool calls will be shown but not executed
-
-Intercepting: claude
-
-Tool call intercepted:
-  Tool:    write_file
-  Path:    /Users/ara/project/src/main.py
-  Action:  require_approval  (policy rule: require-approval-for-writes)
-  Would:   suspend and notify Telegram user 123456789
-
-Dry run complete. No tool calls were executed.
-```
-
-**Passthrough warning:**
-```
-⚠  WARNING: Passthrough mode disables all interception.
-   Tool calls will NOT be policy-checked or approval-routed.
-   This is an emergency bypass. Use with caution.
-
-Continue with passthrough? [y/N]: █
-```
+**Not running:** Exit 0 (idempotent). Output: `Aegis daemon is not running.`
 
 ---
 
 ### `aegis status`
 
-**Purpose:** Show daemon status and system health.
+**Purpose:** Show daemon status and session overview.
 
 **Usage:**
 ```
@@ -368,145 +251,142 @@ aegis status [OPTIONS]
 **Flags:**
 
 | Flag | Description |
-|------|-------------|
+|---|---|
 | `--json` | Output as JSON |
-| `--watch` | Refresh every 2 seconds (like `watch`) |
+| `--watch` | Refresh every 2 seconds |
 
 **Output:**
 ```
 Aegis Status
-────────────────────────────────────────
-Daemon:      ● Running (PID 12345)
+────────────────────────────────────────────
+Daemon:      Running (PID 12345)
 Uptime:      2h 14m
-Port:        39000
-Telegram:    ✓  Connected (@YourAegisBot)
+Telegram:    Connected (@YourAegisBot)
 
-Approvals:
-  Pending:   2
-  Today:     14 (12 approved, 2 denied)
-  All time:  1,847
+Sessions:
+  Active:    1   (claude, PID 9876)
+  Today:     3
+
+Prompts today:
+  Forwarded:  8
+  Answered:   8
+  Pending:    0
 
 Database:    ~/.aegis/aegis.db (2.1 MB)
-Log:         ~/.aegis/aegis.log
 Version:     0.2.0
 ```
 
 **JSON output:**
 ```json
 {
-  "daemon": {
-    "running": true,
-    "pid": 12345,
-    "uptime_seconds": 8040,
-    "port": 39000
-  },
-  "telegram": {
-    "connected": true,
-    "bot_name": "@YourAegisBot"
-  },
-  "approvals": {
-    "pending": 2,
-    "today_approved": 12,
-    "today_denied": 2,
-    "total": 1847
-  },
-  "database": {
-    "path": "/Users/ara/.aegis/aegis.db",
-    "size_bytes": 2202009
-  },
+  "daemon": { "running": true, "pid": 12345, "uptime_seconds": 8040 },
+  "telegram": { "connected": true, "bot_name": "@YourAegisBot" },
+  "sessions": { "active": 1, "today": 3 },
+  "prompts": { "forwarded_today": 8, "answered_today": 8, "pending": 0 },
   "version": "0.2.0"
 }
 ```
 
 ---
 
-### `aegis approvals`
+### `aegis run <tool> [args...]`
 
-**Purpose:** Manage pending and historical approvals.
+**Purpose:** Run an AI CLI tool under Aegis supervision. This is the primary command users invoke on every session.
 
-**Subcommands:**
-
-#### `aegis approvals list`
-
+**Usage:**
 ```
-aegis approvals list [--all] [--limit N] [--json]
+aegis run <tool> [tool-args...] [OPTIONS]
 ```
+
+**Flags:**
+
+| Flag | Description |
+|---|---|
+| `--session-name NAME` | Label for this session in logs and Telegram messages |
+| `--dry-run` | Show what would happen; do not start the process |
+| `--no-inject` | Detect and forward prompts but do not inject replies (monitor-only mode) |
+| `--timeout SECONDS` | Override prompt reply timeout for this session |
+| `--policy PATH` | Override policy file for this session |
+
+**Examples:**
+```bash
+aegis run claude
+aegis run claude --model claude-opus-4-6
+aegis run python my_agent.py
+aegis run claude --session-name "auth-feature-sprint"
+aegis run claude --dry-run
+```
+
+**Behavior:**
+- Requires the daemon to be running. If not running, suggests `aegis start`.
+- Launches the tool in a PTY (full interactive terminal, colors preserved).
+- Forwards all output to the host terminal.
+- On prompt detection, sends the prompt to Telegram and waits for the reply.
+- Injects the reply into the tool's stdin. The tool resumes.
+
+**Dry-run output:**
+```
+DRY RUN — process will not be started
+
+Would run: claude
+PTY: enabled
+Session name: (auto)
+Prompt detection: tri-signal (pattern + stall + time)
+On detection: forward to Telegram user 123456789
+
+No process started.
+```
+
+**Not-running warning:**
+```
+Error: Aegis daemon is not running.
+
+Start it with:
+  aegis start
+
+Then retry:
+  aegis run claude
+
+Exit code: 1
+```
+
+---
+
+### `aegis sessions`
+
+**Purpose:** List active and recent sessions with their IDs, tool names, status, and prompt counts.
+
+**Usage:**
+```
+aegis sessions [OPTIONS]
+```
+
+**Flags:**
+
+| Flag | Description |
+|---|---|
+| `--all` | Show all sessions, not just today's |
+| `--json` | Output as JSON |
 
 **Output:**
 ```
-Pending Approvals (2)
-────────────────────────────────────────────────────────────────────────
- ID      Tool         Path / Command                  Age     Status
-────────────────────────────────────────────────────────────────────────
- a1b2c3  write_file   /src/main.py                    30s     ⏳ PENDING
- d4e5f6  bash         git push origin feature/auth    2m      ⏳ PENDING
-────────────────────────────────────────────────────────────────────────
+Sessions
+────────────────────────────────────────────────────────────────
+ ID        Tool     Status    Started    Prompts  Session Name
+────────────────────────────────────────────────────────────────
+ s-a1b2c3  claude   ACTIVE    19:10:05   8        auth-feature
+ s-d4e5f6  claude   ENDED     17:30:11   3        (none)
+────────────────────────────────────────────────────────────────
 
-Approve:  aegis approvals approve <id>
-Deny:     aegis approvals deny <id>
-Detail:   aegis approvals show <id>
-```
-
-#### `aegis approvals show <id>`
-
-```
-Approval a1b2c3
-────────────────────────────────────────────────────────────────────────
-ID:            a1b2c3
-Status:        PENDING
-Created:       2026-02-20 19:14:32 (30 seconds ago)
-Expires:       2026-02-20 19:19:32 (4m 30s remaining)
-
-Tool:          write_file
-Arguments:
-  path:        /Users/ara/project/src/main.py
-  content:     [1,247 bytes]
-
-Policy rule:   require-approval-for-writes (priority 50)
-Risk score:    MEDIUM
-
-AI session:    claude (PID 9876, started 19:10:05)
-Prompt hash:   sha256:a3f9...  (truncated for security)
-
-Actions:
-  aegis approvals approve a1b2c3
-  aegis approvals deny a1b2c3 --reason "Wrong file"
-```
-
-#### `aegis approvals approve <id>`
-
-```
-aegis approvals approve <id> [--json]
-```
-
-```
-Approved: a1b2c3 (write_file /src/main.py)
-Tool call will now execute.
-```
-
-#### `aegis approvals deny <id>`
-
-```
-aegis approvals deny <id> [--reason TEXT] [--json]
-```
-
-```
-Denied: a1b2c3 (write_file /src/main.py)
-Reason: Wrong file
-Tool call blocked. Agent will receive an error.
-```
-
-#### `aegis approvals history`
-
-```
-aegis approvals history [--limit N] [--since DATETIME] [--json]
+To attach logs for a session:
+  aegis logs --session s-a1b2c3
 ```
 
 ---
 
 ### `aegis logs`
 
-**Purpose:** View Aegis daemon and audit logs.
+**Purpose:** View Aegis daemon and session logs.
 
 **Usage:**
 ```
@@ -516,35 +396,34 @@ aegis logs [OPTIONS]
 **Flags:**
 
 | Flag | Description |
-|------|-------------|
-| `--follow` | Stream new log lines (like `tail -f`) |
-| `--lines N` | Show last N lines (default: 50) |
+|---|---|
+| `--tail` | Stream new log lines continuously (like `tail -f`) |
+| `-n N` | Show last N lines (default: 50) |
+| `--session ID` | Filter to a specific session ID |
 | `--level LEVEL` | Filter by log level: DEBUG, INFO, WARNING, ERROR |
 | `--json` | Output as JSON Lines |
 | `--since DATETIME` | Show logs after this timestamp (ISO 8601) |
-| `--audit` | Show audit log instead of daemon log |
 
-**Text output:**
+**Output:**
 ```
-[2026-02-20 19:14:02] INFO  Daemon started (PID 12345)
-[2026-02-20 19:14:03] INFO  Telegram polling started
-[2026-02-20 19:14:32] INFO  Tool call intercepted: write_file (session claude/9876)
-[2026-02-20 19:14:32] INFO  Approval required: a1b2c3 → notifying Telegram
-[2026-02-20 19:14:55] INFO  Approval a1b2c3 APPROVED by user 123456789
-[2026-02-20 19:14:55] INFO  Tool call a1b2c3 executed: write_file → SUCCESS
+[2026-02-21 19:10:05] INFO  Session started: claude (PID 9876, session s-a1b2c3)
+[2026-02-21 19:14:32] INFO  Prompt detected: YES_NO (confidence 0.90, pattern match)
+[2026-02-21 19:14:32] INFO  Prompt forwarded to Telegram: prompt-p1q2r3
+[2026-02-21 19:14:55] INFO  Reply received from user 123456789: "y"
+[2026-02-21 19:14:55] INFO  Reply injected into stdin (23ms)
 ```
 
 **JSON Lines output (`--json`):**
 ```json
-{"ts": "2026-02-20T19:14:32Z", "level": "INFO", "event": "tool_call_intercepted", "tool": "write_file", "session": "claude/9876", "approval_id": "a1b2c3"}
-{"ts": "2026-02-20T19:14:55Z", "level": "INFO", "event": "approval_decision", "approval_id": "a1b2c3", "decision": "approved", "user_id": 123456789}
+{"ts": "2026-02-21T19:14:32Z", "level": "INFO", "event": "prompt_detected", "type": "YES_NO", "confidence": 0.90}
+{"ts": "2026-02-21T19:14:55Z", "level": "INFO", "event": "reply_injected", "latency_ms": 23, "user_id": 123456789}
 ```
 
 ---
 
 ### `aegis doctor`
 
-**Purpose:** Run comprehensive system diagnostics.
+**Purpose:** Run comprehensive health diagnostics. Always the first thing to run when something is wrong.
 
 **Usage:**
 ```
@@ -554,133 +433,189 @@ aegis doctor [OPTIONS]
 **Flags:**
 
 | Flag | Description |
-|------|-------------|
-| `--fix` | Attempt safe automatic fixes |
+|---|---|
+| `--fix` | Attempt safe automatic repairs |
 | `--json` | Output as JSON |
 | `--verbose` | Show details for PASS checks too |
 
 **Output:**
 ```
 Aegis Doctor — System Diagnostics
-════════════════════════════════════════════════════════════════
+════════════════════════════════════════
 
 Environment
-───────────────────────────────────────────────────────────────
-  ✓  Python 3.11.8 (required: 3.11+)
-  ✓  Dependencies installed (aegis-cli 0.2.0)
-  ✓  SQLite 3.45.1 accessible
-  ✓  Config file exists: ~/.aegis/config.toml
-  ✓  Config file valid (all required fields present)
-  ✓  Telegram token format valid
-  ✓  Telegram API reachable
-  ✓  Bot responds: @YourAegisBot
-  ✓  claude found on PATH: /usr/local/bin/claude
-  ✗  openai not found on PATH
-       → Install with: pip install openai
+──────────────────────────────────────
+  PASS  Python 3.11.8 (required: 3.11+)
+  PASS  Dependencies installed (aegis-cli 0.2.0)
+  PASS  SQLite 3.45.1 accessible
+  PASS  Config file exists: ~/.aegis/config.toml
+  PASS  Config file valid
+  PASS  Telegram token format valid
+  PASS  Telegram API reachable
+  PASS  Bot responds: @YourAegisBot
+  PASS  claude found on PATH: /usr/local/bin/claude
 
 Security
-───────────────────────────────────────────────────────────────
-  ✓  .env file not in git index
-  ✓  Config file permissions: 0600 (owner-only)
-  ✓  No secrets found in environment visible to child processes
-  ✓  Audit log integrity: OK (1,847 entries, no gaps)
+──────────────────────────────────────
+  PASS  Config file permissions: 0600 (owner-only)
+  PASS  Audit log integrity: OK
 
 Runtime
-───────────────────────────────────────────────────────────────
-  ✓  Daemon running (PID 12345)
-  ✓  Lock file valid (~/.aegis/aegis.pid)
-  ✓  No stuck approvals (oldest pending: 30s)
-  ✓  Database schema: current (v3)
-  ✓  Disk space: 12.4 GB available
+──────────────────────────────────────
+  PASS  Daemon running (PID 12345)
+  PASS  No stuck sessions
+  PASS  Database schema: current
 
-════════════════════════════════════════════════════════════════
-Summary: 16 PASS, 1 WARN, 0 FAIL
-
-Issues:
-  ⚠  openai not found on PATH
-     To wrap the OpenAI CLI, install it first:
-     pip install openai
+════════════════════════════════════════
+Summary: 13 PASS, 0 WARN, 0 FAIL
 ```
 
 **With `--fix`:**
 ```
-  ✗  Config file permissions: 0644 (should be 0600)
-       → Auto-fixing: chmod 0600 ~/.aegis/config.toml
-       ✓  Fixed
+  FAIL  Config file permissions: 0644 (should be 0600)
+        Auto-fixing: chmod 0600 ~/.aegis/config.toml
+        Fixed
 ```
 
-**JSON output:**
-```json
-{
-  "summary": {
-    "pass": 16,
-    "warn": 1,
-    "fail": 0,
-    "exit_code": 0
-  },
-  "checks": [
-    {
-      "category": "environment",
-      "name": "python_version",
-      "status": "pass",
-      "detail": "Python 3.11.8"
-    },
-    {
-      "category": "environment",
-      "name": "openai_on_path",
-      "status": "warn",
-      "detail": "openai not found on PATH",
-      "fix": "pip install openai"
-    }
-  ]
-}
-```
-
-**Exit codes for doctor:**
-- `0` — all pass (or only warnings)
-- `3` — one or more environment checks fail
-- `5` — permission check failed
-- `8` — state corruption detected
+**Exit codes for `doctor`:**
+- `0`: all checks pass (warnings are OK)
+- `3`: environment check failed
+- `5`: permission check failed
+- `8`: state corruption detected
 
 ---
 
-### `aegis config`
+### `aegis doctor --fix`
 
-**Purpose:** Read and write Aegis configuration.
+The `--fix` flag enables automatic repair of the following issues:
+
+| Issue | Auto-fix |
+|---|---|
+| Config file permissions not 0600 | `chmod 0600 ~/.aegis/config.toml` |
+| PID file orphaned (process not running) | Remove stale `~/.aegis/aegis.pid` |
+| Database WAL file stuck | `PRAGMA wal_checkpoint(TRUNCATE)` |
+| `~/.aegis/` directory missing | `mkdir -p ~/.aegis` with 0700 |
+
+Fixes that would destroy data (e.g., a corrupted database) are never applied automatically. The doctor reports them and tells the user what to do manually.
+
+---
+
+### `aegis debug bundle`
+
+**Purpose:** Package logs and configuration into a redacted archive for support.
 
 **Usage:**
 ```
-aegis config <subcommand> [OPTIONS]
+aegis debug bundle [OPTIONS]
 ```
 
-**Subcommands:**
+**Flags:**
 
-| Subcommand | Description |
-|------------|-------------|
-| `get <key>` | Print value of config key |
-| `set <key> <value>` | Set config key |
-| `list` | List all config keys and values |
-| `validate` | Validate config file |
-| `path` | Print path to config file |
-| `edit` | Open config in `$EDITOR` |
+| Flag | Description |
+|---|---|
+| `--output PATH` | Output path for the bundle (default: `./aegis-debug-<timestamp>.zip`) |
+| `--include-logs N` | Include last N lines of logs (default: 500) |
+| `--no-redact` | Include secrets unredacted (use with care) |
 
-**Examples:**
-```bash
-aegis config get telegram.bot_token
-aegis config set approvals.timeout_seconds 600
-aegis config list
-aegis config validate
-aegis config path
-aegis config edit
+**What is included (redacted by default):**
+- `~/.aegis/config.toml` with `bot_token` replaced by `***REDACTED***`
+- Last 500 lines of `~/.aegis/aegis.log`
+- `aegis doctor --json` output
+- `aegis version --json` output
+- Python version and platform info
+- OS version
+
+**Output:**
+```
+Creating debug bundle...
+  Collecting config (redacted)...       done
+  Collecting logs (last 500 lines)...   done
+  Running doctor...                     done
+  Collecting version info...            done
+
+Bundle saved to: ./aegis-debug-20260221-191055.zip (12 KB)
+
+Share this file with the Aegis team. It does not contain your bot token or user IDs.
 ```
 
-**Security:** `aegis config get telegram.bot_token` outputs `***REDACTED***` by default; use `--reveal` to show.
+---
+
+### `aegis channel add telegram|slack`
+
+**Purpose:** Add or reconfigure a notification channel.
+
+**Usage:**
+```
+aegis channel add <type> [OPTIONS]
+```
+
+Supported types: `telegram`, `slack`
+
+**Flags (telegram):**
+
+| Flag | Description |
+|---|---|
+| `--token TOKEN` | Bot token |
+| `--users IDS` | Comma-separated user IDs |
+
+**Flags (slack):**
+
+| Flag | Description |
+|---|---|
+| `--token TOKEN` | Slack bot OAuth token |
+| `--channel CHANNEL` | Slack channel to post to (e.g., `#aegis-approvals`) |
+| `--users IDS` | Comma-separated Slack user IDs allowed to reply |
+
+**Output:**
+```
+Adding Slack channel...
+
+Step 1/3: Slack Bot Token
+──────────────────────────
+Install the Aegis Slack app at your workspace, then enter the bot token:
+Enter Slack bot token: _
+
+Step 2/3: Slack Channel
+────────────────────────
+Enter the Slack channel (e.g. #aegis-approvals): _
+
+Step 3/3: Testing
+──────────────────
+  Connecting to Slack API...    OK
+  Sending test message...       OK
+
+Slack channel configured.
+```
+
+---
+
+### `aegis adapter list`
+
+**Purpose:** Show available tool adapters and their compatibility status.
+
+**Usage:**
+```
+aegis adapter list [--json]
+```
+
+**Output:**
+```
+Available Adapters
+
+ Adapter    Status        Tested With
+ claude     Supported     claude 0.2.x (Claude Code)
+ openai     Supported     openai-cli 1.x
+ gemini     Experimental  gemini-cli 0.1.x
+ custom     Any           Any interactive CLI
+
+Use: aegis run <tool>
+```
 
 ---
 
 ### `aegis version`
 
-**Purpose:** Show version information.
+**Purpose:** Show version information and active feature flags.
 
 **Usage:**
 ```
@@ -692,6 +627,11 @@ aegis version [--json]
 aegis 0.2.0
 Python 3.11.8
 Platform: darwin arm64
+
+Feature flags:
+  conpty_backend    disabled  (v0.5.0)
+  slack_channel     disabled  (v0.4.0)
+  whatsapp_channel  disabled  (future)
 ```
 
 **JSON:**
@@ -700,76 +640,108 @@ Platform: darwin arm64
   "aegis": "0.2.0",
   "python": "3.11.8",
   "platform": "darwin",
-  "arch": "arm64"
+  "arch": "arm64",
+  "feature_flags": {
+    "conpty_backend": false,
+    "slack_channel": false,
+    "whatsapp_channel": false
+  }
 }
 ```
 
 ---
 
-### `aegis help`
+### `aegis lab run <scenario>` / `aegis lab list`
+
+**Purpose:** Prompt Lab — developer and QA tool for running PTY/detection scenarios. Not intended for end users.
 
 **Usage:**
 ```
-aegis help
-aegis help <command>
-aegis --help
-aegis <command> --help
+aegis lab run <scenario>     Run a single scenario by QA ID or name
+aegis lab run --all          Run all registered scenarios
+aegis lab list               List all registered scenarios
 ```
 
-**Top-level help:**
+**`aegis lab list` output:**
 ```
-Usage: aegis [OPTIONS] COMMAND [ARGS]...
+Aegis Prompt Lab — Registered Scenarios
 
-  Aegis — CLI firewall and approval layer for AI coding agents.
+QA ID    Name                         Platform           Status
+QA-001   PartialLinePromptScenario    macos, linux       registered
+QA-002   ANSIRedrawScenario           macos, linux       registered
+QA-003   OverwrittenPromptScenario    macos, linux       registered
+QA-004   SilentBlockScenario          macos, linux       registered
+QA-005   NestedPromptsScenario        macos, linux       registered
+QA-006   MultipleChoiceScenario       macos, linux       registered
+QA-007   YesNoVariantsScenario        macos, linux       registered
+QA-008   PressEnterScenario           macos, linux       registered
+QA-009   FreeTextConstraintScenario   macos, linux       registered
+QA-018   OutputFloodScenario          macos, linux       registered
+QA-019   EchoLoopScenario             macos, linux       registered
 
-  Intercepts AI tool calls and routes dangerous operations to your
-  phone for approval via Telegram.
+11 scenarios registered.
+```
 
-Options:
-  -h, --help       Show this message and exit.
-  -V, --version    Show version and exit.
-  --json           Output as JSON.
-  --quiet          Suppress non-error output.
-  --debug          Show debug output.
-  --config PATH    Override config file path.
-  --no-color       Disable colored output.
+**`aegis lab run --all` output:**
+```
+Running all Prompt Lab scenarios...
 
-Commands:
-  setup      First-run wizard — configure Aegis
-  start      Start the Aegis daemon
-  stop       Stop the Aegis daemon
-  wrap       Wrap an AI CLI tool with interception
-  status     Show daemon status and health
-  approvals  Manage pending and historical approvals
-  logs       View daemon and audit logs
-  doctor     Run system diagnostics
-  config     Read and write configuration
-  version    Show version information
-  help       Show help for a command
+  QA-001   PartialLinePromptScenario     PASS  (42ms)
+  QA-002   ANSIRedrawScenario            PASS  (38ms)
+  QA-003   OverwrittenPromptScenario     PASS  (61ms)
+  QA-004   SilentBlockScenario           PASS  (2104ms)
+  QA-005   NestedPromptsScenario         PASS  (88ms)
+  QA-006   MultipleChoiceScenario        PASS  (45ms)
+  QA-007   YesNoVariantsScenario         PASS  (39ms)
+  QA-008   PressEnterScenario            PASS  (41ms)
+  QA-009   FreeTextConstraintScenario    PASS  (44ms)
+  QA-018   OutputFloodScenario           PASS  (5231ms)
+  QA-019   EchoLoopScenario              PASS  (97ms)
 
-Examples:
-  aegis setup
-  aegis start
-  aegis wrap claude
-  aegis status
-  aegis approvals list
-  aegis doctor
-
-Documentation: https://github.com/abdulraoufatia/aegis-cli
+11/11 passed. All scenarios green.
 ```
 
 ---
 
-## Error Message Format
+## 3. Output Formatting
 
-All errors follow this format to stderr:
+### When to use Rich tables
 
+Use Rich tables for multi-row structured output: `aegis sessions`, `aegis adapter list`, `aegis lab list`. Rich tables are rendered only when stdout is a TTY. When stdout is piped or redirected, fall back to plain tab-separated values.
+
+### When to use plain text
+
+Use plain text for single-value output (`aegis config get <key>`), status lines that scripts may parse, and all output in `--quiet` mode. Plain text is the default for error messages to stderr.
+
+### When to use JSON (`--json`)
+
+All commands that produce structured output support `--json`. JSON output:
+- Always goes to stdout.
+- Always includes a `"status"` field: `"success"` or `"error"`.
+- Is valid JSON (not JSON Lines), except `aegis logs --json` which uses JSON Lines (one object per line).
+- Is produced even when stdout is not a TTY.
+
+JSON is the recommended format for use in scripts, CI pipelines, and any context where the output will be parsed.
+
+### Spinners and progress
+
+Spinners (via Rich) are shown during operations that take more than 500ms: Telegram connectivity test, daemon startup, debug bundle creation. Spinners are suppressed in `--quiet` mode and when stdout is not a TTY.
+
+---
+
+## 4. Error Messages
+
+### Tone and format
+
+Error messages are direct, non-blaming, and always end with a suggested next step. The user is never left wondering what to do.
+
+Format:
 ```
-Error: <short description>
+Error: <short description of what went wrong>
 
-  <detail explaining what went wrong>
+  <one or two sentences of detail>
 
-  <suggested fix or next step>
+  <suggested next step>
 
 Exit code: <N>
 ```
@@ -778,108 +750,226 @@ Example:
 ```
 Error: Telegram API unreachable
 
-  Could not connect to https://api.telegram.org after 3 attempts.
+  Could not connect to api.telegram.org after 3 attempts.
   Last error: Connection timed out (10s)
 
-  Check your internet connection and try again:
+  Check your internet connection, then run:
     aegis doctor --fix
-
-  If behind a proxy, set HTTPS_PROXY in your environment.
 
 Exit code: 4
 ```
 
+### Actionable by default
+
+Every error message includes at least one concrete action the user can take. Acceptable actions:
+- A specific `aegis` command to run
+- A file to check
+- A URL to visit
+
+Unacceptable:
+- "An unknown error occurred."
+- "Please try again."
+- "Contact support." (without a link or command)
+
+### Common error templates
+
+| Situation | Message |
+|---|---|
+| Setup not complete | `Run 'aegis setup' to configure Aegis first.` |
+| Daemon not running | `Run 'aegis start' to start the daemon.` |
+| Config invalid | `Run 'aegis doctor' to diagnose configuration issues.` |
+| Permission denied | `Run 'aegis doctor --fix' to auto-repair file permissions.` |
+| Network failure | `Check your internet connection. Run 'aegis doctor' for details.` |
+| Unknown error | `Run 'aegis debug bundle' and share the output with the Aegis team.` |
+
 ---
 
-## Cancellation UX
+## 5. Exit Codes
 
-When a user presses `Ctrl+C` during an interactive command:
+| Code | Name | Meaning |
+|---|---|---|
+| `0` | `SUCCESS` | Command completed successfully |
+| `1` | `ERROR` | General or unhandled error |
+| `2` | `CONFIG_ERROR` | Configuration invalid, missing, or incomplete |
+| `3` | `ENV_ERROR` | Python version wrong, dependency missing, OS not supported |
+| `4` | `NETWORK_ERROR` | Network failure (Telegram or Slack unreachable) |
+| `5` | `PERMISSION_ERROR` | File permissions or access denied |
+| `8` | `STATE_CORRUPTION` | Database, lock file, or audit log corrupted |
+| `130` | `INTERRUPTED` | Interrupted by Ctrl+C (SIGINT) |
+
+All error output goes to stderr. Exit codes are consistent and documented. Scripts can rely on them.
+
+### Ctrl+C (SIGINT) handling
+
+When the user presses Ctrl+C during an interactive command:
 
 ```
 ^C
 Interrupted. Cleaning up...
-  ✓  No pending approvals affected
-  ✓  Daemon still running
+  No active sessions affected
+  Daemon still running
 
 Run 'aegis status' to check daemon state.
+Exit code: 130
 ```
 
-If an approval is in-flight:
+If a session is active:
 ```
 ^C
-Interrupted. Cleaning up...
-  ⚠  Approval a1b2c3 is pending — it will continue on Telegram
-  ✓  Daemon still running
+Interrupted.
+  Session s-a1b2c3 (claude) is still running in the background.
+  A pending prompt will continue waiting for your Telegram reply.
+  Daemon still running.
+
+To monitor the session:
+  aegis logs --session s-a1b2c3 --tail
+Exit code: 130
 ```
 
 ---
 
-## First-Run Experience
+## 6. Shell Completion
 
-On the very first invocation of any `aegis` command (before setup):
+Aegis generates shell completion scripts for bash, zsh, and fish via Click's built-in completion system.
 
+### Bash
+
+Add to `~/.bashrc`:
+```bash
+eval "$(_AEGIS_COMPLETE=bash_source aegis)"
 ```
-Welcome to Aegis!
 
-It looks like Aegis hasn't been configured yet.
-Run setup first:
-
-  aegis setup
-
-This takes about 2 minutes.
+Or generate and source a file:
+```bash
+_AEGIS_COMPLETE=bash_source aegis > ~/.aegis-complete.bash
+echo "source ~/.aegis-complete.bash" >> ~/.bashrc
 ```
+
+### Zsh
+
+Add to `~/.zshrc`:
+```zsh
+eval "$(_AEGIS_COMPLETE=zsh_source aegis)"
+```
+
+### Fish
+
+```fish
+_AEGIS_COMPLETE=fish_source aegis > ~/.config/fish/completions/aegis.fish
+```
+
+### What is completed
+
+- All commands and subcommands
+- All flags and their arguments
+- `aegis run <TAB>`: completes tool names found on PATH
+- `aegis lab run <TAB>`: completes registered QA scenario IDs
+- `aegis logs --session <TAB>`: completes active session IDs
+- `aegis channel add <TAB>`: completes `telegram slack`
 
 ---
 
-## Quiet Mode (`--quiet`)
+## 7. Telegram Bot Commands
 
-In quiet mode:
-- No progress spinners or status output
-- No banners or welcome messages
-- Errors still go to stderr
-- Exit codes unchanged
-- Only explicit output (e.g., `aegis config get` value) is printed
+The Aegis Telegram bot supports the following slash commands. These commands are sent directly to the bot in Telegram and control the active session.
 
----
+### `/start`
 
-## Debug Mode (`--debug`)
+Sent automatically when a user opens a conversation with the bot. Responds with a welcome message and the current connection status.
 
-In debug mode:
-- Full Python stack traces on exceptions
-- HTTP request/response bodies logged (with secrets masked)
-- Policy evaluation steps shown
-- Database queries logged
-- PTY I/O shown
+```
+Aegis bot connected.
+Daemon status: Running
+Active sessions: 1 (claude, started 19:10)
 
----
-
-## JSON Output Mode (`--json`)
-
-All commands support `--json`. JSON output:
-- Always goes to `stdout`
-- Always includes a `"status"` field: `"success"` or `"error"`
-- On error, includes `"error"`, `"exit_code"`, and optionally `"detail"`
-- Is valid JSON (not JSON Lines, except `aegis logs --json`)
-
-Error JSON:
-```json
-{
-  "status": "error",
-  "error": "Telegram API unreachable",
-  "exit_code": 4,
-  "detail": "Connection timed out after 3 attempts"
-}
+When your AI agent asks a question, I'll send it here.
+Use /help to see available commands.
 ```
 
----
+### `/sessions`
 
-## Structured Logging Mode
+Lists all active and recent sessions.
 
-Set `AEGIS_LOG_FORMAT=json` or `--log-level` with structured output:
+```
+Active Sessions
 
-```json
-{"ts": "2026-02-20T19:00:00Z", "level": "INFO", "logger": "aegis.daemon", "event": "started", "pid": 12345, "port": 39000}
-{"ts": "2026-02-20T19:00:01Z", "level": "INFO", "logger": "aegis.telegram", "event": "polling_started"}
+  s-a1b2c3  claude  started 19:10  8 prompts  auth-feature
+  s-d4e5f6  claude  ended 17:30    3 prompts   (none)
+
+Tap a session name to see its last output.
 ```
 
-Uses `structlog` for consistent field naming.
+### `/switch <session-id>`
+
+Switches the active session context. When multiple sessions are running, replies go to the session set by `/switch`. If only one session is active, `/switch` is not needed.
+
+```
+/switch s-a1b2c3
+
+Now routing replies to: claude (s-a1b2c3, auth-feature)
+```
+
+### `/status`
+
+Shows daemon and session status inline in Telegram.
+
+```
+Aegis Status
+
+  Daemon: Running (PID 12345)
+  Telegram: Connected
+  Active sessions: 1
+  Pending prompts: 0
+
+Last prompt: "Do you want to apply this change? (y/n)" — answered 2m ago
+```
+
+### `/cancel`
+
+Cancels the most recent pending prompt without sending a reply. The agent will receive a timeout or a neutral response depending on the prompt type.
+
+```
+/cancel
+
+Cancelled prompt: "Do you want to apply this change?" (s-a1b2c3)
+The agent will receive a timeout response.
+```
+
+### `/help`
+
+Shows all available bot commands with brief descriptions.
+
+```
+Aegis Bot Commands
+
+  /start    Show connection status
+  /sessions List active sessions
+  /switch   Switch active session: /switch <session-id>
+  /status   Show daemon status
+  /cancel   Cancel the pending prompt
+  /help     Show this message
+
+To answer a prompt, tap an inline button or reply to the message directly.
+```
+
+### Inline prompt messages
+
+When a prompt is detected, the bot sends a message with an inline keyboard. The message format:
+
+```
+claude (auth-feature) is waiting for your input:
+
+  "Do you want to continue with the database migration?
+   This will modify 3 tables. (y/n)"
+
+Prompt type: YES_NO
+Detected: pattern match (confidence 0.90)
+```
+
+Keyboard buttons for `YES_NO`: `Yes`  `No`
+
+Keyboard buttons for `CONFIRM_ENTER`: `Send Enter`  `Cancel`
+
+Keyboard buttons for `MULTIPLE_CHOICE`: one button per option, labeled `1`, `2`, `3`, etc.
+
+For `FREE_TEXT` prompts, there are no inline buttons. The message instructs the user to reply directly to the message, and the bot routes the reply text to the session.

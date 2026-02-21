@@ -1,11 +1,11 @@
 # Aegis (AegisCLI)
 
-> **Remote interactive prompt relay for AI CLI tools.**
+> **Universal human-in-the-loop control plane for AI developer agents.**
 
 [![CI](https://github.com/abdulraoufatia/aegis-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/abdulraoufatia/aegis-cli/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/)
-[![Version](https://img.shields.io/badge/version-0.1.0-green.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.2.0--dev-green.svg)](CHANGELOG.md)
 
 ---
 
@@ -27,258 +27,141 @@ No walking back to your desk. No missed prompts. You stay in control.
 
 ---
 
-## Table of Contents
-
-- [How it works](#how-it-works)
-- [Prompt types supported](#prompt-types-supported)
-- [Requirements](#requirements)
-- [Installation](#installation)
-- [Quick Start](#quick-start)
-- [Commands reference](#commands-reference)
-- [Configuration](#configuration)
-- [Channels](#channels)
-- [Implementation notes](#implementation-notes)
-- [Development](#development)
-- [Roadmap](#roadmap)
-- [Contributing](#contributing)
-- [License](#license)
-
----
-
 ## How it works
 
-1. You run your AI CLI through Aegis: `aegis run claude`
-2. Aegis wraps the process in a PTY so it behaves exactly like a normal terminal session — full colour, readline, everything.
-3. While your AI agent works, Aegis monitors its output.
-4. When the agent pauses and waits for your input, Aegis captures the prompt text and sends it to your phone via Telegram.
-5. You reply from your phone.
-6. Aegis injects your reply into the CLI's stdin. The agent continues.
-7. All output streams to your local terminal in real time.
+1. `aegis run claude` — wraps your AI CLI in a PTY supervisor
+2. The **tri-signal prompt detector** watches the output stream
+3. When a prompt is detected, Aegis sends it to your Telegram (or Slack)
+4. You tap a button or send a reply on your phone
+5. Aegis injects your answer into the CLI's stdin
+6. The agent continues
 
-That's it. Aegis is a transparent relay. It doesn't classify operations as dangerous, block tool calls, or enforce policies. It simply keeps you in the loop when your agent needs a human answer.
-
----
-
-## Prompt types supported
-
-| Type | Example | How you reply |
-|------|---------|---------------|
-| Yes / No | `Overwrite existing file? (y/n)` | Tap ✅ Yes or ❌ No |
-| Confirm / Enter | `Press Enter to continue` | Tap ↩️ Press Enter |
-| Multiple choice | `1) Install  2) Skip  3) Abort` | Tap the option |
-| Short free text | `Enter commit message:` | Reply with text (≤200 chars) |
-
-If Aegis can't classify the prompt, it sends it anyway with Yes / No / Enter options and the raw text so you can decide.
+That's it. Aegis is a relay, not a firewall. It does not interpret commands, score risks, or block actions. It asks you — and only you — at the exact moment the agent needs human input.
 
 ---
 
-## Requirements
+## Status
 
-- Python 3.11+
-- macOS (Linux support planned — see [Roadmap](#roadmap))
-- A Telegram bot token (from [@BotFather](https://t.me/BotFather))
-- Your Telegram user ID (from [@userinfobot](https://t.me/userinfobot))
+| Version | Status | Description |
+|---------|--------|-------------|
+| **v0.1.0** | Design release | Architecture, docs, and code stubs |
+| **v0.2.0** | In progress | macOS MVP — working Telegram relay |
+| v0.3.0 | Planned | Linux support |
+| v0.4.0 | Planned | Slack channel |
+| v0.5.0 | Planned | Windows (ConPTY, experimental) |
 
 ---
 
-## Installation
+## Quick start (v0.2.0 target)
 
 ```bash
 pip install aegis-cli
-```
 
-Or from source:
-
-```bash
-git clone https://github.com/abdulraoufatia/aegis-cli.git
-cd aegis-cli
-pip install -e ".[dev]"
-```
-
----
-
-## Quick Start
-
-### 1. Configure
-
-```bash
+# First-time setup (creates ~/.aegis/config.toml)
 aegis setup
-```
 
-You'll be prompted for your Telegram bot token and user ID. Config is saved to `~/.aegis/config.toml` (mode 0600).
-
-### 2. Run your agent through Aegis
-
-```bash
+# Wrap Claude Code
 aegis run claude
+
+# In another terminal, check status
+aegis status
 ```
 
-This launches Claude Code inside a PTY. Everything looks and works exactly as normal. When Claude pauses for input, you get a Telegram message.
+When Claude Code asks you a question, your Telegram bot will send you a message with buttons. Tap Yes or No. Claude Code answers and continues.
 
-### 3. Reply from your phone
+---
 
-Tap a button (Yes / No / Enter / option number) or type a free-text reply. Aegis injects your answer and Claude resumes.
+## Design
 
-### 4. Verify
+See the `docs/` directory:
 
-```bash
-aegis doctor     # check config, deps, connectivity
-aegis status     # show active sessions
-aegis approvals  # list pending or recent prompts
+| Document | What it covers |
+|----------|---------------|
+| [architecture.md](docs/architecture.md) | System diagram, component overview, sequence diagrams |
+| [reliability.md](docs/reliability.md) | PTY supervisor, tri-signal detector, Prompt Lab |
+| [adapters.md](docs/adapters.md) | BaseAdapter interface, Claude Code adapter |
+| [channels.md](docs/channels.md) | BaseChannel interface, Telegram implementation |
+| [cli-ux.md](docs/cli-ux.md) | All CLI commands, output formats, exit codes |
+| [roadmap-90-days.md](docs/roadmap-90-days.md) | 6-phase roadmap, v0.2.0–v0.5.0 |
+| [qa-top-20-failure-scenarios.md](docs/qa-top-20-failure-scenarios.md) | 20 mandatory QA scenarios |
+| [dev-workflow-multi-agent.md](docs/dev-workflow-multi-agent.md) | Branch model, agent roles, CI pipeline |
+
+---
+
+## Repository structure
+
+```
+src/aegis/
+  core/
+    prompt/     — detector, state machine, models
+    session/    — session manager and lifecycle
+    routing/    — prompt router (events → channel, replies → PTY)
+    store/      — SQLite database
+    audit/      — append-only audit log with hash chaining
+    daemon/     — daemon manager (orchestrates all subsystems)
+    scheduler/  — TTL sweeper and periodic tasks
+  os/tty/       — PTY supervisors (macOS, Linux, Windows stub)
+  adapters/     — CLI tool adapters (Claude Code, OpenAI CLI, custom)
+  channels/     — notification channels (Telegram, Slack stub)
+  cli/          — Click CLI entry point and subcommands
+tests/
+  unit/         — pure unit tests (no I/O)
+  integration/  — SQLite + mocked HTTP
+  e2e/          — real PTY + mocked Telegram
+  prompt_lab/   — deterministic QA scenario runner
+    scenarios/  — QA-001 through QA-020 scenario implementations
+docs/           — design documents (see table above)
 ```
 
 ---
 
-## Commands reference
+## Core invariants
 
-| Command | Description |
-|---------|-------------|
-| `aegis setup` | Interactive setup: Telegram token, user ID, timeout |
-| `aegis run <cmd>` | Run a command under Aegis supervision |
-| `aegis status` | Show active sessions |
-| `aegis doctor` | Environment and config health checks |
-| `aegis approvals` | List pending / recent prompts |
-| `aegis logs [-f]` | View Aegis log output |
-| `aegis audit verify` | Verify audit log integrity |
-| `aegis install-service` | Install macOS launchd service |
-| `aegis uninstall-service` | Remove macOS launchd service |
+Aegis guarantees the following regardless of channel, adapter, or concurrency:
 
-### `aegis run`
-
-```bash
-aegis run claude
-aegis run -- claude --model opus
-aegis run bash          # works with any interactive CLI
-```
-
-Runs the given command in a PTY. All input/output is forwarded transparently. When the process is waiting on stdin, Aegis detects this and routes the prompt to Telegram.
-
----
-
-## Configuration
-
-Config file: `~/.aegis/config.toml` (created by `aegis setup`)
-
-```toml
-[telegram]
-bot_token     = "123456789:AABBccdd..."
-allowed_users = [12345678]
-
-[prompts]
-timeout_seconds    = 600    # how long to wait for your reply before using the default
-free_text_enabled  = false  # whether to forward open-ended text prompts to Telegram
-stuck_timeout_seconds = 2.0 # seconds of silence before treating as a prompt
-
-[logging]
-level  = "INFO"
-format = "text"
-```
-
-### Environment variable overrides
-
-| Variable | Effect |
-|----------|--------|
-| `AEGIS_TELEGRAM_BOT_TOKEN` | Override bot token |
-| `AEGIS_TELEGRAM_ALLOWED_USERS` | Override allowed user IDs (comma-separated) |
-| `AEGIS_APPROVAL_TIMEOUT_SECONDS` | Override prompt timeout |
-| `AEGIS_LOG_LEVEL` | Override log level |
-| `AEGIS_DB_PATH` | Override SQLite database path |
-| `AEGIS_CONFIG` | Override config file path |
-
-### Timeout behaviour
-
-If you don't reply within `timeout_seconds`, Aegis injects the **safe default** for that prompt type:
-
-| Prompt type | Default |
-|-------------|---------|
-| Yes / No | `n` |
-| Confirm / Enter | `↵` (Enter) |
-| Multiple choice | `1` |
-| Free text | *(empty string)* |
-
-The safe default for Yes/No cannot be changed to `y`. If you don't reply, the answer is always `n`.
-
----
-
-## Channels
-
-**v0.x (now):** Telegram only — long polling, no inbound ports required, runs entirely on your machine.
-
-**Planned:** WhatsApp, Slack, SMS. The channel interface is abstracted; adding a new channel requires implementing `BaseChannel` in `aegis/channels/`.
-
----
-
-## Implementation notes
-
-Aegis is a transparent relay, not a security product. That said, a few implementation invariants exist for correctness:
-
-- **Allowed users** — only your configured Telegram user ID(s) can send replies.
-- **Prompt binding** — a Telegram reply is only accepted if it matches an active `prompt_id` + `nonce` that is still pending and unexpired. No arbitrary message injection.
-- **One-time nonce** — each prompt has a single-use nonce embedded in the Telegram callback data. Replayed callbacks are ignored.
-- **No shell execution** — Aegis only injects specific reply values (`y`, `n`, `↵`, `1`–`9`, or short text) into stdin while the process is actively waiting. It cannot run arbitrary commands.
-- **Light redaction** — prompt excerpts are capped at 200 characters to limit accidental exposure of secrets that might appear in terminal output.
-
-These are correctness constraints, not a claim that Aegis is a security tool.
-
----
-
-## Module layout
-
-```
-aegis/
-├── cli/        — Click CLI entry point and all commands
-├── core/       — Config, constants, exceptions
-├── policy/     — Prompt detector (pattern matching) and routing
-├── bridge/     — PTY supervisor (launch, read, inject)
-├── store/      — SQLite persistence
-├── audit/      — Append-only audit log with hash chain
-└── channels/   — Channel abstraction + Telegram implementation
-```
+1. **No duplicate injection** — nonce idempotency via atomic SQL guard
+2. **No expired injection** — TTL enforced in the database WHERE clause
+3. **No cross-session injection** — prompt_id + session_id binding checked
+4. **No unauthorised injection** — allowlisted identities only
+5. **No echo loops** — 500ms suppression window after every injection
+6. **No lost prompts** — daemon restart reloads pending prompts from SQLite
+7. **Bounded memory** — rolling 4096-byte buffer, never unbounded growth
 
 ---
 
 ## Development
 
 ```bash
-# Clone and set up
-git clone https://github.com/abdulraoufatia/aegis-cli.git
-cd aegis-cli
-uv venv && uv pip install -e ".[dev]"
-source .venv/bin/activate
+# Install in editable mode with dev dependencies
+pip install -e ".[dev]"
 
 # Run tests
-pytest tests/ -v
+pytest tests/
 
-# Lint
-ruff check .
-ruff format --check .
+# Run a Prompt Lab scenario
+aegis lab run partial-line-prompt
+
+# Lint and format
+ruff check . && ruff format --check .
 
 # Type check
-mypy aegis/
+mypy src/aegis/
+
+# Full CI equivalent (local)
+ruff check . && ruff format --check . && mypy src/aegis/ && pytest tests/ --cov=aegis
 ```
-
----
-
-## Roadmap
-
-| Phase | Status | Notes |
-|-------|--------|-------|
-| macOS PTY + Telegram relay | ✅ Done | `aegis run` working |
-| Multiple prompt types (Y/N, Enter, choice, free-text) | ✅ Done | All four types |
-| Linux support | Planned | PTY code is portable; needs testing |
-| WhatsApp channel | Planned | Requires Twilio or WA Business API |
-| Slack channel | Planned | Webhook or Socket Mode |
-| `aegis wrap` shell alias | Planned | Transparent passthrough without `aegis run` prefix |
-| GUI notifications (macOS) | Not planned for v0.x | Out of scope |
 
 ---
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). All contributions welcome.
+See [CONTRIBUTING.md](CONTRIBUTING.md). All contributions require:
+- Existing tests to remain green
+- New code to have unit tests
+- Prompt Lab scenarios for any PTY/detection changes
 
 ---
 
 ## License
 
-[MIT](LICENSE) — free to use, fork, and modify.
+MIT — see [LICENSE](LICENSE).

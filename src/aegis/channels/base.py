@@ -1,0 +1,145 @@
+"""
+BaseChannel — abstract interface for notification channels.
+
+Concrete implementations:
+  TelegramChannel  — python-telegram-bot or httpx polling
+  SlackChannel     — Slack Bolt (v0.4.0)
+  WhatsAppChannel  — stub (future)
+  WebUIChannel     — stub (future)
+
+A channel is responsible for:
+  1. Sending prompt events to the human (forward path)
+  2. Receiving replies from the human (return path)
+  3. Enforcing allowlisted identities
+  4. Applying rate limits
+
+Channels must NOT inject replies directly — they enqueue Reply objects
+that the PromptRouter delivers to the correct session's PTY supervisor.
+"""
+
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from typing import Any, AsyncIterator
+
+from aegis.core.prompt.models import PromptEvent, Reply
+
+
+class BaseChannel(ABC):
+    """
+    Abstract notification channel.
+
+    One channel instance is shared across all sessions.
+    The channel routes prompts and replies by session_id and prompt_id.
+    """
+
+    #: Short identifier used in config and logs (e.g. "telegram")
+    channel_name: str = ""
+
+    #: Human-readable name shown in `aegis channel list`
+    display_name: str = ""
+
+    # ------------------------------------------------------------------
+    # Lifecycle
+    # ------------------------------------------------------------------
+
+    @abstractmethod
+    async def start(self) -> None:
+        """
+        Connect to the channel backend and start receiving messages.
+
+        For long-polling channels (Telegram): start the polling loop.
+        For webhook channels (Slack): start the webhook server.
+        """
+
+    @abstractmethod
+    async def close(self) -> None:
+        """Disconnect from the channel backend and stop all background tasks."""
+
+    # ------------------------------------------------------------------
+    # Forward path — send prompts to the human
+    # ------------------------------------------------------------------
+
+    @abstractmethod
+    async def send_prompt(self, event: PromptEvent) -> str:
+        """
+        Send a prompt notification to all allowlisted users.
+
+        Returns a channel-specific message ID (used to edit/delete the
+        message later, e.g. after the prompt is resolved or expires).
+
+        Args:
+            event: The PromptEvent to display to the user.
+
+        Returns:
+            Channel message ID as a string (e.g. Telegram message_id).
+        """
+
+    @abstractmethod
+    async def notify(self, message: str, session_id: str = "") -> None:
+        """
+        Send a plain text notification (not a prompt).
+
+        Used for: session start/end, expiry notices, error alerts.
+
+        Args:
+            message:    Text to send.
+            session_id: Optional session context for routing.
+        """
+
+    @abstractmethod
+    async def edit_prompt_message(
+        self,
+        message_id: str,
+        new_text: str,
+        session_id: str = "",
+    ) -> None:
+        """
+        Edit a previously sent prompt message (e.g. to show "Resolved: y").
+
+        Args:
+            message_id: Channel message ID returned by send_prompt().
+            new_text:   New message text.
+            session_id: Session context for routing.
+        """
+
+    # ------------------------------------------------------------------
+    # Return path — receive replies from the human
+    # ------------------------------------------------------------------
+
+    @abstractmethod
+    def receive_replies(self) -> AsyncIterator[Reply]:
+        """
+        Yield Reply objects as the human responds.
+
+        This is an async generator. The PromptRouter consumes it in a loop:
+
+            async for reply in channel.receive_replies():
+                await router.handle_reply(reply)
+
+        The generator must never raise; it runs for the lifetime of the daemon.
+        """
+
+    # ------------------------------------------------------------------
+    # Identity enforcement
+    # ------------------------------------------------------------------
+
+    @abstractmethod
+    def is_allowed(self, identity: str) -> bool:
+        """
+        Return True if *identity* is in the allowlist.
+
+        identity format: "<channel>:<id>" e.g. "telegram:123456789"
+        """
+
+    # ------------------------------------------------------------------
+    # Health check
+    # ------------------------------------------------------------------
+
+    def healthcheck(self) -> dict[str, Any]:
+        """
+        Return health status for this channel.
+
+        Called by `aegis doctor`. Default returns {"status": "ok"}.
+        """
+        return {"status": "ok", "channel": self.channel_name}
