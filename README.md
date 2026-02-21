@@ -369,7 +369,10 @@ You can also send `/pause` or `/resume` from Telegram or Slack.
 | v0.5.2 | Released | Production UI skeleton — 6 screens, StatusCards, polling, TCSS |
 | v0.6.0 | Released | Autonomous Agent Runtime — Policy DSL v0, autopilot engine, kill switch |
 | **v0.6.1** | **Released** | Policy authoring guide, 5 policy presets, docs/policy-authoring.md |
+| v0.6.2 | Released | Product positioning — autonomy-first tagline, pyproject.toml keywords |
 | v0.7.0 | Planned | Windows (ConPTY, experimental) |
+| v0.7.1 | Planned | Policy engine hardening — per-rule rate limits, hot-reload, Slack kill switch |
+| v0.8.0 | Planned | Policy DSL v1 — compound conditions, session context, policy inheritance |
 
 ---
 

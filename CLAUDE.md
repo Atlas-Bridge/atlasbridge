@@ -264,5 +264,9 @@ Policy module layout:
 | v0.4.0 | Slack  | Released | Slack channel, multi-channel routing, renamed to AtlasBridge |
 | v0.5.0 | TUI    | Released | Interactive Textual TUI — setup wizard, sessions, logs, doctor |
 | v0.6.0 | Autopilot | Released | Policy DSL v0, autopilot engine, kill switch, decision trace |
-| v0.7.0 | Windows | Planned | ConPTY experimental |
-| v1.0.0 | GA | Planned | Stable adapter + channel API |
+| v0.6.1 | Docs | Released | Policy authoring guide + 5 preset policies |
+| v0.6.2 | Positioning | Released | Product tagline, pyproject.toml description/keywords |
+| v0.7.0 | Windows | Planned | ConPTY experimental (behind --experimental flag) |
+| v0.7.1 | Hardening | Planned | Per-rule rate limits, policy hot-reload, Slack kill switch |
+| v0.8.0 | Policy v1 | Planned | Policy DSL v1 — compound conditions, session context, inheritance |
+| v1.0.0 | GA | Planned | Stable adapter + channel API, all platforms, all agents |
