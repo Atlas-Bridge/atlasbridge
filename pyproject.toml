@@ -69,6 +69,7 @@ dev = [
     # Type checking
     "mypy>=1.10",
     "types-psutil",
+    "types-PyYAML",
     # Security scanning
     "bandit[toml]>=1.7",
     # Build tools
