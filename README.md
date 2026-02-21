@@ -115,83 +115,46 @@ Requires Python 3.11+. Works on macOS and Linux.
 
 ---
 
-## Quick start
+## Quick Start — Fastest Path (Telegram)
 
-### Option A — Interactive Mode (v0.5.0+)
-
-Run `atlasbridge` with no arguments in your terminal to launch the interactive control panel:
+### 1. Install
 
 ```bash
-atlasbridge          # auto-launches TUI when stdout is a TTY
-atlasbridge ui       # explicit TUI launch
+pip install atlasbridge
 ```
 
-The interactive UI guides you through setup, shows live status, and provides quick access to sessions, logs, and doctor checks — all in your terminal.
-
-```
-┌─ AtlasBridge ──────────────────────────────────────────────────────┐
-│  AtlasBridge                                                        │
-│  Human-in-the-loop control plane for AI developer agents           │
-│                                                                     │
-│  AtlasBridge is ready.                                              │
-│    Config:           Loaded                                         │
-│    Daemon:           Running                                        │
-│    Channel:          telegram                                       │
-│    Sessions:         2                                              │
-│    Pending prompts:  0                                              │
-│                                                                     │
-│  [R] Run a tool      [S] Sessions                                   │
-│  [L] Logs (tail)     [D] Doctor                                     │
-│  [T] Start/Stop daemon                                              │
-│  [Q] Quit                                                           │
-│                                                                     │
-│  [S] Setup  [D] Doctor  [Q] Quit                                    │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-### Option B — CLI commands
-
-### 1. Set up your channel
-
-**Telegram** (recommended for getting started):
+### 2. Set up Telegram
 
 ```bash
 atlasbridge setup --channel telegram
 ```
 
-You'll be prompted for your Telegram bot token (get one from [@BotFather](https://t.me/BotFather)) and your Telegram user ID (get it from [@userinfobot](https://t.me/userinfobot)).
+You'll be prompted for:
+- **Bot token** — get one from [@BotFather](https://t.me/BotFather)
+- **Your user ID** — get it from [@userinfobot](https://t.me/userinfobot)
 
-**Slack:**
+### 3. Start the bot chat
 
-```bash
-atlasbridge setup --channel slack
-```
+**Open Telegram, find your bot, and send `/start`.**
+This is required — Telegram bots cannot message you until you initiate the conversation.
 
-You'll need a Slack App with Socket Mode enabled, a bot token (`xoxb-*`), and an app-level token (`xapp-*`).
-
-> **Need help getting tokens?** See the [Channel Token Setup Guide](docs/channel-token-setup.md) for step-by-step instructions, or press **H** inside the TUI setup wizard.
-
-### Option C — Non-Interactive Setup (CI/Docker)
-
-Set environment variables and run:
+### 4. Verify setup
 
 ```bash
-export ATLASBRIDGE_TELEGRAM_BOT_TOKEN="123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi"
-export ATLASBRIDGE_TELEGRAM_ALLOWED_USERS="12345678"
-atlasbridge setup --from-env
+atlasbridge doctor
 ```
 
-See [Non-Interactive Setup Guide](docs/setup-noninteractive.md) for Docker, CI, and keyring examples.
+Confirms config is loaded, channel is reachable, and your bot can send you messages.
 
-### 2. Run your AI agent under supervision
+### 5. Run your AI agent
 
 ```bash
 atlasbridge run claude
 ```
 
-AtlasBridge wraps Claude Code in a PTY supervisor. When it detects a prompt waiting for input, it either forwards it to your phone or handles it per your policy. Tap a button, send a reply, or let autopilot take care of it.
+AtlasBridge wraps Claude Code in a PTY supervisor. When it detects a prompt waiting for input, it forwards the prompt to your phone. You reply from Telegram. AtlasBridge injects your answer into the CLI. Execution resumes.
 
-### 3. Enable autopilot (optional)
+### 6. Enable autopilot (optional)
 
 Create a policy file to tell AtlasBridge which prompts to handle automatically:
 
@@ -238,21 +201,32 @@ atlasbridge policy validate policy.yaml
 atlasbridge policy test policy.yaml --prompt "Continue? [y/n]" --type yes_no --explain
 ```
 
-### 4. Check status
+See [Policy Authoring Guide](docs/policy-authoring.md) for patterns and debugging.
+
+### Alternative setup paths
+
+**Interactive TUI** — run `atlasbridge` or `atlasbridge ui` to launch the terminal UI with guided setup, live status, sessions, logs, and doctor checks.
+
+**Slack** — `atlasbridge setup --channel slack` (requires `pip install "atlasbridge[slack]"`). You'll need a Slack App with Socket Mode, a bot token (`xoxb-*`), and an app-level token (`xapp-*`).
+
+**Non-interactive (CI/Docker):**
+
+```bash
+export ATLASBRIDGE_TELEGRAM_BOT_TOKEN="your-token"
+export ATLASBRIDGE_TELEGRAM_ALLOWED_USERS="your-user-id"
+atlasbridge setup --from-env
+```
+
+See [Non-Interactive Setup Guide](docs/setup-noninteractive.md) and [Channel Token Setup Guide](docs/channel-token-setup.md).
+
+### Useful commands
 
 ```bash
 atlasbridge status                   # daemon + channel status
 atlasbridge sessions                 # active and recent sessions
 atlasbridge autopilot status         # autopilot state + recent decisions
 atlasbridge autopilot explain        # last 20 decisions with explanations
-```
-
-### 5. Pause and resume
-
-Instantly pause autopilot and route all prompts to your phone:
-
-```bash
-atlasbridge pause                    # from your terminal
+atlasbridge pause                    # pause autopilot — all prompts go to you
 atlasbridge resume                   # re-enable autopilot
 ```
 
@@ -273,110 +247,33 @@ You can also send `/pause` or `/resume` from Telegram or Slack.
 
 ---
 
-## Supported agents
+## Supported Agents
 
-| Agent | Command |
-|-------|---------|
-| Claude Code | `atlasbridge run claude` |
-| OpenAI Codex CLI | `atlasbridge run openai` |
-| Google Gemini CLI | `atlasbridge run gemini` |
+| Agent | Command | Notes |
+|-------|---------|-------|
+| Claude Code | `atlasbridge run claude-code` | `claude` is an alias |
+| OpenAI Codex CLI | `atlasbridge run openai` | |
+| Google Gemini CLI | `atlasbridge run gemini` | |
+| Any interactive CLI | `atlasbridge run custom -- <cmd>` | Generic PTY wrapper |
+
+Run `atlasbridge adapters` to see all registered adapters and their status.
 
 ---
 
-## Supported channels
+## Supported Channels
 
-| Channel | Status |
-|---------|--------|
-| Telegram | Supported |
-| Slack | Supported (`atlasbridge[slack]`) |
+| Channel | Install | Status |
+|---------|---------|--------|
+| Telegram | `pip install atlasbridge` | Stable |
+| Slack | `pip install "atlasbridge[slack]"` | Stable |
+
+> **Not getting Telegram notifications?** Make sure you sent `/start` to your bot in Telegram. Bots cannot message you until you initiate the conversation. Also check that notifications are unmuted for the bot chat in your Telegram app settings.
 
 ---
 
 ## Changelog
 
-### v0.6.3 — Roadmap rewrite
-
-- **Updated**: [`docs/roadmap-90-days.md`](docs/roadmap-90-days.md) — replaced stale 90-day phase plan (all phases shipped) with a milestone-based roadmap anchored at v0.6.2; covers v0.7.0 through v1.0.0 GA with definitions of done
-
-### v0.6.2 — Product positioning
-
-- **Updated**: `pyproject.toml` description → "Policy-driven autonomous runtime for AI CLI agents — deterministic rule evaluation, built-in human escalation"
-- **Updated**: `pyproject.toml` keywords — added `policy`, `autonomous`, `agent`, `escalation`; removed stale relay/interactive/remote terms
-
-### v0.6.1 — Policy Authoring Documentation
-
-- **New**: [`docs/policy-authoring.md`](docs/policy-authoring.md) — 10-section guide: quick start (5 min), core concepts, syntax reference, CLI usage, 8 authoring patterns, debugging, FAQ, and safety notes
-- **New**: `config/policies/` — 5 ready-to-use policy presets (`minimal`, `assist-mode`, `full-mode-safe`, `pr-remediation-dependabot`, `escalation-only`)
-- **Updated**: `docs/policy-dsl.md` — status updated to Implemented (v0.6.0+)
-
-### v0.6.0 — Autonomous Agent Runtime (Policy-Driven)
-
-- **Policy DSL v0** — YAML-based, strictly typed, first-match-wins rule engine; `atlasbridge policy validate` and `atlasbridge policy test --explain`
-- **Autopilot Engine** — policy-driven prompt handler with three autonomy modes: Off / Assist / Full
-- **Kill switch** — `atlasbridge pause` / `atlasbridge resume` (or `/pause`, `/resume` from Telegram/Slack)
-- **Decision trace** — append-only JSONL audit log at `~/.atlasbridge/autopilot_decisions.jsonl`
-- **Autopilot CLI** — `atlasbridge autopilot enable|disable|status|mode|explain`
-- **56 new tests** (policy model, parser, evaluator, decision trace); 341 total
-- New design docs: `docs/autopilot.md`, `docs/policy-dsl.md`, `docs/autonomy-modes.md`
-
-### v0.5.3 — CSS packaging hotfix
-
-- **fix(ui):** `atlasbridge ui` no longer crashes with `StylesheetError` when installed from a wheel
-- Root cause: `.tcss` files were not included in the package distribution, and CSS was loaded via filesystem path instead of `importlib.resources`
-- Both `ui/app.py` and `tui/app.py` now load CSS via `importlib.resources` (works in editable and wheel installs)
-- Added `[tool.setuptools.package-data]` for `*.tcss` inclusion
-- Added `__init__.py` to `ui/css/` so `importlib.resources` can locate assets
-- `atlasbridge doctor` now checks that UI assets are loadable
-- 4 new regression tests for CSS resource loading
-
-### v0.5.2 — Production UI skeleton
-
-- New `atlasbridge.ui` package: 6 screens with exact widget IDs, `StatusCards` component, `polling.py` (`poll_state()`), and full TCSS
-- `atlasbridge` / `atlasbridge ui` now launch the production UI skeleton (separate from the original `tui/` package, which is preserved for compatibility)
-- WelcomeScreen shows live status cards when configured (Config / Daemon / Channel / Sessions)
-- SetupWizardScreen navigates to a dedicated `SetupCompleteScreen` on finish
-- 12 new smoke tests; 285 total
-
-### v0.5.1 — Branding fix + lab import fix
-
-- All CLI output now shows "AtlasBridge" — `doctor`, `status`, `setup`, `daemon`, `sessions`, `run`, and `lab` were still printing "Aegis" / "aegis"
-- `atlasbridge lab list/run` no longer crashes with `ModuleNotFoundError` when installed from PyPI; now shows a clear message pointing to editable install
-
-### v0.5.0 — Interactive Terminal UI
-
-- **`atlasbridge` (no args)** — launches the built-in TUI when run in an interactive terminal; prints help otherwise
-- **`atlasbridge ui`** — explicit TUI launch command
-- **Welcome screen** — shows live status (daemon, channel, sessions) when configured; onboarding copy when not
-- **Setup Wizard** — 4-step guided flow: choose channel → enter credentials (masked) → allowlist user IDs → confirm and save
-- **Doctor screen** — environment health checks with ✓/⚠/✗ icons, re-runnable with `R`
-- **Sessions screen** — DataTable of active and recent sessions
-- **Logs screen** — tail of the hash-chained audit log (last 100 events)
-- **Bug fix** — `channel_summary` now returns `"none"` when channels exist but none are configured
-- 74 new unit tests; 273 total
-
-### v0.4.0 — Slack + AtlasBridge rename
-
-- Full Slack channel implementation (Web API + Socket Mode + Block Kit buttons)
-- MultiChannel fan-out — broadcast to Telegram and Slack simultaneously
-- Renamed from Aegis to AtlasBridge; auto-migration from `~/.aegis/` on first run
-- Added `GeminiAdapter` for Google Gemini CLI
-
-### v0.3.0 — Linux
-
-- Linux PTY supervisor (same `ptyprocess` backend as macOS)
-- systemd user service integration (`atlasbridge start` installs and enables the unit)
-- 20 QA scenarios in the Prompt Lab
-
-### v0.2.0 — macOS MVP
-
-- Working end-to-end Telegram relay for Claude Code
-- Tri-signal prompt detector (pattern match + TTY block inference + silence watchdog)
-- Atomic SQL idempotency guard (`decide_prompt()`)
-- Hash-chained audit log
-
-### v0.1.0 — Design
-
-- Architecture docs, code stubs, Prompt Lab simulator infrastructure
+See [CHANGELOG.md](CHANGELOG.md) for the full version history, or [GitHub Releases](https://github.com/abdulraoufatia/atlasbridge/releases) for release notes and assets.
 
 ---
 
@@ -384,85 +281,71 @@ You can also send `/pause` or `/resume` from Telegram or Slack.
 
 AtlasBridge follows an **open-core** model:
 
-- **Core runtime** (public, MIT) — policy engine, PTY supervisor, prompt detection, channel relay, audit log. Fully functional. Always free.
-- **Enterprise local governance** (public, MIT) — decision trace v2 with hash chaining, deterministic risk classification, policy pinning, RBAC. Phase A — shipping now.
-- **Cloud governance + dashboard** (private, future) — SaaS backend, multi-tenant policy management, web dashboard. Phase B/C — design only.
-
-### What's available now
+- **Community** (public, MIT) — policy engine, PTY supervisor, prompt detection, channel relay, audit log, hash-chained decision trace. Fully functional. Always free.
+- **Pro** (public, MIT) — deterministic risk classifier, decision trace v2, policy pinning, RBAC. Phase A — local governance, shipping now.
+- **Enterprise** (private, future) — SaaS backend, multi-tenant policy management, web dashboard. Phase B is scaffolding only; Phase C is design only.
 
 | Feature | Edition | Maturity |
 |---------|---------|----------|
 | Policy DSL v1 | Community | Stable |
 | Autopilot engine | Community | Stable |
-| Decision trace (JSONL) | Community | Stable |
+| Hash-chained decision trace | Community | Stable |
 | Hash-chained audit log | Community | Stable |
-| Decision trace v2 (hash-chained) | Pro | Experimental |
 | Deterministic risk classifier | Pro | Experimental |
 | Policy pinning (session-level) | Pro | Experimental |
 | RBAC (local) | Pro | Experimental |
 | Cloud policy sync | Enterprise | Specification |
 | Web dashboard | Enterprise | Design only |
 
-### Key principles
+**Key principles:**
 
 - **Execution stays local.** The AI CLI agent always runs on your machine. Cloud features observe; they never execute.
 - **Deterministic, not heuristic.** Risk classification uses a fixed decision table. No ML. No guesswork.
 - **Offline-first.** The runtime works without any cloud connection. Cloud features degrade gracefully.
-- **Correctness over marketing.** We don't call invariants "security features." They are correctness guarantees.
 
 ```bash
-atlasbridge edition     # Show current edition
-atlasbridge features    # List all feature flags
-atlasbridge cloud status  # Cloud integration status
+atlasbridge edition       # Show current edition (community/pro/enterprise)
+atlasbridge features      # List all feature flags
+atlasbridge cloud status  # Cloud integration status (Phase B: scaffolding only)
 ```
 
-See [Enterprise Architecture](docs/enterprise-architecture.md) and [Enterprise Roadmap](docs/roadmap-enterprise-90-days.md) for the full plan.
+See [Enterprise Architecture](docs/enterprise-architecture.md) and [Enterprise Roadmap](docs/roadmap-enterprise-90-days.md).
 
 ---
 
 ## Status
 
-| Version | Status | Description |
-|---------|--------|-------------|
-| v0.1.0 | Released | Architecture, docs, and code stubs |
-| v0.2.0 | Released | macOS MVP — working Telegram relay |
-| v0.3.0 | Released | Linux support, systemd integration |
-| v0.4.0 | Released | Slack channel, MultiChannel fan-out, renamed to AtlasBridge |
-| v0.5.0 | Released | Interactive terminal UI — setup wizard, sessions, logs, doctor |
-| v0.5.1 | Released | Branding fix (Aegis→AtlasBridge in CLI output) + lab import fix |
-| v0.5.2 | Released | Production UI skeleton — 6 screens, StatusCards, polling, TCSS |
-| v0.6.0 | Released | Autonomous Agent Runtime — Policy DSL v0, autopilot engine, kill switch |
-| v0.6.1 | Released | Policy authoring guide, 5 policy presets, docs/policy-authoring.md |
-| v0.6.2 | Released | Product positioning — autonomy-first tagline, pyproject.toml keywords |
-| **v0.6.3** | **Released** | Roadmap rewrite — milestone-based, aligned with autonomy-first positioning |
-| v0.7.0 | Planned | Windows (ConPTY, experimental) |
-| v0.7.1 | Planned | Policy engine hardening — per-rule rate limits, hot-reload, Slack kill switch |
-| v0.8.0 | Planned | Policy DSL v1 — compound conditions, session context, policy inheritance |
+**Current release: v0.8.6** — see [CHANGELOG.md](CHANGELOG.md) for full history.
+
+| Milestone | Status | Highlights |
+|-----------|--------|------------|
+| v0.1–v0.3 | Released | Architecture, macOS MVP, Linux + systemd |
+| v0.4 | Released | Slack channel, MultiChannel, renamed to AtlasBridge |
+| v0.5 | Released | Interactive terminal UI, setup wizard, doctor |
+| v0.6 | Released | Policy DSL v0, autopilot engine, kill switch |
+| v0.7.x | Released | Per-rule rate limits, hot-reload, adapter auto-registration, Telegram singleton |
+| v0.8.0 | Released | Zero-touch setup — config migration, env bootstrap, keyring, config CLI |
+| v0.8.1 | Released | Policy DSL v1 — compound conditions, session_tag, inheritance, trace rotation |
+| v0.8.5–v0.8.6 | Released | Adapters CLI, ethics & safety CI gate, hash-chained decision trace |
+| v0.9.0 | Planned | Windows (ConPTY, experimental) |
+| v1.0.0 | Planned | GA — stable adapter + channel API, all platforms |
 
 ---
 
-## Design
+## Documentation
 
-See the `docs/` directory:
+See [docs/README.md](docs/README.md) for the full documentation index — organized by audience (users, policy authors, contributors) with a searchable documentation map.
+
+Key starting points:
 
 | Document | What it covers |
 |----------|---------------|
-| [architecture.md](docs/architecture.md) | System diagram, component overview, sequence diagrams |
-| [reliability.md](docs/reliability.md) | PTY supervisor, tri-signal detector, Prompt Lab |
-| [adapters.md](docs/adapters.md) | BaseAdapter interface, Claude Code adapter |
-| [channels.md](docs/channels.md) | BaseChannel interface, Telegram and Slack implementations |
-| [cli-ux.md](docs/cli-ux.md) | All CLI commands, output formats, exit codes |
-| [autopilot.md](docs/autopilot.md) | Autopilot engine architecture, kill switch, escalation protocol |
-| [policy-authoring.md](docs/policy-authoring.md) | Policy authoring guide — quick start, patterns, debugging, FAQ |
-| [policy-dsl.md](docs/policy-dsl.md) | AtlasBridge Policy DSL v0 full reference |
-| [autonomy-modes.md](docs/autonomy-modes.md) | Off / Assist / Full mode specs and behavior |
-| [roadmap-90-days.md](docs/roadmap-90-days.md) | 6-phase roadmap |
-| [enterprise-architecture.md](docs/enterprise-architecture.md) | Enterprise governance architecture |
-| [roadmap-enterprise-90-days.md](docs/roadmap-enterprise-90-days.md) | Enterprise evolution roadmap (Phase A/B/C) |
-| [enterprise-trust-boundaries.md](docs/enterprise-trust-boundaries.md) | Trust domains and security boundaries |
-| [enterprise-saas-architecture.md](docs/enterprise-saas-architecture.md) | Phase C SaaS design (design only) |
-| [qa-top-20-failure-scenarios.md](docs/qa-top-20-failure-scenarios.md) | 20 mandatory QA scenarios |
-| [dev-workflow-multi-agent.md](docs/dev-workflow-multi-agent.md) | Branch model, agent roles, CI pipeline |
+| [channel-token-setup.md](docs/channel-token-setup.md) | Step-by-step Telegram and Slack token setup |
+| [policy-authoring.md](docs/policy-authoring.md) | Policy authoring guide — quick start, patterns, debugging |
+| [autonomy-modes.md](docs/autonomy-modes.md) | Off / Assist / Full mode specs |
+| [architecture.md](docs/architecture.md) | System design, data flow, invariants |
+| [troubleshooting.md](docs/troubleshooting.md) | Common issues and solutions |
+| [ethics-and-safety-guarantees.md](docs/ethics-and-safety-guarantees.md) | Safety invariants and CI enforcement |
 
 ---
 
@@ -477,7 +360,7 @@ src/atlasbridge/
     store/      — SQLite database
     audit/      — append-only audit log with hash chaining
     daemon/     — daemon manager (orchestrates all subsystems)
-    policy/     — Policy DSL v0: model, parser, evaluator, explain
+    policy/     — Policy DSL v0/v1: model, parser, evaluator, explain
     autopilot/  — AutopilotEngine, kill switch, decision trace
   os/tty/       — PTY supervisors (macOS, Linux, Windows stub)
   os/systemd/   — Linux systemd user service integration
@@ -491,8 +374,9 @@ tests/
   policy/       — policy model, parser, evaluator tests + fixtures
   integration/  — SQLite + mocked HTTP
   prompt_lab/   — deterministic QA scenario runner
-    scenarios/  — QA-001 through QA-020 scenario implementations
-docs/           — design documents
+    scenarios/  — QA-001 through QA-023 scenario implementations
+  safety/       — ethics & safety invariant tests (CI-gated)
+docs/           — design documents (see docs/README.md for index)
 config/
   policy.example.yaml     — annotated full-featured example policy
   policy.schema.json      — JSON Schema for IDE validation
@@ -546,13 +430,13 @@ ruff check . && ruff format --check . && mypy src/atlasbridge/ && pytest tests/ 
 
 ## Troubleshooting
 
-**Wrong binary in PATH?**
+**Wrong binary or version?**
 
 ```bash
 atlasbridge version --verbose
 ```
 
-This shows the exact install path, config path, Python version, and platform — useful for detecting stale installs or multiple versions.
+Shows the exact install path, config path, Python version, and platform.
 
 **`atlasbridge: command not found` after `pip install`**
 
@@ -572,9 +456,25 @@ atlasbridge doctor
 
 Shows where AtlasBridge expects its config file. Run `atlasbridge setup` to create it.
 
+**Telegram: "chat not found" or bot not sending messages**
+
+Your bot cannot message you until you open the bot chat in Telegram and send `/start`. This is a Telegram requirement, not an AtlasBridge limitation.
+
+**Telegram: 409 Conflict error**
+
+Another AtlasBridge instance (or poller) is already running. Stop it first:
+
+```bash
+atlasbridge stop
+```
+
+Ensure only one instance is running at a time.
+
 **Upgrading from Aegis?**
 
 AtlasBridge automatically migrates `~/.aegis/config.toml` on first run. Your tokens and settings are preserved.
+
+See [docs/troubleshooting.md](docs/troubleshooting.md) for more solutions.
 
 ---
 
