@@ -132,6 +132,25 @@ def _check_ui_assets() -> dict:
         }
 
 
+def _check_poller_lock() -> dict | None:
+    """Check for stale Telegram poller lock files."""
+    try:
+        from atlasbridge.core.config import load_config
+
+        cfg_path = _config_path()
+        if not cfg_path.exists():
+            return None
+        cfg = load_config(cfg_path)
+        if not cfg.telegram:
+            return None
+        token = cfg.telegram.bot_token.get_secret_value()
+        from atlasbridge.core.poller_lock import check_stale_lock
+
+        return check_stale_lock(token)
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _check_systemd_service() -> dict | None:
     """Linux-only: check if the aegis.service unit is installed."""
     if not sys.platform.startswith("linux"):
@@ -181,6 +200,7 @@ def cmd_doctor(fix: bool, as_json: bool, console: Console) -> None:
         _check_config(),
         _check_bot_token(),
         _check_ui_assets(),
+        _check_poller_lock(),
         _check_systemd(),
         _check_systemd_service(),
     ]

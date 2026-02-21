@@ -25,6 +25,13 @@ Rate limiting:
 Allowlist:
   Config key: channels.telegram.allowed_user_ids (list of int)
   Only users in this list can trigger injections.
+
+Singleton polling:
+  Only one process per bot token may run getUpdates (Telegram enforces
+  this with HTTP 409).  TelegramChannel acquires a PollerLock before
+  starting its poll loop.  If the lock is held, the channel operates
+  in send-only mode — it can still send messages and edit prompts,
+  but does not poll for updates.
 """
 
 from __future__ import annotations
@@ -34,6 +41,7 @@ import logging
 import secrets
 from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import UTC
+from pathlib import Path
 from typing import Any
 
 from atlasbridge.channels.base import BaseChannel
@@ -45,6 +53,10 @@ _BASE_URL = "https://api.telegram.org/bot{token}/{method}"
 _POLL_TIMEOUT = 30  # Long-poll timeout (seconds)
 _RETRY_BASE_S = 1.0
 _RETRY_MAX_S = 60.0
+
+
+class TelegramConflictError(Exception):
+    """Raised when Telegram returns 409 — another poller is active."""
 
 
 class TelegramChannel(BaseChannel):
@@ -64,14 +76,19 @@ class TelegramChannel(BaseChannel):
         bot_token: str,
         allowed_user_ids: list[int],
         command_callback: Callable[[str, str], Awaitable[str]] | None = None,
+        *,
+        locks_dir: Path | None = None,
     ) -> None:
         self._token = bot_token
         self._allowed = set(allowed_user_ids)
         self._reply_queue: asyncio.Queue[Reply] = asyncio.Queue()
         self._offset = 0  # getUpdates offset
         self._running = False
+        self._polling = False  # True only if we own the poll loop
         self._client = None  # httpx.AsyncClient — created in start()
         self._command_callback = command_callback
+        self._locks_dir = locks_dir
+        self._poller_lock = None  # PollerLock — created in start()
 
     async def start(self) -> None:
         try:
@@ -83,11 +100,30 @@ class TelegramChannel(BaseChannel):
 
         self._client = httpx.AsyncClient(timeout=_POLL_TIMEOUT + 5)
         self._running = True
-        asyncio.create_task(self._poll_loop(), name="telegram_poll")
-        logger.info("Telegram channel started")
+
+        # Acquire the singleton poller lock
+        from atlasbridge.core.poller_lock import PollerLock
+
+        self._poller_lock = PollerLock(self._token, locks_dir=self._locks_dir)
+        if self._poller_lock.acquire():
+            self._polling = True
+            asyncio.create_task(self._poll_loop(), name="telegram_poll")
+            logger.info("Telegram channel started (polling)")
+        else:
+            holder = self._poller_lock.holder_pid
+            logger.warning(
+                "Telegram poller already running (PID %s) — operating in send-only mode. "
+                "Stop the other instance with `atlasbridge stop` if this is unexpected.",
+                holder or "unknown",
+            )
+            logger.info("Telegram channel started (send-only, no polling)")
 
     async def close(self) -> None:
         self._running = False
+        self._polling = False
+        if self._poller_lock is not None:
+            self._poller_lock.release()
+            self._poller_lock = None
         if self._client:
             await self._client.aclose()
         logger.info("Telegram channel closed")
@@ -149,6 +185,7 @@ class TelegramChannel(BaseChannel):
         return {
             "status": "ok" if self._running else "stopped",
             "channel": self.channel_name,
+            "polling": self._polling,
             "allowed_users": len(self._allowed),
         }
 
@@ -159,7 +196,7 @@ class TelegramChannel(BaseChannel):
     async def _poll_loop(self) -> None:
         """Long-polling loop — runs for the lifetime of the daemon."""
         backoff = _RETRY_BASE_S
-        while self._running:
+        while self._running and self._polling:
             try:
                 updates = await self._api(
                     "getUpdates",
@@ -174,6 +211,16 @@ class TelegramChannel(BaseChannel):
                         self._offset = update["update_id"] + 1
                         await self._handle_update(update)
                 backoff = _RETRY_BASE_S
+            except TelegramConflictError:
+                logger.error(
+                    "Telegram 409 Conflict — another poller is active for this bot token. "
+                    "Stopping polling. If this is unexpected, run `atlasbridge stop` "
+                    "and restart."
+                )
+                self._polling = False
+                if self._poller_lock is not None:
+                    self._poller_lock.release()
+                return
             except Exception:  # noqa: BLE001
                 logger.warning("Telegram polling error; backoff=%.1fs", backoff)
                 await asyncio.sleep(backoff)
@@ -264,7 +311,14 @@ class TelegramChannel(BaseChannel):
             data = resp.json()
             if data.get("ok"):
                 return data.get("result")
+            # Detect 409 Conflict — another getUpdates poller
+            error_code = data.get("error_code")
+            description = data.get("description", "")
+            if error_code == 409 and "getUpdates" in description:
+                raise TelegramConflictError(description)
             logger.warning("Telegram API error: %s", data)
+        except TelegramConflictError:
+            raise
         except Exception as exc:  # noqa: BLE001
             logger.warning("Telegram API request failed: %s", exc)
         return None
