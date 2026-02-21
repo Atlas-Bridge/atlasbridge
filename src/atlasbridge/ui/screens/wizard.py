@@ -51,7 +51,9 @@ _TELEGRAM_HELP = (
     "  2. Send /newbot\n"
     "  3. Choose a display name and a username (must end in 'bot')\n"
     "  4. BotFather replies with your token\n"
-    "     Format: 123456789:ABCDefghIJKLMN...\n\n"
+    "     Format: 123456789:ABCDefghIJKLMN...\n"
+    "  5. Open a chat with your bot and send /start\n"
+    "     This is required before AtlasBridge can deliver prompts.\n\n"
     "  To find your user ID, message @userinfobot\n\n"
     "  Your token is stored locally and never uploaded."
 )
@@ -203,6 +205,8 @@ class SetupWizardScreen(Screen):  # type: ignore[type-arg]
             f"  Allowlisted users: {user_count}\n\n"
             "Press Finish to save your configuration."
         )
+        if self._wizard.channel == "telegram":
+            text += "\n\n  \u26a0 Remember: send /start to your bot in Telegram first."
         with Container(id="wizard-step"):
             yield Label(text, classes="step-title")
 

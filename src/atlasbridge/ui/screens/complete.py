@@ -48,6 +48,10 @@ class SetupCompleteScreen(Screen):  # type: ignore[type-arg]
             f"  Allowlisted users: {self._user_count}\n"
             f"  Config path:       {cfg_path or '~/.atlasbridge/config.toml'}\n\n"
             "Next steps:\n"
+        )
+        if self._channel == "telegram":
+            text += "  • Important: Send /start to your bot in Telegram before running\n"
+        text += (
             "  • Run `atlasbridge run claude` to supervise Claude Code\n"
             "  • Run `atlasbridge doctor` to verify your environment\n\n"
             "  [Q] Done"
