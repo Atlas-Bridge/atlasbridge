@@ -26,7 +26,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any
 
@@ -56,6 +56,7 @@ class SlackChannel(BaseChannel):
         bot_token: str,
         app_token: str,
         allowed_user_ids: list[str],
+        command_callback: Callable[[str, str], Awaitable[str]] | None = None,
     ) -> None:
         self._bot_token = bot_token
         self._app_token = app_token
@@ -64,6 +65,7 @@ class SlackChannel(BaseChannel):
         self._running = False
         self._client = None  # httpx.AsyncClient — created in start()
         self._dm_cache: dict[str, str] = {}  # user_id → DM channel_id
+        self._command_callback = command_callback
 
     async def start(self) -> None:
         try:
@@ -195,6 +197,23 @@ class SlackChannel(BaseChannel):
                             value = action.get("value", "")
                             if value:
                                 await self._handle_action(value, user_id)
+                elif req.type == "slash_commands":
+                    payload = req.payload or {}
+                    cmd = payload.get("command", "").lower()
+                    user_id = payload.get("user_id", "")
+                    identity = f"slack:{user_id}"
+                    if self.is_allowed(identity) and self._command_callback is not None and cmd:
+                        try:
+                            response_text = await self._command_callback(cmd, identity)
+                        except Exception as exc:  # noqa: BLE001
+                            response_text = f"Error: {exc}"
+                        await client.send_socket_mode_response(
+                            SocketModeResponse(
+                                envelope_id=req.envelope_id,
+                                payload={"text": response_text},
+                            )
+                        )
+                        return
             except Exception as exc:  # noqa: BLE001
                 logger.warning("Slack socket handler error: %s", exc)
             finally:

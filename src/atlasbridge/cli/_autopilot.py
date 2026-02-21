@@ -6,6 +6,7 @@ CLI commands: ``atlasbridge autopilot`` subcommands.
     autopilot status        -- show current state + active policy
     autopilot mode          -- set autonomy mode (off|assist|full)
     autopilot explain       -- show last N decisions from the trace
+    autopilot history       -- show last N state transitions
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ from pathlib import Path
 
 import click
 
-from atlasbridge.core.autopilot.engine import STATE_FILENAME, AutopilotState
+from atlasbridge.core.autopilot.engine import HISTORY_FILENAME, STATE_FILENAME, AutopilotState
 from atlasbridge.core.autopilot.trace import TRACE_FILENAME, DecisionTrace
 from atlasbridge.core.policy.parser import PolicyParseError, default_policy, load_policy
 
@@ -27,6 +28,10 @@ def _state_path(data_dir: Path) -> Path:
 
 def _trace_path(data_dir: Path) -> Path:
     return data_dir / TRACE_FILENAME
+
+
+def _history_path(data_dir: Path) -> Path:
+    return data_dir / HISTORY_FILENAME
 
 
 def _read_state(data_dir: Path) -> AutopilotState:
@@ -222,3 +227,55 @@ def autopilot_explain(last: int, as_json: bool) -> None:
         if expl:
             click.echo(f"           {expl}")
         click.echo("")
+
+
+@autopilot_group.command("history")
+@click.option("-n", "--last", default=20, show_default=True, help="Number of transitions to show.")
+@click.option("--json", "as_json", is_flag=True, help="Output as raw JSONL.")
+def autopilot_history(last: int, as_json: bool) -> None:
+    """Show the last N autopilot state transitions (pause/resume/stop history)."""
+    from atlasbridge.core.config import atlasbridge_dir
+
+    data_dir = atlasbridge_dir()
+    path = _history_path(data_dir)
+
+    if not path.exists():
+        click.echo("No autopilot state transitions recorded yet.")
+        return
+
+    lines: list[str] = []
+    try:
+        with path.open("r", encoding="utf-8") as fh:
+            lines = fh.readlines()
+    except OSError as exc:
+        click.echo(f"Cannot read history file: {exc}", err=True)
+        sys.exit(1)
+
+    entries: list[dict] = []
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entries.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+
+    recent = entries[-last:] if len(entries) > last else entries
+
+    if not recent:
+        click.echo("No autopilot state transitions recorded yet.")
+        return
+
+    if as_json:
+        for entry in recent:
+            click.echo(json.dumps(entry, ensure_ascii=False))
+        return
+
+    click.echo(f"Last {len(recent)} state transition(s):\n")
+    for entry in recent:
+        ts = entry.get("timestamp", "?")[:19]
+        from_s = entry.get("from_state", "?")
+        to_s = entry.get("to_state", "?")
+        by = entry.get("triggered_by", "unknown")
+        click.echo(f"  [{ts}]  {from_s:<8} → {to_s:<8}  triggered_by={by}")

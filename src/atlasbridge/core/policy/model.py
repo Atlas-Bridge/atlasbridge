@@ -250,6 +250,9 @@ class PolicyRule(BaseModel):
     match: MatchCriteria
     action: PolicyAction
 
+    max_auto_replies: int | None = Field(default=None, ge=1)
+    """Max times this rule may auto-reply per session. None = unlimited."""
+
 
 class PolicyDefaults(BaseModel):
     """Fallback actions when no rule matches or confidence is too low."""

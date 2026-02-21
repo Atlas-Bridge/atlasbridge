@@ -33,6 +33,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
 
@@ -45,11 +46,12 @@ from atlasbridge.core.autopilot.actions import (
 )
 from atlasbridge.core.autopilot.trace import DecisionTrace
 from atlasbridge.core.policy.evaluator import evaluate
-from atlasbridge.core.policy.model import AutonomyMode, Policy, PolicyDecision
+from atlasbridge.core.policy.model import AutonomyMode, Policy, PolicyDecision, PolicyRule
 
 logger = logging.getLogger(__name__)
 
 STATE_FILENAME = "autopilot_state.json"
+HISTORY_FILENAME = "autopilot_history.jsonl"
 
 
 class AutopilotState(str, Enum):
@@ -78,6 +80,7 @@ class AutopilotEngine:
         inject_fn:    Coroutine: inject a reply string into the PTY.
         route_fn:     Coroutine: forward a PromptEvent to the human via channel.
         notify_fn:    Coroutine: send a one-way notification to the channel.
+        history_path: Path to the state transition history JSONL file.
     """
 
     def __init__(
@@ -88,15 +91,19 @@ class AutopilotEngine:
         inject_fn: InjectFn,
         route_fn: RouteFn,
         notify_fn: NotifyFn,
+        history_path: Path | None = None,
     ) -> None:
         self.policy = policy
         self.trace = DecisionTrace(trace_path)
         self._state_path = state_path
+        self._history_path = history_path or state_path.parent / HISTORY_FILENAME
         self._inject_fn = inject_fn
         self._route_fn = route_fn
         self._notify_fn = notify_fn
         self._state = self._load_state()
         self._lock = asyncio.Lock()
+        # session_id → {rule_id → count}
+        self._rule_reply_counts: dict[str, dict[str, int]] = {}
 
     # ------------------------------------------------------------------
     # State persistence
@@ -131,7 +138,7 @@ class AutopilotEngine:
     def state(self) -> AutopilotState:
         return self._state
 
-    def _transition(self, new_state: AutopilotState) -> bool:
+    def _transition(self, new_state: AutopilotState, triggered_by: str = "unknown") -> bool:
         """
         Attempt a state transition. Returns True if successful, False if invalid.
         """
@@ -145,20 +152,55 @@ class AutopilotEngine:
         old = self._state
         self._state = new_state
         self._save_state()
-        logger.info("AutopilotEngine: %s → %s", old.value, new_state.value)
+        self._append_history(old, new_state, triggered_by)
+        logger.info("AutopilotEngine: %s → %s (by %s)", old.value, new_state.value, triggered_by)
         return True
 
-    def pause(self) -> bool:
+    def _append_history(
+        self,
+        from_state: AutopilotState,
+        to_state: AutopilotState,
+        triggered_by: str,
+    ) -> None:
+        """Append one state transition entry to the history JSONL file."""
+        entry = {
+            "timestamp": datetime.now(UTC).isoformat(),
+            "from_state": from_state.value,
+            "to_state": to_state.value,
+            "triggered_by": triggered_by,
+        }
+        try:
+            self._history_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            with self._history_path.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps(entry) + "\n")
+        except OSError as exc:
+            logger.error("AutopilotEngine: cannot write history: %s", exc)
+
+    def pause(self, triggered_by: str = "unknown") -> bool:
         """Pause the engine — all prompts will be escalated to human."""
-        return self._transition(AutopilotState.PAUSED)
+        return self._transition(AutopilotState.PAUSED, triggered_by=triggered_by)
 
-    def resume(self) -> bool:
+    def resume(self, triggered_by: str = "unknown") -> bool:
         """Resume the engine — policy-driven auto-replies restart."""
-        return self._transition(AutopilotState.RUNNING)
+        return self._transition(AutopilotState.RUNNING, triggered_by=triggered_by)
 
-    def stop(self) -> bool:
+    def stop(self, triggered_by: str = "unknown") -> bool:
         """Stop the engine — triggers clean shutdown."""
-        return self._transition(AutopilotState.STOPPED)
+        return self._transition(AutopilotState.STOPPED, triggered_by=triggered_by)
+
+    # ------------------------------------------------------------------
+    # Rate limit helpers
+    # ------------------------------------------------------------------
+
+    def _get_rule(self, rule_id: str | None) -> PolicyRule | None:
+        """Return the PolicyRule with the given id, or None."""
+        if rule_id is None:
+            return None
+        return next((r for r in self.policy.rules if r.id == rule_id), None)
+
+    def reset_session(self, session_id: str) -> None:
+        """Clear per-rule reply counters for a finished session."""
+        self._rule_reply_counts.pop(session_id, None)
 
     # ------------------------------------------------------------------
     # Policy hot-reload
@@ -239,6 +281,25 @@ class AutopilotEngine:
             # Record decision to trace (always, regardless of action type)
             self.trace.record(decision)
 
+            # --- Rate limit check ---
+            # If the matched rule has max_auto_replies set, check the counter.
+            # Exceeded limit → escalate to human instead of auto-replying.
+            if decision.matched_rule_id is not None and decision.action_type == "auto_reply":
+                rule = self._get_rule(decision.matched_rule_id)
+                if rule is not None and rule.max_auto_replies is not None:
+                    session_counts = self._rule_reply_counts.setdefault(session_id, {})
+                    current = session_counts.get(decision.matched_rule_id, 0)
+                    if current >= rule.max_auto_replies:
+                        logger.info(
+                            "AutopilotEngine: rate limit reached for rule=%s session=%s "
+                            "(limit=%d) — escalating to human",
+                            decision.matched_rule_id,
+                            session_id,
+                            rule.max_auto_replies,
+                        )
+                        await self._route_fn(prompt_event)
+                        return ActionResult(action_type="require_human", routed_to_human=True)
+
             # --- Autonomy mode: ASSIST ---
             # Suggest the reply to the human; they confirm or override.
             if autonomy_mode == AutonomyMode.ASSIST:
@@ -260,4 +321,12 @@ class AutopilotEngine:
                 route_fn=self._route_fn,
                 notify_fn=self._notify_fn,
             )
+
+            # Increment per-rule reply counter on successful auto_reply
+            if result.injected and decision.matched_rule_id is not None:
+                session_counts = self._rule_reply_counts.setdefault(session_id, {})
+                session_counts[decision.matched_rule_id] = (
+                    session_counts.get(decision.matched_rule_id, 0) + 1
+                )
+
             return result

@@ -154,6 +154,7 @@ Each entry in the `rules` list is a `PolicyRule` object:
 | `description` | string | no | Human-readable label. Included in explain output. |
 | `match` | object | yes | Match criteria. All specified criteria must be satisfied. |
 | `action` | object | yes | Action to execute when this rule matches. |
+| `max_auto_replies` | integer | no | Maximum number of times this rule may auto-reply per session. When the limit is reached, the prompt is escalated to a human instead. `null` (default) means unlimited. Minimum value: 1. Only meaningful for `auto_reply` actions; ignored for other action types. |
 
 ### Match field reference
 

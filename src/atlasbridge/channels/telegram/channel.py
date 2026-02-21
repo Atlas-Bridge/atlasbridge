@@ -32,7 +32,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import secrets
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import UTC
 from typing import Any
 
@@ -59,13 +59,19 @@ class TelegramChannel(BaseChannel):
     channel_name = "telegram"
     display_name = "Telegram"
 
-    def __init__(self, bot_token: str, allowed_user_ids: list[int]) -> None:
+    def __init__(
+        self,
+        bot_token: str,
+        allowed_user_ids: list[int],
+        command_callback: Callable[[str, str], Awaitable[str]] | None = None,
+    ) -> None:
         self._token = bot_token
         self._allowed = set(allowed_user_ids)
         self._reply_queue: asyncio.Queue[Reply] = asyncio.Queue()
         self._offset = 0  # getUpdates offset
         self._running = False
         self._client = None  # httpx.AsyncClient — created in start()
+        self._command_callback = command_callback
 
     async def start(self) -> None:
         try:
@@ -211,12 +217,27 @@ class TelegramChannel(BaseChannel):
         await self._api("answerCallbackQuery", {"callback_query_id": cb["id"]})
 
     async def _handle_message(self, msg: dict[str, Any]) -> None:
-        """Handle free-text reply messages."""
+        """Handle free-text reply messages and / commands."""
         user_id = msg.get("from", {}).get("id")
+        chat_id = msg.get("chat", {}).get("id")
         text = msg.get("text", "").strip()
 
-        if not text or text.startswith("/"):
-            return  # Commands handled elsewhere
+        if not text:
+            return
+
+        if text.startswith("/"):
+            if not self.is_allowed(f"telegram:{user_id}"):
+                return
+            if self._command_callback is not None:
+                cmd = text.split()[0].lower()
+                try:
+                    response = await self._command_callback(cmd, f"telegram:{user_id}")
+                except Exception as exc:  # noqa: BLE001
+                    response = f"Error: {exc}"
+                if chat_id is not None:
+                    await self._api("sendMessage", {"chat_id": chat_id, "text": response})
+            return
+
         if not self.is_allowed(f"telegram:{user_id}"):
             return
 

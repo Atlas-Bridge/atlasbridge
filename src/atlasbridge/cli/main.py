@@ -378,11 +378,40 @@ cli.add_command(autopilot_group)
 
 
 @cli.command()
-def pause() -> None:
+@click.option(
+    "--all",
+    "pause_all",
+    is_flag=True,
+    default=False,
+    help="Pause autopilot across all active sessions (shows session count).",
+)
+def pause(pause_all: bool) -> None:
     """Pause the autopilot — all prompts will be forwarded to you."""
     from atlasbridge.cli._autopilot import autopilot_disable
 
     autopilot_disable.main(standalone_mode=False)
+
+    if pause_all:
+        try:
+            from atlasbridge.core.config import atlasbridge_dir
+            from atlasbridge.core.constants import DB_FILENAME
+            from atlasbridge.core.store.database import Database
+
+            data_dir = atlasbridge_dir()
+            db_path = data_dir / DB_FILENAME
+            if db_path.exists():
+                db = Database(db_path)
+                db.connect()
+                try:
+                    sessions = db.list_active_sessions()
+                    count = len(sessions)
+                finally:
+                    db.close()
+                click.echo(f"Active sessions affected: {count}")
+            else:
+                click.echo("No database found — no active sessions.")
+        except Exception:  # noqa: BLE001
+            pass  # DB query is best-effort; pause itself already succeeded
 
 
 @cli.command()
