@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from atlasbridge.enterprise.risk import (
     EnterpriseRiskClassifier,
+    RiskAssessment,
     RiskInput,
     RiskLevel,
 )
@@ -156,3 +157,73 @@ class TestProtectedBranches:
 
     def test_empty_not_protected(self) -> None:
         assert not EnterpriseRiskClassifier._is_protected_branch("")
+
+    def test_prod_is_protected(self) -> None:
+        assert EnterpriseRiskClassifier._is_protected_branch("prod")
+
+    def test_case_insensitive(self) -> None:
+        assert EnterpriseRiskClassifier._is_protected_branch("Main")
+        assert EnterpriseRiskClassifier._is_protected_branch("MASTER")
+
+    def test_release_slash_prefix(self) -> None:
+        assert EnterpriseRiskClassifier._is_protected_branch("release/3.2.1")
+
+
+class TestRiskClassifierEdgeCases:
+    def test_deny_action_is_low(self) -> None:
+        inp = RiskInput(
+            prompt_type="yes_no",
+            action_type="deny",
+            confidence="high",
+            branch="main",
+            ci_status="failing",
+        )
+        result = EnterpriseRiskClassifier.classify(inp)
+        assert result.level == RiskLevel.LOW
+
+    def test_notify_only_is_low(self) -> None:
+        inp = RiskInput(
+            prompt_type="yes_no",
+            action_type="notify_only",
+            confidence="low",
+            branch="main",
+            ci_status="failing",
+        )
+        result = EnterpriseRiskClassifier.classify(inp)
+        assert result.level == RiskLevel.LOW
+
+    def test_empty_ci_status(self) -> None:
+        inp = RiskInput(
+            prompt_type="yes_no",
+            action_type="auto_reply",
+            confidence="high",
+            branch="main",
+            ci_status="",
+        )
+        result = EnterpriseRiskClassifier.classify(inp)
+        # Not CRITICAL because ci_status != "failing"
+        assert result.level == RiskLevel.MEDIUM
+
+    def test_reasons_is_tuple(self) -> None:
+        inp = RiskInput(
+            prompt_type="yes_no",
+            action_type="auto_reply",
+            confidence="high",
+            branch="feature/foo",
+            ci_status="passing",
+        )
+        result = EnterpriseRiskClassifier.classify(inp)
+        assert isinstance(result.reasons, tuple)
+
+    def test_risk_level_enum_values(self) -> None:
+        assert RiskLevel.LOW == "low"
+        assert RiskLevel.MEDIUM == "medium"
+        assert RiskLevel.HIGH == "high"
+        assert RiskLevel.CRITICAL == "critical"
+
+    def test_risk_assessment_frozen(self) -> None:
+        import pytest
+
+        assessment = RiskAssessment(level=RiskLevel.LOW, reasons=("test",))
+        with pytest.raises(AttributeError):
+            assessment.level = RiskLevel.HIGH  # type: ignore[misc]
