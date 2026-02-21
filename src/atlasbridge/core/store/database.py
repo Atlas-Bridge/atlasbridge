@@ -139,6 +139,26 @@ class Database:
             "SELECT * FROM sessions WHERE status NOT IN ('completed', 'crashed', 'canceled')"
         ).fetchall()
 
+    def list_sessions(self, limit: int = 50) -> list[sqlite3.Row]:
+        """Return all sessions ordered by most recent first."""
+        return self._db.execute(
+            "SELECT * FROM sessions ORDER BY started_at DESC LIMIT ?", (limit,)
+        ).fetchall()
+
+    def count_prompts_for_session(self, session_id: str) -> int:
+        """Return the number of prompts associated with a session."""
+        row = self._db.execute(
+            "SELECT count(*) FROM prompts WHERE session_id = ?", (session_id,)
+        ).fetchone()
+        return row[0] if row else 0
+
+    def list_prompts_for_session(self, session_id: str) -> list[sqlite3.Row]:
+        """Return all prompts for a session, ordered by creation time."""
+        return self._db.execute(
+            "SELECT * FROM prompts WHERE session_id = ? ORDER BY created_at ASC",
+            (session_id,),
+        ).fetchall()
+
     # ------------------------------------------------------------------
     # Prompts
     # ------------------------------------------------------------------
