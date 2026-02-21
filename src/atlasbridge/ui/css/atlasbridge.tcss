@@ -1,0 +1,196 @@
+/* ============================================================
+   AtlasBridge TUI — global stylesheet
+   ============================================================ */
+
+/* ── App shell ─────────────────────────────────────────────── */
+
+Screen {
+    background: $surface;
+}
+
+/* ── Welcome screen ─────────────────────────────────────────── */
+
+#welcome-root {
+    width: 100%;
+    height: 1fr;
+    padding: 1 2;
+    overflow-y: auto;
+}
+
+#welcome-grid {
+    width: 100%;
+    height: auto;
+}
+
+#brand-header {
+    text-style: bold;
+    color: $accent;
+    margin-bottom: 0;
+}
+
+#brand-tagline {
+    color: $text-muted;
+    margin-bottom: 1;
+}
+
+StatusCards {
+    margin-top: 1;
+    margin-bottom: 1;
+}
+
+#welcome-body {
+    padding: 1 0;
+    margin-top: 1;
+}
+
+#welcome-footer-tip {
+    color: $text-muted;
+    text-style: italic;
+    margin-top: 2;
+}
+
+/* ── Status cards ─────────────────────────────────────────────── */
+
+_Card {
+    width: 1fr;
+    height: 5;
+    padding: 0 1;
+    border: tall $panel-lighten-1;
+    margin: 0 1;
+}
+
+_Card .card-title {
+    color: $text-muted;
+    text-style: bold;
+}
+
+_Card .card-value {
+    color: $accent;
+}
+
+/* ── Wizard screen ─────────────────────────────────────────── */
+
+#wizard-root {
+    width: 100%;
+    height: 1fr;
+    padding: 1 2;
+    overflow-y: auto;
+}
+
+#wizard-title {
+    text-style: bold;
+    color: $accent;
+    margin-bottom: 1;
+}
+
+#wizard-progress-label {
+    color: $text-muted;
+}
+
+#wizard-progress {
+    margin-bottom: 1;
+}
+
+#wizard-step {
+    margin-top: 1;
+    margin-bottom: 1;
+    padding: 1;
+    border: tall $panel-lighten-1;
+}
+
+.step-title {
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+.field-label {
+    color: $text-muted;
+    margin-bottom: 0;
+}
+
+.wizard-nav {
+    layout: horizontal;
+    height: auto;
+    margin-top: 1;
+}
+
+.wizard-nav Button {
+    margin-right: 1;
+}
+
+.wizard-error {
+    color: $error;
+    height: auto;
+    margin-top: 1;
+}
+
+/* ── Complete screen ─────────────────────────────────────────── */
+
+#complete-root {
+    width: 100%;
+    height: 1fr;
+    padding: 2 4;
+    align: center middle;
+}
+
+#complete-body {
+    width: 60%;
+    padding: 2;
+    border: tall $success;
+}
+
+/* ── Sessions screen ─────────────────────────────────────────── */
+
+#sessions-root {
+    width: 100%;
+    height: 1fr;
+    padding: 1 2;
+}
+
+#sessions-title {
+    text-style: bold;
+    color: $accent;
+    margin-bottom: 1;
+}
+
+#sessions-table {
+    height: 1fr;
+}
+
+/* ── Logs screen ─────────────────────────────────────────────── */
+
+#logs-root {
+    width: 100%;
+    height: 1fr;
+    padding: 1 2;
+}
+
+#logs-title {
+    text-style: bold;
+    color: $accent;
+    margin-bottom: 1;
+}
+
+#log-view {
+    height: 1fr;
+    border: tall $panel-lighten-1;
+}
+
+/* ── Doctor screen ─────────────────────────────────────────── */
+
+#doctor-root {
+    width: 100%;
+    height: 1fr;
+    padding: 1 2;
+    overflow-y: auto;
+}
+
+#doctor-title {
+    text-style: bold;
+    color: $accent;
+    margin-bottom: 1;
+}
+
+#checks-body {
+    margin-top: 1;
+}
