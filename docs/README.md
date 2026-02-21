@@ -59,14 +59,12 @@ This index helps you find the right document fast, whether you are a new user, a
 | [red-team-report.md](red-team-report.md) | Contributor | Relay misuse analysis under original "firewall" framing; retained for implementation reference | For historical context on correctness invariants | Reference |
 | [release.md](release.md) | Contributor | Release process: tag patterns (rc vs stable), TestPyPI vs PyPI, version bumping, OIDC | When cutting a release | Current |
 | [reliability.md](reliability.md) | Both | Reliability philosophy, core invariants, failure modes, PTY supervisor architecture | When diagnosing PTY or prompt detection issues | Current |
-| [roadmap-90-days.md](roadmap-90-days.md) | Both | Project milestones from v0.1 through v1.0 | To understand project direction | Partially outdated (see note below) |
+| [roadmap-90-days.md](roadmap-90-days.md) | Both | Project milestones from v0.1 through v1.0 | To understand project direction | Current |
 | [setup-flow.md](setup-flow.md) | Contributor | Setup command design: flow diagram, pre-flight checks, config collection, validation | When modifying the setup wizard | Current |
 | [setup-noninteractive.md](setup-noninteractive.md) | User | Headless / CI deployment: env vars, `--from-env`, Docker example | When deploying without a TTY | Current |
 | [threat-model.md](threat-model.md) | Contributor | STRIDE-based relay correctness analysis, trust boundaries, threat scenarios | For correctness review or architecture audits | Current |
 | [tool-adapter.md](tool-adapter.md) | Contributor | Adapter abstraction design goals and interface (early design doc) | For historical context on adapter design decisions | Reference |
 | [tool-interception-design.md](tool-interception-design.md) | Contributor | Strategy analysis: wrapper vs PTY interception; rationale for PTY approach | For historical context on interception strategy | Reference |
-
-> **Note on roadmap-90-days.md:** This document lists v0.6.2 as the latest release. The project has since shipped through v0.8.1. Refer to `CLAUDE.md` for the up-to-date roadmap table.
 
 ---
 

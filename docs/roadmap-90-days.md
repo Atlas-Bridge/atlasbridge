@@ -1,6 +1,6 @@
 # AtlasBridge Roadmap
 
-**Version:** 0.6.2
+**Version:** 0.8.1
 **Status:** Active
 **Last updated:** 2026-02-21
 
@@ -8,16 +8,17 @@
 
 ## Where We Are
 
-AtlasBridge v0.6.2 is released and available on PyPI. The core autonomous runtime is complete and production-capable on macOS and Linux.
+AtlasBridge v0.8.1 is released and available on PyPI. The core autonomous runtime is production-capable on macOS and Linux with a mature policy engine and zero-touch setup experience.
 
 Key capabilities shipped:
 
-- **Policy DSL v0** — deterministic, first-match-wins rule engine with YAML authoring
-- **Autopilot Engine** — three autonomy modes (Off / Assist / Full) with instant kill switch
-- **PTY supervisor** — macOS and Linux, Claude Code + OpenAI + Gemini adapters
-- **Telegram + Slack** — dual-channel notification with inline keyboard responses
-- **Interactive TUI** — setup wizard, sessions, logs, doctor
-- **Audit infrastructure** — hash-chained audit log + append-only decision trace (JSONL)
+- **Policy DSL v1** — compound conditions (`any_of`/`none_of`), session scoping (`session_tag`), confidence bounds (`max_confidence`), policy inheritance (`extends`), trace rotation
+- **Zero-touch setup** — config migration from legacy paths, `--from-env` bootstrap, keyring integration, `atlasbridge config` CLI
+- **Autopilot Engine** — three autonomy modes (Off / Assist / Full) with instant kill switch, per-rule rate limits, policy hot-reload
+- **PTY supervisor** — macOS and Linux, Claude Code + OpenAI + Gemini adapters with auto-registration
+- **Telegram + Slack** — dual-channel notification with inline keyboard responses, Slack kill switch parity
+- **Interactive TUI** — setup wizard, sessions, logs, doctor, dynamic guidance panel
+- **Audit infrastructure** — hash-chained audit log + append-only decision trace (JSONL) with configurable rotation
 
 The positioning is settled: **policy-driven autonomous runtime for AI CLI agents**. Autonomy first. Human override when required.
 
@@ -36,12 +37,55 @@ The positioning is settled: **policy-driven autonomous runtime for AI CLI agents
 | v0.6.0 | Autonomous Agent Runtime — Policy DSL v0, autopilot, kill switch | Released |
 | v0.6.1 | Policy authoring guide + 5 ready-to-use presets | Released |
 | v0.6.2 | Product positioning — pyproject.toml, keywords, tagline | Released |
+| v0.7.1 | Policy engine hardening — per-rule rate limits, hot-reload, Slack kill switch | Released |
+| v0.7.2 | Doctor + polling path fixes, config path normalization | Released |
+| v0.7.3 | Adapter auto-registration, `run claude-code` alias | Released |
+| v0.7.4 | Telegram singleton poller (no 409 conflicts) | Released |
+| v0.7.5 | Dynamic guidance panel on welcome screen | Released |
+| v0.8.0 | Zero-touch setup — config migration, env bootstrap, keyring, config CLI | Released |
+| v0.8.1 | Policy DSL v1 — any_of/none_of, session_tag, max_confidence, extends, trace rotation | Released |
+
+### v0.7.1 — Policy Engine Hardening (Released)
+
+**Theme:** Make the autonomy engine production-grade for always-on workloads.
+
+**Delivered:**
+
+- **Per-rule rate limits** — `max_auto_replies: N` cap per session; prevents runaway automation on looping prompts
+- **Policy hot-reload** — `SIGHUP` reloads policy without daemon restart; new rules take effect on next prompt
+- **Slack kill switch** — `/pause`, `/resume`, `/stop`, `/status` commands in Slack (full parity with Telegram)
+- **Multi-session kill switch** — `atlasbridge pause --all` instantly pauses every active session
+- **Kill switch history** — `atlasbridge autopilot history` shows state transitions with timestamps and who triggered each change
+
+### v0.8.0 — Zero-Touch Setup (Released)
+
+**Theme:** First-run experience that just works.
+
+**Delivered:**
+
+- **Config migration** — automatic detection and migration from legacy `~/.aegis/` paths
+- **Environment bootstrap** — `atlasbridge setup --from-env` for headless / CI deployments
+- **Keyring integration** — channel tokens stored in the OS keyring instead of plain-text config
+- **Config CLI** — `atlasbridge config` subcommands for viewing and modifying configuration
+
+### v0.8.1 — Policy DSL v1 (Released)
+
+**Theme:** A richer, more expressive policy language for complex autonomous workflows.
+
+**Delivered:**
+
+- **Compound conditions** — `any_of`, `none_of` match operators for multi-field rules
+- **Session context matching** — `match.session.tag` for session-scoped policy rules
+- **Confidence bounds** — `max_confidence` for bounded automation windows
+- **Policy inheritance** — `extends: base-policy.yaml` for composing shared rules with overrides
+- **Decision trace rotation** — configurable rotation of `autopilot_decisions.jsonl` by size or age
+- **Backward compatibility** — `policy_version: "0"` policies parse and evaluate identically to v0.6.x
 
 ---
 
 ## Upcoming Milestones
 
-### v0.7.0 — Windows (ConPTY, Experimental)
+### v0.9.0 — Windows (ConPTY, Experimental)
 
 **Theme:** Run AtlasBridge wherever AI agents run.
 
@@ -60,58 +104,7 @@ The positioning is settled: **policy-driven autonomous runtime for AI CLI agents
 - [ ] QA-020 passes — all CRLF prompt variants detected and classified correctly
 - [ ] No `UnicodeDecodeError` on Unicode ConPTY output
 - [ ] Windows CI runner produces a result on every PR (pass or fail, not timeout)
-- [ ] `CHANGELOG.md` updated; `v0.7.0` tag created
-
----
-
-### v0.7.1 — Policy Engine Hardening
-
-**Theme:** Make the autonomy engine production-grade for always-on workloads.
-
-**Deliverables:**
-
-- **Per-rule rate limits** — `max_auto_replies: N` cap per session; prevents runaway automation on looping prompts
-- **Policy hot-reload** — `SIGHUP` reloads policy without daemon restart; new rules take effect on next prompt
-- **Slack kill switch** — `/pause`, `/resume`, `/stop`, `/status` commands in Slack (full parity with Telegram)
-- **Multi-session kill switch** — `atlasbridge pause --all` instantly pauses every active session
-- **Kill switch history** — `atlasbridge autopilot history` shows state transitions with timestamps and who triggered each change
-
-**Definition of done:**
-
-- [ ] Per-rule `max_auto_replies` enforced in `PolicyEvaluator`; limit documented in `docs/policy-dsl.md`
-- [ ] `SIGHUP` triggers `PolicyLoader.reload()` without interrupting in-flight sessions
-- [ ] Slack channel `/pause` and `/resume` functional and covered by channel harness tests
-- [ ] `atlasbridge pause --all` pauses all active sessions atomically
-- [ ] `atlasbridge autopilot history` command functional with `--json` output
-- [ ] `CHANGELOG.md` updated; `v0.7.1` tag created
-
----
-
-### v0.8.0 — Policy DSL v1
-
-**Theme:** A richer, more expressive policy language for complex autonomous workflows.
-
-**DSL v1 additions:**
-
-- **Compound conditions** — `any_of`, `all_of`, `none_of` match operators for multi-field rules
-- **Session context matching** — `match.session.cwd`, `match.session.tag`, `match.session.tool`
-- **Confidence ranges** — `min_confidence: medium, max_confidence: high` for bounded automation
-- **Per-session overrides** — inject session-scoped policy at run time: `atlasbridge run claude --policy override.yaml`
-- **Decision trace archival** — configurable rotation of `autopilot_decisions.jsonl` (by size or age)
-- **Policy inheritance** — `extends: base-policy.yaml` for composing shared rules with overrides
-
-**Compatibility guarantee:** `policy_version: "0"` policies parse and evaluate identically to v0.6.x. No migration required unless you want v1 features.
-
-**Definition of done:**
-
-- [ ] `policy_version: "0"` and `policy_version: "1"` use separate parsers; no v0 regressions
-- [ ] Compound conditions functional in `PolicyEvaluator`
-- [ ] Session-context matching functional (`cwd`, `tag`, `tool`)
-- [ ] Per-session CLI override (`atlasbridge run claude --policy override.yaml`)
-- [ ] Decision trace rotation configurable in `config.toml`
-- [ ] `atlasbridge policy migrate` command converts v0 → v1 format
-- [ ] `docs/policy-dsl.md` updated with full v1 syntax reference
-- [ ] `CHANGELOG.md` updated; `v0.8.0` tag created
+- [ ] `CHANGELOG.md` updated; `v0.9.0` tag created
 
 ---
 
@@ -176,7 +169,7 @@ These items are continuously improved across releases with no fixed version targ
 ### Risk 1: ConPTY API Instability on Windows
 
 **Likelihood:** High
-**Impact:** v0.7.0 ships with unresolved platform bugs
+**Impact:** v0.9.0 ships with unresolved platform bugs
 
 Windows ConPTY has known behavioural differences across Windows builds. Third-party wrappers have historically had version-specific issues.
 
@@ -189,23 +182,7 @@ Windows ConPTY has known behavioural differences across Windows builds. Third-pa
 
 ---
 
-### Risk 2: Policy DSL v1 Breaking v0 Policies
-
-**Likelihood:** Medium
-**Impact:** Existing users' policies stop working after v0.8.0
-
-Compound conditions and session-context matching may create parser ambiguity or change evaluation precedence.
-
-**Mitigation:**
-
-- `policy_version: "0"` and `policy_version: "1"` use completely separate parsers
-- The v0 parser is frozen at v0.7.1 — no changes after that release
-- `atlasbridge policy migrate` command converts v0 → v1 format automatically
-- Migration guide published alongside the v0.8.0 release
-
----
-
-### Risk 3: Event Loop Latency Under High-Volume Output
+### Risk 2: Event Loop Latency Under High-Volume Output
 
 **Likelihood:** Low
 **Impact:** QA-018 fails; real Claude Code workloads see latency spikes
@@ -224,10 +201,15 @@ Under high-volume output (100k+ lines/session), `PromptDetector.detect()` could 
 
 | Version | Theme | Status |
 |---------|-------|--------|
-| v0.7.0 | Windows ConPTY (experimental) | Planned |
-| v0.7.1 | Policy engine hardening | Planned |
-| v0.8.0 | Policy DSL v1 | Planned |
-| v1.0.0 | GA — stable, multi-platform, multi-agent | Post-roadmap |
+| v0.7.1 | Policy engine hardening | Released |
+| v0.7.2 | Doctor + polling bugfixes | Released |
+| v0.7.3 | Adapter auto-registration | Released |
+| v0.7.4 | Telegram singleton poller | Released |
+| v0.7.5 | Dynamic guidance panel | Released |
+| v0.8.0 | Zero-touch setup | Released |
+| v0.8.1 | Policy DSL v1 | Released |
+| v0.9.0 | Windows ConPTY (experimental) | Planned |
+| v1.0.0 | GA — stable, multi-platform, multi-agent | Planned |
 
 Versions follow SemVer. Breaking changes to `BaseAdapter` or `BaseChannel` require a minor version bump in v0.x and a major bump at v1.0+.
 
@@ -246,4 +228,4 @@ A CI job is considered green when all of the following pass:
 
 Platform parity: all jobs pass on `macos-latest` and `ubuntu-latest`, Python 3.11 and 3.12.
 
-The Windows CI runner on `windows-latest` is best-effort through v0.7.0 — failures are reported but do not block releases.
+The Windows CI runner on `windows-latest` is best-effort through v0.9.0 — failures are reported but do not block releases.
