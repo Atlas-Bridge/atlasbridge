@@ -6,23 +6,33 @@ This file is read by Claude Code automatically. It provides project context for 
 
 ## What AtlasBridge is
 
-AtlasBridge is a **policy-driven autonomous runtime for AI CLI agents** with built-in human escalation and remote prompt relay.
+AtlasBridge is a **policy-driven autonomous runtime for AI CLI agents**.
 
-AtlasBridge is a deterministic, policy-governed runtime that allows AI CLI agents to operate autonomously within defined boundaries. Humans define the rules. AtlasBridge enforces them. When uncertainty, ambiguity, or high-impact actions arise, AtlasBridge escalates safely to a human via Telegram or Slack.
+It is a deterministic, policy-governed runtime that allows AI CLI agents to operate autonomously within defined boundaries. Humans define the rules via a YAML Policy DSL. AtlasBridge evaluates them on every prompt and executes only what is explicitly permitted. When no rule matches, confidence is low, or a rule says `require_human`, AtlasBridge escalates to a human via Telegram or Slack.
 
-**Three autonomy levels:** Off (all prompts to human), Assist (policy handles allowed prompts, escalates others), Full (policy auto-executes, escalates no-match/low-confidence).
+**Autonomy first. Human override when required.**
+
+Three autonomy modes:
+- **Off** — all prompts forwarded to human; no automatic decisions
+- **Assist** — policy handles explicitly allowed prompts; all others escalated
+- **Full** — policy auto-executes permitted prompts; no-match/low-confidence escalated safely
+
+AtlasBridge is not a wrapper around a CLI tool. It is a runtime that governs how AI agents execute.
 
 ---
 
-## What AtlasBridge is NOT
+## Safety by design
 
-- Not a security product
-- Not a CLI firewall
-- Not a cloud service
+AtlasBridge is built around strict invariants — not as security posture but as correctness guarantees:
+
+- No freestyle decisions — every action must match a policy rule
+- No bypassing CI checks — merge gating is enforced
+- Default-safe escalation on no-match or low-confidence
+- Append-only audit log for every decision
 
 ---
 
-## Core invariants (correctness, not security posture)
+## Core correctness invariants
 
 These exist to keep the relay working correctly:
 
