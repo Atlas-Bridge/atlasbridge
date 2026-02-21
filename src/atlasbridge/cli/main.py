@@ -180,13 +180,33 @@ def run(
 # ---------------------------------------------------------------------------
 
 
-@cli.command()
-@click.option("--json", "as_json", is_flag=True, default=False)
-def sessions(as_json: bool) -> None:
-    """List active and recent sessions."""
-    from atlasbridge.cli._sessions import cmd_sessions
+@cli.group(invoke_without_command=True)
+@click.pass_context
+def sessions(ctx: click.Context) -> None:
+    """Session lifecycle commands."""
+    if ctx.invoked_subcommand is None:
+        ctx.invoke(sessions_list)
 
-    cmd_sessions(as_json=as_json, console=console)
+
+@sessions.command("list")
+@click.option("--json", "as_json", is_flag=True, default=False, help="Output as JSON")
+@click.option("--all", "show_all", is_flag=True, default=False, help="Include completed sessions")
+@click.option("--limit", default=50, show_default=True, help="Max sessions to show")
+def sessions_list(as_json: bool = False, show_all: bool = False, limit: int = 50) -> None:
+    """List active and recent sessions."""
+    from atlasbridge.cli._sessions import cmd_sessions_list
+
+    cmd_sessions_list(as_json=as_json, show_all=show_all, limit=limit, console=console)
+
+
+@sessions.command("show")
+@click.argument("session_id")
+@click.option("--json", "as_json", is_flag=True, default=False, help="Output as JSON")
+def sessions_show(session_id: str, as_json: bool = False) -> None:
+    """Show details for a specific session."""
+    from atlasbridge.cli._sessions import cmd_sessions_show
+
+    cmd_sessions_show(session_id=session_id, as_json=as_json, console=console)
 
 
 # ---------------------------------------------------------------------------
