@@ -5,6 +5,10 @@ Every PolicyDecision is written to ``~/.atlasbridge/autopilot_decisions.jsonl``.
 Entries are never modified or deleted; when the file grows beyond ``max_bytes``
 it is rotated (up to ``MAX_ARCHIVES`` archives are kept).
 
+Each entry is hash-chained: every record includes ``prev_hash`` (the hash of
+the preceding entry) and its own ``hash``.  This forms an append-only chain
+whose integrity can be verified offline via ``verify_integrity()``.
+
 Usage::
 
     trace = DecisionTrace(path)
@@ -12,10 +16,13 @@ Usage::
 
     for entry in trace.tail(n=20):
         print(entry)
+
+    valid, errors = DecisionTrace.verify_integrity(path)
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Iterator
 from pathlib import Path
@@ -27,6 +34,20 @@ from atlasbridge.core.policy.model import PolicyDecision
 logger = structlog.get_logger()
 
 TRACE_FILENAME = "autopilot_decisions.jsonl"
+
+
+def _compute_hash(prev_hash: str, entry_dict: dict[str, object]) -> str:
+    """Compute SHA-256 hash for a trace entry.
+
+    Hash input: prev_hash + idempotency_key + action_type + canonical JSON.
+    """
+    chain_input = (
+        f"{prev_hash}"
+        f"{entry_dict.get('idempotency_key', '')}"
+        f"{entry_dict.get('action_type', '')}"
+        f"{json.dumps(entry_dict, separators=(',', ':'), sort_keys=True)}"
+    )
+    return hashlib.sha256(chain_input.encode()).hexdigest()
 
 
 class DecisionTrace:
@@ -50,6 +71,25 @@ class DecisionTrace:
         self._path = path
         self._max_bytes = max_bytes
         self._path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        self._last_hash: str = self._load_last_hash()
+
+    def _load_last_hash(self) -> str:
+        """Read the hash of the last entry in the trace file (for chain continuity)."""
+        if not self._path.exists():
+            return ""
+        try:
+            with self._path.open("r", encoding="utf-8") as fh:
+                last_line = ""
+                for line in fh:
+                    stripped = line.strip()
+                    if stripped:
+                        last_line = stripped
+            if not last_line:
+                return ""
+            entry = json.loads(last_line)
+            return entry.get("hash", "")
+        except (OSError, json.JSONDecodeError):
+            return ""
 
     @property
     def path(self) -> Path:
@@ -89,6 +129,9 @@ class DecisionTrace:
         except OSError as exc:
             logger.warning("trace_archive_failed", path=str(self._path), error=str(exc))
 
+        # New chain starts after rotation
+        self._last_hash = ""
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -97,8 +140,14 @@ class DecisionTrace:
         """Append one decision to the trace file (rotating first if needed)."""
         self._maybe_rotate()
         try:
+            entry = decision.to_dict()
+            entry["prev_hash"] = self._last_hash
+            entry_hash = _compute_hash(self._last_hash, entry)
+            entry["hash"] = entry_hash
+            line = json.dumps(entry, ensure_ascii=False)
             with self._path.open("a", encoding="utf-8") as fh:
-                fh.write(decision.to_json() + "\n")
+                fh.write(line + "\n")
+            self._last_hash = entry_hash
         except OSError as exc:
             # Trace write failure must never crash the autopilot engine
             logger.error("trace_write_failed", path=str(self._path), error=str(exc))
@@ -142,3 +191,70 @@ class DecisionTrace:
                         continue
         except OSError as exc:
             logger.error("trace_iterate_failed", path=str(self._path), error=str(exc))
+
+    # ------------------------------------------------------------------
+    # Integrity verification
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def verify_integrity(path: Path) -> tuple[bool, list[str]]:
+        """Verify hash chain integrity of a trace file.
+
+        Returns ``(valid, errors)`` where ``valid`` is True if the chain
+        is intact and ``errors`` is a list of human-readable descriptions
+        of any integrity violations found.
+
+        Entries written by older versions (without ``hash``/``prev_hash``
+        fields) are treated as chain-start entries.
+        """
+        if not path.exists():
+            return True, []
+
+        errors: list[str] = []
+        prev_hash = ""
+        line_no = 0
+
+        try:
+            with path.open("r", encoding="utf-8") as fh:
+                for raw_line in fh:
+                    raw_line = raw_line.strip()
+                    if not raw_line:
+                        continue
+                    line_no += 1
+
+                    try:
+                        entry = json.loads(raw_line)
+                    except json.JSONDecodeError as exc:
+                        errors.append(f"Line {line_no}: invalid JSON — {exc}")
+                        prev_hash = ""
+                        continue
+
+                    # Legacy entries without hash fields: treat as chain start
+                    if "hash" not in entry or "prev_hash" not in entry:
+                        prev_hash = ""
+                        continue
+
+                    # Verify prev_hash linkage
+                    if entry["prev_hash"] != prev_hash:
+                        errors.append(
+                            f"Line {line_no}: prev_hash mismatch — "
+                            f"expected {prev_hash!r}, got {entry['prev_hash']!r}"
+                        )
+
+                    # Verify self-hash
+                    stored_hash = entry.pop("hash")
+                    recomputed = _compute_hash(entry["prev_hash"], entry)
+                    entry["hash"] = stored_hash  # restore
+
+                    if stored_hash != recomputed:
+                        errors.append(
+                            f"Line {line_no}: hash mismatch — "
+                            f"stored {stored_hash!r}, computed {recomputed!r}"
+                        )
+
+                    prev_hash = stored_hash
+
+        except OSError as exc:
+            errors.append(f"Failed to read trace file: {exc}")
+
+        return len(errors) == 0, errors
