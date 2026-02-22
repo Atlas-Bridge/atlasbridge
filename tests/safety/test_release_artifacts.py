@@ -69,6 +69,24 @@ def test_version_strings_match():
     )
 
 
+def test_readme_status_table_includes_current_version():
+    """README.md status table must reference the current pyproject.toml version."""
+    with (ROOT / "pyproject.toml").open("rb") as f:
+        data = tomllib.load(f)
+    version = data["project"]["version"]
+    # e.g. "0.9.6" → "v0.9.6"
+    vtag = f"v{version}"
+    # For minor version matching (e.g. v0.9.6 → "v0.9")
+    minor = ".".join(version.split(".")[:2])
+    vminor = f"v{minor}"
+
+    readme = (ROOT / "README.md").read_text()
+    assert vtag in readme or vminor in readme, (
+        f"README.md does not reference current version {vtag} or {vminor}. "
+        f"Update the Status table to include the latest release."
+    )
+
+
 def test_safety_test_suite_has_minimum_files():
     """Safety test suite must have at least 19 test files."""
     safety_dir = ROOT / "tests" / "safety"

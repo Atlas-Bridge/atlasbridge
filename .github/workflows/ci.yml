@@ -146,6 +146,7 @@ jobs:
     name: Tests (${{ matrix.os }} / Python ${{ matrix.python-version }})
     runs-on: ${{ matrix.os }}
     needs: [smoke]
+    continue-on-error: ${{ matrix.experimental || false }}
     strategy:
       fail-fast: false
       matrix:
@@ -155,6 +156,11 @@ jobs:
           # Run macos only on 3.11 to save CI minutes
           - os: macos-latest
             python-version: "3.12"
+        include:
+          # Python 3.13 forward-compat check (non-blocking)
+          - os: ubuntu-latest
+            python-version: "3.13"
+            experimental: true
 
     steps:
       - uses: actions/checkout@v6

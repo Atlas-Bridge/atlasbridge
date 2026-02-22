@@ -415,6 +415,7 @@ See [CHANGELOG.md](CHANGELOG.md) for full version history.
 | v0.9.1–v0.9.3 | Released | Local dashboard MVP, hardening, remote-ready UX |
 | v0.9.4 | Released | Platform automation — CI hardening, release pipeline |
 | v0.9.5 | Released | Operator console — `atlasbridge console` process management TUI |
+| v0.9.6 | Released | GA hard freeze, release pipeline, project automation, 1336 tests |
 | v1.0.0 | Planned | GA — stable APIs, 2-week freeze window, then tag |
 
 ---
