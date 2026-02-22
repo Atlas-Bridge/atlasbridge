@@ -290,11 +290,6 @@ jobs:
           assert 'Screen' in ui_css, 'UI CSS missing Screen selector'
           print(f'  atlasbridge.ui.css/atlasbridge.tcss: {len(ui_css)} chars OK')
 
-          # Legacy TUI CSS
-          tui_css = files('atlasbridge.tui').joinpath('app.tcss').read_text('utf-8')
-          assert len(tui_css) > 0, 'TUI CSS is empty'
-          print(f'  atlasbridge.tui/app.tcss: {len(tui_css)} chars OK')
-
           print('All UI assets verified.')
           "
 

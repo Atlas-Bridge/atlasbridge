@@ -23,9 +23,19 @@ import os
 import signal
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
+
+if TYPE_CHECKING:
+    from atlasbridge.adapters.base import BaseAdapter
+    from atlasbridge.channels.base import BaseChannel
+    from atlasbridge.core.policy.model import Policy
+    from atlasbridge.core.policy.model_v1 import PolicyV1
+    from atlasbridge.core.routing.intent import IntentRouter
+    from atlasbridge.core.routing.router import PromptRouter
+    from atlasbridge.core.session.manager import SessionManager
+    from atlasbridge.core.store.database import Database
 
 logger = structlog.get_logger()
 
@@ -46,15 +56,15 @@ class DaemonManager:
     def __init__(self, config: dict[str, Any]) -> None:
         self._config = config
         self._data_dir = Path(config.get("data_dir", str(_DEFAULT_DATA_DIR)))
-        self._db: Any = None
-        self._channel: Any = None
-        self._session_manager: Any = None
-        self._router: Any = None
-        self._adapters: dict[str, Any] = {}
-        self._running = False
-        self._shutdown_event = asyncio.Event()
-        self._policy: Any = None  # Policy | PolicyV1, loaded in _init_autopilot
-        self._intent_router: Any = None  # IntentRouter, wraps _router
+        self._db: Database | None = None
+        self._channel: BaseChannel | None = None
+        self._session_manager: SessionManager | None = None
+        self._router: PromptRouter | None = None
+        self._adapters: dict[str, BaseAdapter] = {}
+        self._running: bool = False
+        self._shutdown_event: asyncio.Event = asyncio.Event()
+        self._policy: Policy | PolicyV1 | None = None
+        self._intent_router: IntentRouter | None = None
 
     async def start(self) -> None:
         """Start all subsystems and run until shutdown."""

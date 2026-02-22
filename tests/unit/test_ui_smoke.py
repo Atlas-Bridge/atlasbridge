@@ -65,14 +65,6 @@ def test_ui_css_resource_loads_non_empty() -> None:
     assert "Screen" in css, "CSS should contain Screen selector"
 
 
-def test_tui_css_resource_loads_non_empty() -> None:
-    """Legacy TUI CSS must also be loadable via importlib.resources."""
-    from importlib.resources import files
-
-    css = files("atlasbridge.tui").joinpath("app.tcss").read_text("utf-8")
-    assert len(css) > 0, "TUI CSS file should not be empty"
-
-
 def test_ui_app_has_css_class_variable() -> None:
     """AtlasBridgeApp.CSS must be a non-empty string (not a file path)."""
     from atlasbridge.ui.app import AtlasBridgeApp
@@ -80,14 +72,6 @@ def test_ui_app_has_css_class_variable() -> None:
     assert isinstance(AtlasBridgeApp.CSS, str)
     assert len(AtlasBridgeApp.CSS) > 100
     assert "Screen" in AtlasBridgeApp.CSS
-
-
-def test_tui_app_has_css_class_variable() -> None:
-    """Legacy TUI AtlasBridgeApp.CSS must be a non-empty string."""
-    from atlasbridge.tui.app import AtlasBridgeApp
-
-    assert isinstance(AtlasBridgeApp.CSS, str)
-    assert len(AtlasBridgeApp.CSS) > 0
 
 
 def test_ui_components_importable() -> None:
@@ -221,27 +205,6 @@ def test_wizard_uses_container_not_static() -> None:
         inspect.getmodule(SetupWizardScreen)  # type: ignore[arg-type]
     ), "wizard must import Container from textual.containers"
     # Step methods must not monkey-patch compose on Static
-    assert "s.compose = lambda" not in src, "Must not monkey-patch compose on Static"
-
-
-def test_tui_setup_screen_uses_recompose() -> None:
-    """Legacy tui SetupScreen._refresh_screen must use recompose."""
-    import inspect
-
-    from atlasbridge.tui.screens.setup import SetupScreen
-
-    src = inspect.getsource(SetupScreen._refresh_screen)
-    assert "recompose" in src
-    assert "refresh(layout" not in src
-
-
-def test_tui_setup_uses_container_not_static() -> None:
-    """Legacy tui SetupScreen must use Container for step content."""
-    import inspect
-
-    from atlasbridge.tui.screens.setup import SetupScreen
-
-    src = inspect.getsource(SetupScreen)
     assert "s.compose = lambda" not in src, "Must not monkey-patch compose on Static"
 
 
