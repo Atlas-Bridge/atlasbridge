@@ -213,18 +213,19 @@ class TestLogsService:
         assert result == []
 
     def test_read_recent_delegates_to_database(self, tmp_path: Path) -> None:
-        fake_rows = [
-            MagicMock(**{"__iter__": lambda s: iter([("ts", "2025-01-01"), ("event_type", "session_start")])})
-        ]
+        fake_row = MagicMock()
+        fake_row.__iter__ = lambda s: iter(
+            [("ts", "2025-01-01"), ("event_type", "session_start")]
+        )
         mock_db = MagicMock()
-        mock_db.get_recent_audit_events.return_value = fake_rows
+        mock_db.get_recent_audit_events.return_value = [fake_row]
 
         (tmp_path / "atlasbridge.db").touch()
         with (
             patch("atlasbridge.core.config.atlasbridge_dir", return_value=tmp_path),
             patch("atlasbridge.core.store.database.Database", return_value=mock_db),
         ):
-            result = LogsService.read_recent(limit=25)
+            LogsService.read_recent(limit=25)
 
         mock_db.connect.assert_called_once()
         mock_db.get_recent_audit_events.assert_called_once_with(limit=25)
