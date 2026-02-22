@@ -13,6 +13,7 @@ Usage::
 
 from __future__ import annotations
 
+import logging
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -21,9 +22,12 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from atlasbridge.dashboard.repo import DashboardRepo
-from atlasbridge.dashboard.sanitize import is_loopback
+from atlasbridge.dashboard.sanitize import is_loopback, redact_query_params
+
+_access_log = logging.getLogger("atlasbridge.dashboard.access")
 
 _HERE = Path(__file__).resolve().parent
 _TEMPLATES_DIR = _HERE / "templates"
@@ -77,6 +81,27 @@ def _timeago(value: str | None) -> str:
         return str(value)
 
 
+class _AccessLogMiddleware(BaseHTTPMiddleware):
+    """Log every request with method, path, redacted query, status, and elapsed time."""
+
+    async def dispatch(self, request, call_next):
+        start = time.monotonic()
+        response = await call_next(request)
+        elapsed_ms = (time.monotonic() - start) * 1000
+        query = redact_query_params(str(request.query_params)) if request.query_params else ""
+        _access_log.info(
+            "dashboard_request",
+            extra={
+                "method": request.method,
+                "path": request.url.path,
+                "query": query,
+                "status": response.status_code,
+                "elapsed_ms": round(elapsed_ms, 1),
+            },
+        )
+        return response
+
+
 def create_app(
     db_path: Path | None = None,
     trace_path: Path | None = None,
@@ -91,6 +116,8 @@ def create_app(
         docs_url=None,
         redoc_url=None,
     )
+
+    app.add_middleware(_AccessLogMiddleware)
 
     templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
     templates.env.filters["timeago"] = _timeago

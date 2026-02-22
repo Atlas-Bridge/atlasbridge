@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from atlasbridge.dashboard.sanitize import (
+    redact_query_params,
     redact_tokens,
     sanitize_for_display,
     strip_ansi,
@@ -77,3 +78,20 @@ class TestSanitizeForDisplay:
     def test_short_text_not_truncated(self):
         text = "hello"
         assert sanitize_for_display(text) == "hello"
+
+
+class TestRedactQueryParams:
+    def test_preserves_normal_params(self):
+        assert redact_query_params("status=running&tool=claude") == "status=running&tool=claude"
+
+    def test_redacts_token_in_value(self):
+        qs = "token=sk-abcdefghijklmnopqrstuvwxyz1234567890"
+        result = redact_query_params(qs)
+        assert "sk-abc" not in result
+        assert "token=%5BREDACTED%5D" in result
+
+    def test_handles_empty_string(self):
+        assert redact_query_params("") == ""
+
+    def test_preserves_blank_values(self):
+        assert redact_query_params("q=&status=running") == "q=&status=running"

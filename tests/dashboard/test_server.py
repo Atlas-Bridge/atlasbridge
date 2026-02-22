@@ -195,6 +195,22 @@ class TestStaticAssets:
         assert "javascript" in response.headers.get("content-type", "")
 
 
+class TestAccessLogging:
+    def test_access_log_emitted(self, client, caplog):
+        import logging
+        with caplog.at_level(logging.INFO, logger="atlasbridge.dashboard.access"):
+            client.get("/")
+        assert any("dashboard_request" in r.message for r in caplog.records)
+
+    def test_access_log_no_secrets(self, client, caplog):
+        import logging
+        with caplog.at_level(logging.INFO, logger="atlasbridge.dashboard.access"):
+            client.get("/?token=sk-abcdefghijklmnopqrstuvwxyz1234567890")
+        for record in caplog.records:
+            if hasattr(record, 'query'):
+                assert "sk-abc" not in record.query
+
+
 class TestNoDataState:
     def test_home_with_no_db(self, tmp_path):
         from atlasbridge.dashboard.app import create_app
