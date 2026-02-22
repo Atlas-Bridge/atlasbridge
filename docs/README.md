@@ -85,6 +85,7 @@ This index helps you find the right document fast, whether you are a new user, a
 | [contract-surfaces.md](contract-surfaces.md) | Contributor | Formal spec of all 8 frozen contract surfaces | Before modifying any contract surface | Current |
 | [console.md](console.md) | Both | Operator console: process management, keybindings, status polling | When using `atlasbridge console` | Current |
 | [dashboard.md](dashboard.md) | Both | Dashboard deployment: SSH tunnel, reverse proxy, export, mobile access | When accessing dashboard remotely | Current |
+| [automation-architecture.md](automation-architecture.md) | Contributor | GitHub Actions automation: issue triage, PR status sync, sprint rotation, governance guard | When modifying or extending project automation | Current |
 
 ---
 
