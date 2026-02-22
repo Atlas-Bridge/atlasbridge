@@ -29,7 +29,7 @@ class InteractionClass(StrEnum):
     CONFIRM_ENTER = "confirm_enter"
     NUMBERED_CHOICE = "numbered_choice"
     FREE_TEXT = "free_text"
-    PASSWORD_INPUT = "password_input"
+    PASSWORD_INPUT = "password_input"  # noqa: S105
     CHAT_INPUT = "chat_input"
 
 

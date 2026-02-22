@@ -7,16 +7,13 @@ InteractionClassifier, and InteractionExecutor.
 
 from __future__ import annotations
 
-import asyncio
 import time
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, PropertyMock
 
 import pytest
 
-from atlasbridge.core.interaction.classifier import InteractionClass
 from atlasbridge.core.interaction.engine import InteractionEngine
-from atlasbridge.core.interaction.executor import InjectionResult
 from atlasbridge.core.prompt.models import Confidence, PromptEvent, PromptType, Reply
 from atlasbridge.core.routing.router import PromptRouter
 from atlasbridge.core.session.manager import SessionManager

@@ -13,7 +13,7 @@ The engine is constructed per-session and provides two entry points:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import structlog
 
