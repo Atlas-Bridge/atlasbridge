@@ -204,6 +204,7 @@ omit = [
     "*/atlasbridge/cli/*",
     "*/atlasbridge/tui/*",
     "*/atlasbridge/ui/*",
+    "*/atlasbridge/console/*",
 ]
 
 [tool.coverage.report]
