@@ -47,12 +47,16 @@ Closes #<!-- issue number -->
 
 ## Governance Gates
 
+- [ ] Invariants confirmed ("Cloud OBSERVES, local EXECUTES" — see `docs/invariants.md`)
+- [ ] No auto-merge requested
+- [ ] Scope declared: <!-- docs-only / dashboard-only / core / CLI / tests -->
+- [ ] All CI checks green before tagging
 - [ ] No changes to `core/`, `os/`, `channels/`, `adapters/` unless explicitly required
 - [ ] `BaseAdapter` / `BaseChannel` ABCs unchanged (or documented in breaking changes)
 - [ ] Policy DSL schema unchanged (or documented in breaking changes)
 - [ ] Dashboard default binding remains loopback-only
 - [ ] No new production dependencies in core runtime
-- [ ] "Cloud OBSERVES, local EXECUTES" invariant preserved
+- [ ] Contract surface freeze respected (update safety tests if changing frozen surfaces)
 
 ## Checklist
 

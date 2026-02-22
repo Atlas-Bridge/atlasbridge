@@ -112,6 +112,9 @@ jobs:
       - name: atlasbridge resume --help
         run: atlasbridge resume --help
 
+      - name: atlasbridge console --help
+        run: atlasbridge console --help
+
   lint:
     name: Lint & Type Check
     runs-on: ubuntu-latest
@@ -170,6 +173,13 @@ jobs:
       - name: Run tests with coverage
         run: |
           pytest --cov=atlasbridge --cov-report=xml --cov-report=term-missing -v
+
+      - name: Verify core package coverage
+        if: matrix.python-version == '3.11' && matrix.os == 'ubuntu-latest'
+        run: |
+          echo "=== Core Package Coverage ==="
+          coverage report --include="src/atlasbridge/core/*" --fail-under=85
+          echo "Core coverage floor: 85% (target: 90%)"
 
       - name: Upload coverage report
         uses: codecov/codecov-action@v4
