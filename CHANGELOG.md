@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Pytest markers: `safety`, `e2e`, `optional`, `performance` — run subsets with `pytest -m safety` (#105)
+- Auto-apply conftest hooks for `tests/safety/` and `tests/e2e/` directories
+- `.secrets.baseline` for detect-secrets pre-commit hook (#73)
+- `test_readme_status_table_includes_current_version` safety test (#93)
+- Python 3.13 as non-blocking experimental CI target (#94)
+- Tiered CI coverage gates: Tier 1 core >= 88%, Tier 2 core >= 75%
+
+### Changed
+
+- Coverage floor raised from 80% to 84% (#70)
+- Coverage config restructured: daemon and channel ABCs now measured (#95)
+- v0.9.6 added to README.md status table (#93)
+
+### Fixed
+
+- Coverage omit patterns no longer hide daemon/channels from measurement (#95)
+
 ---
 
 ## [0.9.6] — 2026-02-22
