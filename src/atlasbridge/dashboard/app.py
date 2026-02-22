@@ -72,9 +72,9 @@ def create_app(
         stats = repo.get_stats()
         sessions = repo.list_sessions(limit=20)
         return templates.TemplateResponse(
+            request,
             "home.html",
             {
-                "request": request,
                 "stats": stats,
                 "sessions": sessions,
                 "db_available": repo.db_available,
@@ -89,9 +89,9 @@ def create_app(
         all_traces = repo.trace_tail(200)
         session_traces = [t for t in all_traces if t.get("session_id") == session_id]
         return templates.TemplateResponse(
+            request,
             "session_detail.html",
             {
-                "request": request,
                 "session": session,
                 "prompts": prompts,
                 "traces": session_traces,
@@ -104,9 +104,9 @@ def create_app(
         entries = repo.trace_tail(index + 1)
         entry = entries[index] if index < len(entries) else None
         return templates.TemplateResponse(
+            request,
             "trace_detail.html",
             {
-                "request": request,
                 "entry": entry,
                 "index": index,
                 "trace_available": repo.trace_available,
@@ -119,9 +119,9 @@ def create_app(
         audit_valid, audit_errors = repo.verify_audit_integrity()
         audit_events = repo.list_audit_events(limit=50)
         return templates.TemplateResponse(
+            request,
             "integrity.html",
             {
-                "request": request,
                 "trace_valid": trace_valid,
                 "trace_errors": trace_errors,
                 "audit_valid": audit_valid,
