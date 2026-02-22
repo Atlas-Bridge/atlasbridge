@@ -28,27 +28,27 @@ class TestDashboardHelp:
 
 class TestHostValidation:
     def test_rejects_all_interfaces(self):
-        from atlasbridge.dashboard.app import is_loopback
+        from atlasbridge.dashboard.sanitize import is_loopback
 
         assert not is_loopback("0.0.0.0")
 
     def test_accepts_localhost(self):
-        from atlasbridge.dashboard.app import is_loopback
+        from atlasbridge.dashboard.sanitize import is_loopback
 
         assert is_loopback("localhost")
 
     def test_accepts_127_0_0_1(self):
-        from atlasbridge.dashboard.app import is_loopback
+        from atlasbridge.dashboard.sanitize import is_loopback
 
         assert is_loopback("127.0.0.1")
 
     def test_accepts_ipv6_loopback(self):
-        from atlasbridge.dashboard.app import is_loopback
+        from atlasbridge.dashboard.sanitize import is_loopback
 
         assert is_loopback("::1")
 
     def test_rejects_public_ip(self):
-        from atlasbridge.dashboard.app import is_loopback
+        from atlasbridge.dashboard.sanitize import is_loopback
 
         assert not is_loopback("192.168.1.1")
 

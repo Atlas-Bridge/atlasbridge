@@ -8,6 +8,7 @@ this module handles content-level sanitization.
 
 from __future__ import annotations
 
+import ipaddress
 import re
 
 # ---------------------------------------------------------------------------
@@ -61,6 +62,21 @@ def redact_tokens(text: str) -> str:
 # ---------------------------------------------------------------------------
 
 MAX_DISPLAY_LENGTH = 4096
+
+
+def is_loopback(host: str) -> bool:
+    """Check if a host string resolves to a loopback address.
+
+    This function lives in sanitize (not app) so it can be imported
+    without fastapi installed — safety tests depend on it.
+    """
+    if host == "localhost":
+        return True
+    try:
+        addr = ipaddress.ip_address(host)
+        return addr.is_loopback
+    except ValueError:
+        return False
 
 
 def sanitize_for_display(text: str, max_length: int = MAX_DISPLAY_LENGTH) -> str:

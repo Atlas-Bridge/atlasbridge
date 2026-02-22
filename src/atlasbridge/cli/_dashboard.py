@@ -41,7 +41,7 @@ def dashboard_start(host: str, port: int, no_browser: bool) -> None:
         raise SystemExit(1) from exc
 
     # Guard: host must be loopback
-    from atlasbridge.dashboard.app import is_loopback
+    from atlasbridge.dashboard.sanitize import is_loopback
 
     if not is_loopback(host):
         click.echo(

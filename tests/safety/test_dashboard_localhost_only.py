@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from atlasbridge.dashboard.app import is_loopback
+from atlasbridge.dashboard.sanitize import is_loopback
 
 
 class TestLoopbackValidation:
@@ -45,6 +45,7 @@ class TestStartServerRejectsNonLoopback:
     """start_server() must raise ValueError for non-loopback hosts."""
 
     def test_start_server_rejects_public(self):
+        pytest.importorskip("fastapi")
         from atlasbridge.dashboard.app import start_server
 
         with pytest.raises(ValueError, match="loopback"):

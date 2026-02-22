@@ -13,7 +13,6 @@ Usage::
 
 from __future__ import annotations
 
-import ipaddress
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -22,6 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from atlasbridge.dashboard.repo import DashboardRepo
+from atlasbridge.dashboard.sanitize import is_loopback
 
 _HERE = Path(__file__).resolve().parent
 _TEMPLATES_DIR = _HERE / "templates"
@@ -144,17 +144,6 @@ def create_app(
         )
 
     return app
-
-
-def is_loopback(host: str) -> bool:
-    """Check if a host string resolves to a loopback address."""
-    if host == "localhost":
-        return True
-    try:
-        addr = ipaddress.ip_address(host)
-        return addr.is_loopback
-    except ValueError:
-        return False
 
 
 def start_server(
