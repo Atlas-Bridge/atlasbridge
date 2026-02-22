@@ -189,6 +189,11 @@ class TestStaticAssets:
         assert response.status_code == 200
         assert "text/css" in response.headers.get("content-type", "")
 
+    def test_js_served(self, client):
+        response = client.get("/static/dashboard.js")
+        assert response.status_code == 200
+        assert "javascript" in response.headers.get("content-type", "")
+
 
 class TestNoDataState:
     def test_home_with_no_db(self, tmp_path):
