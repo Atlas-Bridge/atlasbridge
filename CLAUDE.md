@@ -65,6 +65,16 @@ Additional rules files:
 
 ---
 
+## UI module architecture
+
+- **Canonical:** `src/atlasbridge/ui/` — production Textual TUI (screens, app, CSS)
+- **Legacy:** `src/atlasbridge/tui/` — pure-Python state and services layer (no Textual deps)
+- **Relationship:** `ui/` re-exports from `tui/state` and uses `tui/services`. `tui/` has no Textual dependency.
+- **Rule:** All new UI code goes in `ui/`. No new imports of `tui/` from `cli/`, `core/`, `adapters/`, or `channels/`.
+- **Timeline:** `tui/` will be consolidated into `ui/` in v1.1.0.
+
+---
+
 ## Dev commands
 
 ```bash
