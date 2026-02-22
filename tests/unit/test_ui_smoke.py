@@ -315,3 +315,32 @@ def test_cli_ui_non_tty_exits_nonzero(monkeypatch) -> None:
     result = runner.invoke(cli, ["ui"])
     # Should exit 1 (TTY required)
     assert result.exit_code != 0
+
+
+# ---------------------------------------------------------------------------
+# Module architecture — canonical vs legacy (#96)
+# ---------------------------------------------------------------------------
+
+
+def test_cli_imports_canonical_ui_module() -> None:
+    """cli/ must import from atlasbridge.ui.app, not atlasbridge.tui.app."""
+    import inspect
+
+    from atlasbridge.cli import _ui
+
+    source = inspect.getsource(_ui)
+    assert "from atlasbridge.ui.app import" in source, (
+        "cli/_ui.py must import from atlasbridge.ui.app (canonical module)"
+    )
+
+
+def test_tui_init_has_deprecation_marker() -> None:
+    """tui/__init__.py docstring must contain a deprecation notice."""
+    import atlasbridge.tui
+
+    doc = atlasbridge.tui.__doc__ or ""
+    assert "deprecated" in doc.lower(), "tui/__init__.py must contain 'DEPRECATED' in its docstring"
+    assert "atlasbridge.ui" in doc, (
+        "tui deprecation notice must reference atlasbridge.ui as canonical"
+    )
+    assert "v1.1.0" in doc, "tui deprecation notice must include consolidation timeline (v1.1.0)"
