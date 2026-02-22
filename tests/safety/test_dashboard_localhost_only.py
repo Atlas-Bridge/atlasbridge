@@ -69,3 +69,21 @@ class TestReadOnlyDatabaseGuard:
         with pytest.raises(sqlite3.OperationalError):
             ro_conn.execute("INSERT INTO t (id) VALUES ('x')")
         ro_conn.close()
+
+
+class TestNoMutationRoutes:
+    """Dashboard must not expose any mutation endpoints (PUT/DELETE/PATCH)."""
+
+    def test_no_put_delete_patch_routes(self):
+        """Introspect app routes — only GET and POST allowed."""
+        pytest.importorskip("fastapi")
+        from atlasbridge.dashboard.app import create_app
+
+        app = create_app()
+        forbidden_methods = {"PUT", "DELETE", "PATCH"}
+        for route in app.routes:
+            if hasattr(route, "methods"):
+                overlap = forbidden_methods & route.methods
+                assert not overlap, (
+                    f"Route {getattr(route, 'path', '?')} exposes forbidden methods: {overlap}"
+                )

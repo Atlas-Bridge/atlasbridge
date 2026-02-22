@@ -13,19 +13,28 @@ Usage::
 
 from __future__ import annotations
 
+import logging
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from atlasbridge.dashboard.repo import DashboardRepo
-from atlasbridge.dashboard.sanitize import is_loopback
+from atlasbridge.dashboard.sanitize import is_loopback, redact_query_params
+
+_access_log = logging.getLogger("atlasbridge.dashboard.access")
 
 _HERE = Path(__file__).resolve().parent
 _TEMPLATES_DIR = _HERE / "templates"
 _STATIC_DIR = _HERE / "static"
+
+# Integrity verify throttle — 10-second cooldown
+_VERIFY_COOLDOWN_SECONDS = 10.0
 
 
 def _default_db_path() -> Path:
@@ -40,6 +49,57 @@ def _default_trace_path() -> Path:
     from atlasbridge.core.config import atlasbridge_dir
 
     return atlasbridge_dir() / TRACE_FILENAME
+
+
+def _timeago(value: str | None) -> str:
+    """Jinja2 filter: convert ISO timestamp to '2h ago' style string."""
+    if not value:
+        return ""
+    try:
+        dt = datetime.fromisoformat(value)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        now = datetime.now(timezone.utc)
+        delta = now - dt
+        seconds = int(delta.total_seconds())
+        if seconds < 0:
+            return "just now"
+        if seconds < 60:
+            return f"{seconds}s ago"
+        minutes = seconds // 60
+        if minutes < 60:
+            return f"{minutes}m ago"
+        hours = minutes // 60
+        if hours < 24:
+            return f"{hours}h ago"
+        days = hours // 24
+        if days < 30:
+            return f"{days}d ago"
+        months = days // 30
+        return f"{months}mo ago"
+    except (ValueError, TypeError):
+        return str(value)
+
+
+class _AccessLogMiddleware(BaseHTTPMiddleware):
+    """Log every request with method, path, redacted query, status, and elapsed time."""
+
+    async def dispatch(self, request, call_next):
+        start = time.monotonic()
+        response = await call_next(request)
+        elapsed_ms = (time.monotonic() - start) * 1000
+        query = redact_query_params(str(request.query_params)) if request.query_params else ""
+        _access_log.info(
+            "dashboard_request",
+            extra={
+                "method": request.method,
+                "path": request.url.path,
+                "query": query,
+                "status": response.status_code,
+                "elapsed_ms": round(elapsed_ms, 1),
+            },
+        )
+        return response
 
 
 def create_app(
@@ -57,20 +117,29 @@ def create_app(
         redoc_url=None,
     )
 
+    app.add_middleware(_AccessLogMiddleware)
+
     templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
+    templates.env.filters["timeago"] = _timeago
     app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 
     repo = DashboardRepo(db_path, trace_path)
     repo.connect()
 
+    # Module-level throttle state for integrity verify
+    last_verify: dict[str, float] = {"ts": 0.0}
+
     # ------------------------------------------------------------------
-    # Routes
+    # HTML Routes
     # ------------------------------------------------------------------
 
     @app.get("/", response_class=HTMLResponse)
     async def home(request: Request):
+        status = request.query_params.get("status") or None
+        tool = request.query_params.get("tool") or None
+        q = request.query_params.get("q") or None
         stats = repo.get_stats()
-        sessions = repo.list_sessions(limit=20)
+        sessions = repo.list_sessions(limit=20, status=status, tool=tool, q=q)
         return templates.TemplateResponse(
             request,
             "home.html",
@@ -78,6 +147,9 @@ def create_app(
                 "stats": stats,
                 "sessions": sessions,
                 "db_available": repo.db_available,
+                "filter_status": status or "",
+                "filter_tool": tool or "",
+                "filter_q": q or "",
             },
         )
 
@@ -85,9 +157,7 @@ def create_app(
     async def session_detail(request: Request, session_id: str):
         session = repo.get_session(session_id)
         prompts = repo.list_prompts_for_session(session_id) if session else []
-        # Get trace entries for this session
-        all_traces = repo.trace_tail(200)
-        session_traces = [t for t in all_traces if t.get("session_id") == session_id]
+        session_traces = repo.trace_entries_for_session(session_id, limit=100) if session else []
         return templates.TemplateResponse(
             request,
             "session_detail.html",
@@ -96,6 +166,30 @@ def create_app(
                 "prompts": prompts,
                 "traces": session_traces,
                 "db_available": repo.db_available,
+            },
+        )
+
+    @app.get("/traces", response_class=HTMLResponse)
+    async def traces_list(request: Request):
+        page = int(request.query_params.get("page") or 1)
+        per_page = 20
+        action_type = request.query_params.get("action_type") or None
+        confidence = request.query_params.get("confidence") or None
+        entries, total = repo.trace_page(
+            page=page, per_page=per_page, action_type=action_type, confidence=confidence
+        )
+        total_pages = max(1, (total + per_page - 1) // per_page)
+        return templates.TemplateResponse(
+            request,
+            "traces.html",
+            {
+                "entries": entries,
+                "page": page,
+                "total_pages": total_pages,
+                "total": total,
+                "trace_available": repo.trace_available,
+                "filter_action_type": action_type or "",
+                "filter_confidence": confidence or "",
             },
         )
 
@@ -132,14 +226,40 @@ def create_app(
             },
         )
 
+    # ------------------------------------------------------------------
+    # JSON API Routes
+    # ------------------------------------------------------------------
+
+    @app.get("/api/stats")
+    async def api_stats():
+        stats = repo.get_stats()
+        return JSONResponse(stats)
+
+    @app.get("/api/sessions")
+    async def api_sessions(request: Request):
+        status = request.query_params.get("status") or None
+        tool = request.query_params.get("tool") or None
+        q = request.query_params.get("q") or None
+        sessions = repo.list_sessions(limit=100, status=status, tool=tool, q=q)
+        total = repo.count_sessions(status=status, tool=tool, q=q)
+        return JSONResponse({"sessions": sessions, "total": total})
+
     @app.post("/api/integrity/verify")
     async def api_verify_integrity():
+        now = time.monotonic()
+        if now - last_verify["ts"] < _VERIFY_COOLDOWN_SECONDS:
+            return JSONResponse(
+                {"error": "Too many requests. Try again later."},
+                status_code=429,
+            )
+        last_verify["ts"] = now
         trace_valid, trace_errors = repo.verify_integrity()
         audit_valid, audit_errors = repo.verify_audit_integrity()
         return JSONResponse(
             {
                 "trace": {"valid": trace_valid, "errors": trace_errors},
                 "audit": {"valid": audit_valid, "errors": audit_errors},
+                "verified_at": datetime.now(timezone.utc).isoformat(),
             }
         )
 

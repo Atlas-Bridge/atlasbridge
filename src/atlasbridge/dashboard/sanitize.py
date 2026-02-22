@@ -79,6 +79,27 @@ def is_loopback(host: str) -> bool:
         return False
 
 
+def redact_query_params(query_string: str) -> str:
+    """Redact sensitive values from a URL query string for logging.
+
+    Preserves parameter names but replaces values that look like tokens
+    or secrets with ``[REDACTED]``.  Non-sensitive values pass through.
+    """
+    if not query_string:
+        return query_string
+    from urllib.parse import parse_qsl, urlencode
+
+    pairs = parse_qsl(query_string, keep_blank_values=True)
+    safe: list[tuple[str, str]] = []
+    for key, value in pairs:
+        redacted = redact_tokens(value)
+        if redacted != value:
+            safe.append((key, "[REDACTED]"))
+        else:
+            safe.append((key, value))
+    return urlencode(safe)
+
+
 def sanitize_for_display(text: str, max_length: int = MAX_DISPLAY_LENGTH) -> str:
     """Apply full sanitization pipeline: ANSI strip → token redaction → truncate.
 

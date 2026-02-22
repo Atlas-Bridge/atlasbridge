@@ -103,7 +103,7 @@ Security = "https://github.com/abdulraoufatia/atlasbridge/blob/main/SECURITY.md"
 where = ["src"]
 
 [tool.setuptools.package-data]
-atlasbridge = ["**/*.tcss", "dashboard/templates/*.html", "dashboard/static/*.css"]
+atlasbridge = ["**/*.tcss", "dashboard/templates/*.html", "dashboard/static/*.css", "dashboard/static/*.js"]
 
 [tool.ruff]
 target-version = "py311"
@@ -149,7 +149,7 @@ ignore = [
 "src/atlasbridge/core/autopilot/**/*.py" = ["ANN", "UP042"]
 "src/atlasbridge/enterprise/**/*.py" = ["ANN"]
 "src/atlasbridge/cloud/**/*.py" = ["ANN"]
-"src/atlasbridge/dashboard/**/*.py" = ["ANN"]
+"src/atlasbridge/dashboard/**/*.py" = ["ANN", "UP017"]
 "tests/policy/**/*.py" = ["S101", "ANN", "E501", "B017", "F841"]
 
 [tool.mypy]

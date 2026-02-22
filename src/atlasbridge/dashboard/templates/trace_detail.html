@@ -7,14 +7,14 @@
 <div class="notice">
     <h3>No trace data</h3>
     <p>The decision trace file does not exist yet. Enable autopilot and run a session to generate trace data:</p>
-    <pre>atlasbridge autopilot enable
+    <pre class="code-hint">atlasbridge autopilot enable
 atlasbridge run claude</pre>
 </div>
 {% elif not entry %}
 <div class="notice">
     <h3>Trace entry not found</h3>
     <p>Entry #{{ index }} does not exist in the current trace file.</p>
-    <p><a href="/integrity">&larr; Back to integrity</a></p>
+    <p><a href="/traces">&larr; Back to traces</a></p>
 </div>
 {% else %}
 
@@ -32,6 +32,8 @@ atlasbridge run claude</pre>
                 <summary>Show content</summary>
                 <pre>{{ value }}</pre>
             </details>
+            {% elif key == 'timestamp' %}
+            <span title="{{ value }}">{{ value|timeago }}</span>
             {% else %}
             {{ value }}
             {% endif %}
@@ -45,6 +47,7 @@ atlasbridge run claude</pre>
     <a href="/traces/{{ index - 1 }}">&larr; Previous</a> &middot;
     {% endif %}
     <a href="/traces/{{ index + 1 }}">Next &rarr;</a> &middot;
+    <a href="/traces">All Traces</a> &middot;
     <a href="/integrity">Integrity</a>
 </p>
 

@@ -19,8 +19,8 @@
     <tr><th>Command</th><td>{{ session.command }}</td></tr>
     <tr><th>CWD</th><td>{{ session.cwd }}</td></tr>
     <tr><th>Status</th><td><span class="status-{{ session.status }}">{{ session.status }}</span></td></tr>
-    <tr><th>Started</th><td>{{ session.started_at }}</td></tr>
-    <tr><th>Ended</th><td>{{ session.ended_at or '&mdash;' }}</td></tr>
+    <tr><th>Started</th><td title="{{ session.started_at }}">{{ session.started_at|timeago }}</td></tr>
+    <tr><th>Ended</th><td>{% if session.ended_at %}<span title="{{ session.ended_at }}">{{ session.ended_at|timeago }}</span>{% else %}&mdash;{% endif %}</td></tr>
     <tr><th>Exit Code</th><td>{{ session.exit_code if session.exit_code is not none else '&mdash;' }}</td></tr>
     <tr><th>Label</th><td>{{ session.label or '&mdash;' }}</td></tr>
 </table>
@@ -46,7 +46,7 @@
             <td>{{ p.prompt_type }}</td>
             <td>{{ p.confidence }}</td>
             <td><span class="status-{{ p.status }}">{{ p.status }}</span></td>
-            <td>{{ p.created_at }}</td>
+            <td title="{{ p.created_at }}">{{ p.created_at|timeago }}</td>
             <td>
                 <details>
                     <summary>Show excerpt</summary>
@@ -75,7 +75,7 @@
     <tbody>
         {% for t in traces %}
         <tr>
-            <td>{{ t.get('timestamp', '&mdash;') }}</td>
+            <td title="{{ t.get('timestamp', '') }}">{{ t.get('timestamp', '&mdash;')|timeago }}</td>
             <td>{{ t.get('action_type', '&mdash;') }}</td>
             <td>{{ t.get('rule_id', '&mdash;') }}</td>
             <td>{{ t.get('confidence', '&mdash;') }}</td>

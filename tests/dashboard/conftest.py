@@ -74,7 +74,7 @@ def _create_schema(conn: sqlite3.Connection) -> None:
 
 def _seed_data(conn: sqlite3.Connection) -> None:
     """Insert sample data for tests."""
-    # Sessions
+    # Sessions — 4 sessions with varied statuses and tools
     conn.execute(
         "INSERT INTO sessions (id, tool, command, cwd, status, started_at, label) "
         "VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -102,8 +102,34 @@ def _seed_data(conn: sqlite3.Connection) -> None:
             0,
         ),
     )
+    conn.execute(
+        "INSERT INTO sessions (id, tool, command, cwd, status, started_at, label) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (
+            "sess-003",
+            "gemini",
+            '["gemini"]',
+            "/home/user/project",
+            "crashed",
+            "2025-01-13T08:00:00",
+            "gemini debug",
+        ),
+    )
+    conn.execute(
+        "INSERT INTO sessions (id, tool, command, cwd, status, started_at, label) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (
+            "sess-004",
+            "openai",
+            '["openai-cli"]',
+            "/home/user/work",
+            "running",
+            "2025-01-16T11:00:00",
+            "openai run",
+        ),
+    )
 
-    # Prompts
+    # Prompts — varied types, confidences, and statuses
     conn.execute(
         "INSERT INTO prompts (id, session_id, prompt_type, confidence, excerpt, status, nonce, expires_at) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -133,12 +159,48 @@ def _seed_data(conn: sqlite3.Connection) -> None:
             "2025-01-15T10:05:00",
         ),
     )
+    conn.execute(
+        "INSERT INTO prompts (id, session_id, prompt_type, confidence, excerpt, status, nonce, expires_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            "prompt-003",
+            "sess-001",
+            "yes_no",
+            "low",
+            "Proceed? [Y/n]",
+            "expired",
+            "nonce-3",
+            "2025-01-01T00:00:00",
+        ),
+    )
+    conn.execute(
+        "INSERT INTO prompts (id, session_id, prompt_type, confidence, excerpt, status, nonce, expires_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            "prompt-004",
+            "sess-004",
+            "freeform",
+            "high",
+            "Enter your name:",
+            "awaiting_reply",
+            "nonce-4",
+            "2025-12-31T23:59:59",
+        ),
+    )
 
     # Audit events with hash chain
     prev_hash = ""
-    for i in range(3):
+    event_types = [
+        "prompt_detected",
+        "prompt_resolved",
+        "prompt_detected",
+        "session_started",
+        "prompt_detected",
+    ]
+    for i in range(5):
         event_id = f"evt-{i:03d}"
-        event_type = "prompt_detected" if i % 2 == 0 else "prompt_resolved"
+        event_type = event_types[i]
+        session_id = "sess-001" if i < 3 else "sess-004"
         payload = json.dumps({"detail": f"event {i}"}, separators=(",", ":"), sort_keys=True)
         chain_input = f"{prev_hash}{event_id}{event_type}{payload}"
         event_hash = hashlib.sha256(chain_input.encode()).hexdigest()
@@ -148,7 +210,7 @@ def _seed_data(conn: sqlite3.Connection) -> None:
             (
                 event_id,
                 event_type,
-                "sess-001",
+                session_id,
                 payload,
                 f"2025-01-15T10:0{i}:00",
                 prev_hash,
@@ -188,12 +250,16 @@ def trace_file(tmp_path: Path) -> Path:
     trace_path = tmp_path / "decisions.jsonl"
     prev_hash = ""
     entries = []
+    action_types = ["auto_respond", "auto_respond", "escalate", "auto_respond", "escalate"]
+    confidences = ["high", "high", "low", "medium", "low"]
+    session_ids = ["sess-001", "sess-001", "sess-001", "sess-004", "sess-004"]
     for i in range(5):
         entry = {
             "idempotency_key": f"key-{i}",
-            "action_type": "auto_respond",
+            "action_type": action_types[i],
             "prompt_type": "yes_no",
-            "confidence": "high",
+            "confidence": confidences[i],
+            "session_id": session_ids[i],
             "rule_id": f"rule-{i}",
             "timestamp": f"2025-01-15T10:0{i}:00",
             "prev_hash": prev_hash,

@@ -9,30 +9,52 @@
 <div class="notice">
     <h3>No data yet</h3>
     <p>The AtlasBridge database has not been created. Run a supervised session to start collecting data:</p>
-    <pre>atlasbridge run claude</pre>
+    <pre class="code-hint">atlasbridge run claude</pre>
 </div>
 {% else %}
 
 <div class="stats-grid">
     <div class="stat-card">
-        <div class="stat-value">{{ stats.sessions }}</div>
+        <div class="stat-value" id="stat-sessions">{{ stats.sessions }}</div>
         <div class="stat-label">Total Sessions</div>
     </div>
     <div class="stat-card">
-        <div class="stat-value">{{ stats.active_sessions }}</div>
+        <div class="stat-value" id="stat-active">{{ stats.active_sessions }}</div>
         <div class="stat-label">Active Sessions</div>
     </div>
     <div class="stat-card">
-        <div class="stat-value">{{ stats.prompts }}</div>
+        <div class="stat-value" id="stat-prompts">{{ stats.prompts }}</div>
         <div class="stat-label">Prompts</div>
     </div>
     <div class="stat-card">
-        <div class="stat-value">{{ stats.audit_events }}</div>
+        <div class="stat-value" id="stat-audit">{{ stats.audit_events }}</div>
         <div class="stat-label">Audit Events</div>
     </div>
 </div>
 
 <h2>Recent Sessions</h2>
+
+<form class="filter-bar" method="get" action="/">
+    <input type="text" name="q" placeholder="Search by ID or label..." value="{{ filter_q }}" class="filter-input">
+    <select name="status" class="filter-select">
+        <option value="">All statuses</option>
+        <option value="running" {% if filter_status == 'running' %}selected{% endif %}>Running</option>
+        <option value="completed" {% if filter_status == 'completed' %}selected{% endif %}>Completed</option>
+        <option value="crashed" {% if filter_status == 'crashed' %}selected{% endif %}>Crashed</option>
+        <option value="canceled" {% if filter_status == 'canceled' %}selected{% endif %}>Canceled</option>
+        <option value="starting" {% if filter_status == 'starting' %}selected{% endif %}>Starting</option>
+    </select>
+    <select name="tool" class="filter-select">
+        <option value="">All tools</option>
+        <option value="claude" {% if filter_tool == 'claude' %}selected{% endif %}>Claude</option>
+        <option value="gemini" {% if filter_tool == 'gemini' %}selected{% endif %}>Gemini</option>
+        <option value="openai" {% if filter_tool == 'openai' %}selected{% endif %}>OpenAI</option>
+    </select>
+    <button type="submit" class="filter-btn">Filter</button>
+    {% if filter_status or filter_tool or filter_q %}
+    <a href="/" class="filter-clear">Clear</a>
+    {% endif %}
+</form>
 
 {% if sessions %}
 <table>
@@ -51,14 +73,14 @@
             <td><a href="/sessions/{{ s.id }}">{{ s.id[:12] }}&hellip;</a></td>
             <td>{{ s.tool }}</td>
             <td><span class="status-{{ s.status }}">{{ s.status }}</span></td>
-            <td>{{ s.started_at }}</td>
+            <td title="{{ s.started_at }}">{{ s.started_at|timeago }}</td>
             <td>{{ s.label or '&mdash;' }}</td>
         </tr>
         {% endfor %}
     </tbody>
 </table>
 {% else %}
-<p class="empty">No sessions recorded yet.</p>
+<p class="empty">No sessions found{% if filter_status or filter_tool or filter_q %} matching the current filters. <a href="/">Clear filters</a>{% endif %}.</p>
 {% endif %}
 
 {% endif %}

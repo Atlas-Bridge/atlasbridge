@@ -9,17 +9,29 @@
 <div class="notice">
     <h3>No data yet</h3>
     <p>Neither the database nor the decision trace file exist. Run a supervised session to start collecting data:</p>
-    <pre>atlasbridge run claude</pre>
+    <pre class="code-hint">atlasbridge run claude</pre>
 </div>
 {% else %}
 
 <div class="stats-grid">
     <div class="stat-card {% if trace_valid %}card-ok{% else %}card-error{% endif %}">
-        <div class="stat-value">{{ 'VALID' if trace_valid else 'INVALID' }}</div>
+        <div class="stat-value">
+            {% if trace_valid %}
+            <span class="badge-verified">VERIFIED</span>
+            {% else %}
+            <span class="badge-failed">FAILED</span>
+            {% endif %}
+        </div>
         <div class="stat-label">Decision Trace Chain</div>
     </div>
     <div class="stat-card {% if audit_valid %}card-ok{% else %}card-error{% endif %}">
-        <div class="stat-value">{{ 'VALID' if audit_valid else 'INVALID' }}</div>
+        <div class="stat-value">
+            {% if audit_valid %}
+            <span class="badge-verified">VERIFIED</span>
+            {% else %}
+            <span class="badge-failed">FAILED</span>
+            {% endif %}
+        </div>
         <div class="stat-label">Audit Event Chain</div>
     </div>
 </div>
@@ -27,6 +39,7 @@
 <div class="verify-action">
     <button id="re-verify" onclick="reVerify()">Re-verify Integrity</button>
     <span id="verify-result"></span>
+    <span id="verify-time"></span>
 </div>
 
 {% if trace_errors %}
@@ -61,7 +74,7 @@
     <tbody>
         {% for e in audit_events %}
         <tr>
-            <td>{{ e.timestamp }}</td>
+            <td title="{{ e.timestamp }}">{{ e.timestamp|timeago }}</td>
             <td>{{ e.event_type }}</td>
             <td>
                 {% if e.session_id %}
@@ -88,14 +101,29 @@
 function reVerify() {
     var btn = document.getElementById('re-verify');
     var result = document.getElementById('verify-result');
+    var timeEl = document.getElementById('verify-time');
     btn.disabled = true;
     result.textContent = 'Verifying...';
+    result.className = '';
+    timeEl.textContent = '';
     fetch('/api/integrity/verify', { method: 'POST' })
-        .then(function(r) { return r.json(); })
+        .then(function(r) {
+            if (r.status === 429) {
+                result.textContent = 'Rate limited — wait a few seconds';
+                result.className = 'verify-warning';
+                btn.disabled = false;
+                return null;
+            }
+            return r.json();
+        })
         .then(function(data) {
+            if (!data) return;
             var ok = data.trace.valid && data.audit.valid;
-            result.textContent = ok ? 'All chains valid' : 'Integrity errors found';
+            result.textContent = ok ? 'All chains verified' : 'Integrity errors found';
             result.className = ok ? 'verify-ok' : 'verify-error';
+            if (data.verified_at) {
+                timeEl.textContent = ' — verified at ' + data.verified_at;
+            }
             btn.disabled = false;
         })
         .catch(function() {
