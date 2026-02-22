@@ -1,6 +1,6 @@
 # AtlasBridge Roadmap
 
-**Version:** 0.9.3
+**Version:** 0.9.4
 **Status:** Active
 **Last updated:** 2026-02-22
 
@@ -55,6 +55,7 @@ The positioning is settled: **policy-driven autonomous runtime for AI CLI agents
 | v0.9.1 | Phase C.1 — Local Dashboard MVP (localhost-only, read-only) | Released |
 | v0.9.2 | Phase C.2 — Dashboard Hardening (filtering, pagination, themes) | Released |
 | v0.9.3 | Phase C.3 — Remote-Ready Local UX (export, mobile, SSH/proxy docs) | Released |
+| v0.9.4 | Phase D — Platform Automation & Governance Hardening | Released |
 
 ### v0.7.1 — Policy Engine Hardening (Released)
 
@@ -220,6 +221,22 @@ The positioning is settled: **policy-driven autonomous runtime for AI CLI agents
 - **Responsive mobile layout** — CSS breakpoints at 768px/480px, hamburger nav, touch targets, table scrolling
 - 32 new tests (1260 total)
 
+### v0.9.4 — Phase D: Platform Automation & Governance Hardening (Released)
+
+**Theme:** Automate platform lifecycle without altering runtime behavior.
+
+**Delivered:**
+
+- **Tag-version validation** — publish workflows fail if git tag doesn't match pyproject.toml and __init__.py
+- **Dashboard route freeze** — 10 frozen routes; CI fails on drift
+- **Docs index validation** — every docs/*.md must be linked in docs/README.md
+- **Secret scan** — detect-secrets pre-commit hook + CI workflow (weekly + PRs)
+- **Dependency audit** — pip-audit CI workflow (weekly + dependency changes)
+- **Coverage floor** — raised from 70% to 75% (actual: 89.84%)
+- **Release checklist** — .github/RELEASE_CHECKLIST.md template
+- **PR governance gates** — contract freeze, loopback default, invariant confirmation in PR template
+- 6 new safety tests (1266 total), 21 safety test files
+
 ---
 
 ## Upcoming Milestones
@@ -335,6 +352,7 @@ Under high-volume output (100k+ lines/session), `PromptDetector.detect()` could 
 | v0.9.1 | Phase C.1 — Local Dashboard MVP | Released |
 | v0.9.2 | Phase C.2 — Dashboard Hardening | Released |
 | v0.9.3 | Phase C.3 — Remote-Ready Local UX | Released |
+| v0.9.4 | Phase D — Platform Automation & Governance Hardening | Released |
 | v1.0.0 | GA — stable, multi-platform, multi-agent | Planned |
 
 Versions follow SemVer. Breaking changes to `BaseAdapter` or `BaseChannel` require a minor version bump in v0.x and a major bump at v1.0+.

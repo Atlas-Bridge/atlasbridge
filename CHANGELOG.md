@@ -11,6 +11,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.4] — 2026-02-22
+
+### Added
+
+- **Phase D — Platform Automation & Governance Hardening**
+  - Tag-version validation in PyPI/TestPyPI publish workflows (tag must match `pyproject.toml` and `__init__.py`)
+  - Dashboard route freeze safety test (10 frozen routes, CI fails on drift)
+  - Docs index validation safety test (every `docs/*.md` must be linked in `docs/README.md`)
+  - Secret scan CI workflow with `detect-secrets` (runs on PRs + weekly)
+  - Dependency audit CI workflow with `pip-audit` (runs on dependency changes + weekly)
+  - Pre-commit config (detect-secrets + ruff hooks)
+  - Release checklist template (`.github/RELEASE_CHECKLIST.md`)
+  - PR template updated with governance gates (contract freeze, loopback default, invariant confirmation)
+- 6 new safety tests (1266 total), 21 safety test files
+
+### Changed
+
+- Coverage floor raised from 70% to 75% (actual: 89.84%)
+- Docs index updated with 3 previously unlinked docs (dashboard.md, api-stability-policy.md, contract-surfaces.md)
+
+---
+
 ## [0.9.3] — 2026-02-22
 
 ### Added
@@ -296,7 +318,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/abdulraoufatia/atlasbridge/compare/v0.9.3...HEAD
+[Unreleased]: https://github.com/abdulraoufatia/atlasbridge/compare/v0.9.4...HEAD
+[0.9.4]: https://github.com/abdulraoufatia/atlasbridge/compare/v0.9.3...v0.9.4
 [0.9.3]: https://github.com/abdulraoufatia/atlasbridge/compare/v0.9.2...v0.9.3
 [0.9.2]: https://github.com/abdulraoufatia/atlasbridge/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/abdulraoufatia/atlasbridge/compare/v0.9.0...v0.9.1
