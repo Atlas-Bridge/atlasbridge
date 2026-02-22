@@ -283,7 +283,8 @@ Policy module layout:
 | v0.8.4 | Stability | Released | Core product stability fixes — adapter resilience, Telegram error handling, doctor/setup/run UX |
 | v0.8.5 | Phase 1 Kernel | Released | Phase 1 Core Runtime Kernel — all exit criteria pass, 677 tests, doctor DB+adapter checks |
 | v0.8.6 | Phase B Scaffold | Released | Phase B — Hybrid Governance Scaffolding Complete (spec only, no cloud execution) |
-| v0.9.0 | Windows | Planned | ConPTY experimental (behind --experimental flag) |
+| v0.9.0 | Phase A.2 | Released | Contract freeze + safety guards — 155 safety tests, 8 frozen surfaces |
+| v0.9.1 | Phase C.1 | Released | Local dashboard MVP — localhost-only, read-only FastAPI dashboard, 1166 tests |
 | v1.0.0 | GA | Planned | Stable adapter + channel API, all platforms, all agents |
 
 ---
