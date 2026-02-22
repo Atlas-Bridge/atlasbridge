@@ -11,6 +11,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.9.6] — 2026-02-22
+
+### Added
+
+- **Phase H — v1.0 GA Hard Freeze + Release Pipeline Correction**
+  - `console` added to frozen CLI command set (27 top-level commands)
+  - Subcommand freeze tests for dashboard, config, cloud, db, lab groups (5 new tests)
+  - Console surface freeze safety test — options, defaults, help text (7 tests)
+  - Console smoke test added to CI workflow
+  - `docs/invariants.md` — all correctness invariants in one document
+  - `docs/releasing.md` — tag-only release process, troubleshooting
+  - PR template governance gates: invariant confirmation, no-auto-merge, scope declaration
+- 12 new safety tests (1336 total), 22 safety test files
+
+### Changed
+
+- Coverage floor raised from 75% to 80% (actual: 85.92%)
+- Core package coverage verification step added to CI (floor: 85%, target: 90%)
+- Safety test file minimum raised from 21 to 22
+
+### Fixed
+
+- Publish workflow now includes pre-publish validation (lint, mypy, pytest)
+- Publish workflow adds `workflow_dispatch` trigger for manual publish
+- Publish workflow adds tag ref guard — non-tag refs skip publish gracefully
+- Fixed YAML syntax in publish workflow step name
+
+---
+
 ## [0.9.5] — 2026-02-22
 
 ### Added
@@ -335,7 +364,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/abdulraoufatia/atlasbridge/compare/v0.9.4...HEAD
+[Unreleased]: https://github.com/abdulraoufatia/atlasbridge/compare/v0.9.6...HEAD
+[0.9.6]: https://github.com/abdulraoufatia/atlasbridge/compare/v0.9.5...v0.9.6
+[0.9.5]: https://github.com/abdulraoufatia/atlasbridge/compare/v0.9.4...v0.9.5
 [0.9.4]: https://github.com/abdulraoufatia/atlasbridge/compare/v0.9.3...v0.9.4
 [0.9.3]: https://github.com/abdulraoufatia/atlasbridge/compare/v0.9.2...v0.9.3
 [0.9.2]: https://github.com/abdulraoufatia/atlasbridge/compare/v0.9.1...v0.9.2

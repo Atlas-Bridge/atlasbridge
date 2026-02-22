@@ -290,6 +290,7 @@ Policy module layout:
 | v0.9.3 | Phase C.3 | Released | Remote-ready UX — safety guard, session export, mobile layout, deployment guide, 1260 tests |
 | v0.9.4 | Phase D | Released | Platform automation — CI hardening, secret scan, coverage governance, release automation |
 | v0.9.5 | Phase C.X | Released | Operator console — `atlasbridge console` single-screen process management TUI |
+| v0.9.6 | Phase H | Released | Hard freeze — contract surface audit, tag-only publish, coverage governance, 1336 tests |
 | v1.0.0 | GA | Planned | Stable adapter + channel API, all platforms, all agents |
 
 ---
