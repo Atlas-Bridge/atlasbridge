@@ -267,3 +267,62 @@ class TestFeedback:
 
         # Stall notification + escalation notification
         assert mock_channel.notify.call_count >= 1
+
+
+class TestFuserIntegration:
+    """Engine uses fuser when provided, falls back to classifier when not."""
+
+    @pytest.mark.asyncio
+    async def test_engine_uses_fuser_when_provided(
+        self,
+        mock_adapter: AsyncMock,
+        mock_detector: MagicMock,
+        mock_channel: AsyncMock,
+        mock_session_manager: MagicMock,
+    ) -> None:
+        from atlasbridge.core.interaction.classifier import InteractionClassifier
+        from atlasbridge.core.interaction.fuser import ClassificationFuser
+        from atlasbridge.core.interaction.ml_classifier import NullMLClassifier
+
+        fuser = ClassificationFuser(InteractionClassifier(), NullMLClassifier())
+        engine = InteractionEngine(
+            adapter=mock_adapter,
+            session_id="test-session-fuser",
+            detector=mock_detector,
+            channel=mock_channel,
+            session_manager=mock_session_manager,
+            fuser=fuser,
+        )
+
+        # Advance detector time on inject
+        original_time = mock_detector.last_output_time
+
+        async def _advance(**kw: object) -> None:
+            mock_detector.last_output_time = original_time + 2.0
+
+        mock_adapter.inject_reply = AsyncMock(side_effect=_advance)
+
+        event = _event()
+        reply = _reply("y")
+        result = await engine.handle_prompt_reply(event, reply)
+        assert result.success is True
+
+    @pytest.mark.asyncio
+    async def test_engine_works_without_fuser(
+        self,
+        engine: InteractionEngine,
+        mock_adapter: AsyncMock,
+        mock_detector: MagicMock,
+    ) -> None:
+        # Advance detector time on inject
+        original_time = mock_detector.last_output_time
+
+        async def _advance(**kw: object) -> None:
+            mock_detector.last_output_time = original_time + 2.0
+
+        mock_adapter.inject_reply = AsyncMock(side_effect=_advance)
+
+        event = _event()
+        reply = _reply("y")
+        result = await engine.handle_prompt_reply(event, reply)
+        assert result.success is True

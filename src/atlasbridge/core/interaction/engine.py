@@ -24,6 +24,7 @@ from atlasbridge.core.interaction.plan import build_plan
 if TYPE_CHECKING:
     from atlasbridge.adapters.base import BaseAdapter
     from atlasbridge.channels.base import BaseChannel
+    from atlasbridge.core.interaction.fuser import ClassificationFuser
     from atlasbridge.core.prompt.detector import PromptDetector
     from atlasbridge.core.prompt.models import PromptEvent, Reply
     from atlasbridge.core.session.manager import SessionManager
@@ -47,8 +48,10 @@ class InteractionEngine:
         detector: PromptDetector,
         channel: BaseChannel,
         session_manager: SessionManager,
+        fuser: ClassificationFuser | None = None,
     ) -> None:
         self._classifier = InteractionClassifier()
+        self._fuser = fuser
         self._channel = channel
         self._session_id = session_id
 
@@ -81,7 +84,18 @@ class InteractionEngine:
             prompt_id=event.prompt_id,
         )
 
-        ic = self._classifier.classify(event)
+        if self._fuser is not None:
+            fused = self._fuser.fuse(event)
+            ic = fused.interaction_class
+            if fused.disagreement:
+                log.warning(
+                    "classification_disagreement",
+                    interaction_class=ic,
+                    source=fused.source,
+                )
+        else:
+            ic = self._classifier.classify(event)
+
         plan = build_plan(ic)
 
         log.debug(
