@@ -20,6 +20,8 @@ atlasbridge console --dashboard-port 9000  # Custom dashboard port
 ┌─ Header: "AtlasBridge Console v0.9.x" ──────────────────────┐
 │                                                              │
 │ OPERATOR CONSOLE — LOCAL EXECUTION ONLY                      │
+│ [GREEN] All Healthy  |  Last check: 14:32:05                 │
+│ Config: ~/Library/.../atlasbridge/  |  DB: sessions.db       │
 │                                                              │
 │ ┌─────────┐ ┌─────────┐ ┌──────────┐ ┌─────────────┐       │
 │ │ Daemon  │ │Dashboard│ │ Agent    │ │ Channel     │       │
@@ -34,12 +36,15 @@ atlasbridge console --dashboard-port 9000  # Custom dashboard port
 │ └─────────────────────────────────────────────────────────┘  │
 │                                                              │
 │ ┌─ Doctor ────────────────────────────────────────────────┐  │
-│ │ OK Python  OK Config  OK Token  OK Database             │  │
+│ │ PASS  python_version       3.11.5                       │  │
+│ │ PASS  config_file          Found                        │  │
+│ │ WARN  bot_token            Not set                      │  │
 │ └─────────────────────────────────────────────────────────┘  │
 │                                                              │
 │ ┌─ Audit Log (recent) ───────────────────────────────────┐  │
-│ │ 10:30 prompt_detected      session abc123               │  │
-│ │ 10:31 prompt_forwarded     telegram -> user 12345       │  │
+│ │ 10:30  INFO  prompt_detected          abc12345          │  │
+│ │ 10:31  INFO  prompt_forwarded         abc12345          │  │
+│ │ 10:35  WARN  prompt_expired           abc12345          │  │
 │ └─────────────────────────────────────────────────────────┘  │
 │                                                              │
 │ [D]aemon [A]gent [W]eb [H]ealth [R]efresh [Q]uit           │
@@ -121,6 +126,52 @@ This is a reminder that:
 | Shutdown behavior | Simple exit | Stops managed processes |
 
 Use `atlasbridge ui` for initial setup and configuration. Use `atlasbridge console` for day-to-day operations.
+
+## Operator Lifecycle
+
+### Starting a Session
+
+1. `atlasbridge console` — launches the TUI
+2. Press `d` to start the daemon
+3. Press `w` to start the dashboard (optional)
+4. Press `a` to start the agent
+5. Monitor the health banner — GREEN means all healthy
+
+### During Operation
+
+- Health banner updates every 2 seconds with aggregate state
+- Press `h` to run doctor checks on demand
+- Press `r` to force-refresh all panels
+- Audit log shows recent events with severity markers (INFO/WARN)
+
+### Ending a Session
+
+- Press `q` — the console displays which processes will be stopped, then exits
+- All managed processes (daemon, dashboard, agent) are stopped on quit
+
+### Health States
+
+| State | Meaning |
+|-------|---------|
+| GREEN | All processes healthy, doctor checks pass |
+| YELLOW | Some processes stopped or doctor warnings |
+| RED | Critical fault — daemon down while agent running, or doctor failure |
+
+## Freeze Window
+
+During a GA freeze window, the console should be used for monitoring only:
+- Start the daemon and let existing sessions complete
+- Do NOT start new agents
+- Monitor health banner for any regressions
+- Use `h` to run periodic health checks
+- Export audit logs for review: `atlasbridge dashboard export --session <id>`
+
+## Known Limitations
+
+- **Windows**: PTY supervisor is stub-only. ConPTY not implemented. Console launches but agent supervision is non-functional on Windows.
+- **Dashboard auth**: No authentication. Relies on localhost-only binding (`127.0.0.1`). Use SSH tunnel for remote access.
+- **Single agent**: Only one agent can be managed at a time. Starting a second agent requires stopping the first.
+- **External processes**: Processes started outside the console (e.g., daemon started via `atlasbridge start` in another terminal) are detected via PID file but not managed by the console's lifecycle.
 
 ## Troubleshooting
 
