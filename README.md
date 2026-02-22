@@ -1,6 +1,6 @@
 # AtlasBridge
 
-> **Policy-driven autonomous runtime for AI CLI agents.**
+> **v1.0 — Local Governance Runtime for AI CLI Agents**
 
 [![CI](https://github.com/abdulraoufatia/atlasbridge/actions/workflows/ci.yml/badge.svg)](https://github.com/abdulraoufatia/atlasbridge/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/atlasbridge.svg)](https://pypi.org/project/atlasbridge/)
@@ -386,9 +386,22 @@ See [Enterprise Architecture](docs/enterprise-architecture.md) and [Enterprise R
 
 ---
 
+## Versioning and Support
+
+AtlasBridge follows [Semantic Versioning](https://semver.org/). All 8 contract surfaces (Adapter API, Channel API, Policy DSL, CLI, Dashboard, Console, Audit, Config) are frozen and enforced by safety tests in CI. See [versioning-policy.md](docs/versioning-policy.md).
+
+**Invariants** — these hold at all times:
+- **Cloud OBSERVES, local EXECUTES** — all execution happens on your machine
+- No remote execution control
+- Read-only dashboard (localhost-only by default)
+- Deterministic policy evaluation before every injection
+- Append-only, hash-chained audit log
+
+> **Future roadmap** includes SaaS, multi-tenant, authentication, cloud control, enterprise SSO — but v1.0 is strictly local-first. See [saas-alpha-roadmap.md](docs/saas-alpha-roadmap.md).
+
 ## Status
 
-**Current release: v0.8.6** — see [CHANGELOG.md](CHANGELOG.md) for full history.
+See [CHANGELOG.md](CHANGELOG.md) for full version history.
 
 | Milestone | Status | Highlights |
 |-----------|--------|------------|
@@ -396,12 +409,13 @@ See [Enterprise Architecture](docs/enterprise-architecture.md) and [Enterprise R
 | v0.4 | Released | Slack channel, MultiChannel, renamed to AtlasBridge |
 | v0.5 | Released | Interactive terminal UI, setup wizard, doctor |
 | v0.6 | Released | Policy DSL v0, autopilot engine, kill switch |
-| v0.7.x | Released | Per-rule rate limits, hot-reload, adapter auto-registration, Telegram singleton |
-| v0.8.0 | Released | Zero-touch setup — config migration, env bootstrap, keyring, config CLI |
-| v0.8.1 | Released | Policy DSL v1 — compound conditions, session_tag, inheritance, trace rotation |
-| v0.8.5–v0.8.6 | Released | Adapters CLI, ethics & safety CI gate, hash-chained decision trace |
-| v0.9.0 | Planned | Windows (ConPTY, experimental) |
-| v1.0.0 | Planned | GA — stable adapter + channel API, all platforms |
+| v0.7.x | Released | Per-rule rate limits, hot-reload, adapter auto-registration |
+| v0.8.x | Released | Zero-touch setup, Policy DSL v1, enterprise scaffolding |
+| v0.9.0 | Released | Contract freeze — 8 frozen surfaces, 155 safety tests |
+| v0.9.1–v0.9.3 | Released | Local dashboard MVP, hardening, remote-ready UX |
+| v0.9.4 | Released | Platform automation — CI hardening, release pipeline |
+| v0.9.5 | Released | Operator console — `atlasbridge console` process management TUI |
+| v1.0.0 | Planned | GA — stable APIs, 2-week freeze window, then tag |
 
 ---
 

@@ -88,6 +88,10 @@ This index helps you find the right document fast, whether you are a new user, a
 | [invariants.md](invariants.md) | Both | Correctness invariants: relay, policy, audit, dashboard, console | Before modifying safety-critical code | Current |
 | [releasing.md](releasing.md) | Contributor | Release process: tag-only publishing, version bumping, CI gates | When cutting a release | Current |
 | [automation-architecture.md](automation-architecture.md) | Contributor | GitHub Actions automation: issue triage, PR status sync, sprint rotation, governance guard | When modifying or extending project automation | Current |
+| [positioning-v1.md](positioning-v1.md) | Both | v1.0 positioning: what AtlasBridge is/is not, target audience, invariants, compatibility | Before v1.0 launch | Current |
+| [ga-readiness-checklist.md](ga-readiness-checklist.md) | Contributor | GA readiness audit: contract freeze, coverage, threat model, CI matrix, verdict | Before tagging v1.0 | Current |
+| [saas-alpha-roadmap.md](saas-alpha-roadmap.md) | Contributor | 90-day SaaS Alpha path: stabilization, observe-only cloud, multi-tenant alpha | For post-v1.0 planning | Design Only |
+| [versioning-policy.md](versioning-policy.md) | Both | SemVer, deprecation policy, breaking change protocol, tag-only releases | Before modifying frozen APIs | Current |
 
 ---
 
