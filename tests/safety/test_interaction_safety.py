@@ -75,9 +75,7 @@ class TestPasswordRedaction:
         adapter = AsyncMock()
 
         async def _advance(**kw: object) -> None:
-            type(detector).last_output_time = PropertyMock(
-                return_value=time.monotonic() + 2.0
-            )
+            type(detector).last_output_time = PropertyMock(return_value=time.monotonic() + 2.0)
 
         adapter.inject_reply.side_effect = _advance
 
@@ -225,9 +223,9 @@ class TestAllInteractionClassesValid:
     @pytest.mark.parametrize("ic", list(InteractionClass))
     def test_plan_has_button_layout(self, ic: InteractionClass) -> None:
         plan = build_plan(ic)
-        assert plan.button_layout in {
-            "yes_no", "confirm_enter", "numbered", "none"
-        }, f"{ic} has unexpected button_layout: {plan.button_layout}"
+        assert plan.button_layout in {"yes_no", "confirm_enter", "numbered", "none"}, (
+            f"{ic} has unexpected button_layout: {plan.button_layout}"
+        )
 
     @pytest.mark.parametrize("ic", list(InteractionClass))
     def test_plan_is_frozen(self, ic: InteractionClass) -> None:

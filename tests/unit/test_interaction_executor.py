@@ -116,9 +116,7 @@ class TestAdvanceVerification:
         # Simulate CLI advancing: output_time moves forward after injection
         plan = build_plan(InteractionClass.YES_NO)
         # Override to short timeout for test speed
-        plan = plan.__class__(
-            **{**plan.__dict__, "advance_timeout_s": 0.5, "max_retries": 0}
-        )
+        plan = plan.__class__(**{**plan.__dict__, "advance_timeout_s": 0.5, "max_retries": 0})
         initial_time = time.monotonic()
         mock_detector.last_output_time = initial_time
 
@@ -142,9 +140,7 @@ class TestAdvanceVerification:
     ) -> None:
         # CLI does not advance — last_output_time stays the same
         plan = build_plan(InteractionClass.FREE_TEXT)
-        plan = plan.__class__(
-            **{**plan.__dict__, "advance_timeout_s": 0.3, "max_retries": 0}
-        )
+        plan = plan.__class__(**{**plan.__dict__, "advance_timeout_s": 0.3, "max_retries": 0})
         mock_detector.last_output_time = time.monotonic()
 
         result = await executor.execute(plan, "test", "free_text")
@@ -314,9 +310,7 @@ class TestChatInput:
         assert result.injected_value == "hello world"
 
     @pytest.mark.asyncio
-    async def test_no_tty_returns_failure(
-        self, executor: InteractionExecutor
-    ) -> None:
+    async def test_no_tty_returns_failure(self, executor: InteractionExecutor) -> None:
         # No supervisor registered
         result = await executor.execute_chat_input("hello")
         assert result.success is False

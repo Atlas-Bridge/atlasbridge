@@ -208,9 +208,7 @@ class TestHandleChatInput:
         tty.inject_reply.assert_called_once_with(b"refactor this function\r")
 
     @pytest.mark.asyncio
-    async def test_no_tty_returns_failure(
-        self, engine: InteractionEngine
-    ) -> None:
+    async def test_no_tty_returns_failure(self, engine: InteractionEngine) -> None:
         reply = _reply("hello")
         result = await engine.handle_chat_input(reply)
         assert result.success is False

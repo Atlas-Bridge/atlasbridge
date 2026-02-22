@@ -223,9 +223,7 @@ class InteractionExecutor:
                 feedback_message=f"Chat input failed: {exc}",
             )
 
-    async def _check_advance(
-        self, plan: InteractionPlan, pre_inject_time: float
-    ) -> bool:
+    async def _check_advance(self, plan: InteractionPlan, pre_inject_time: float) -> bool:
         """
         Wait up to advance_timeout_s for new output after injection.
 
