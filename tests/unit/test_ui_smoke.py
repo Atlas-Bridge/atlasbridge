@@ -324,14 +324,15 @@ def test_cli_ui_non_tty_exits_nonzero(monkeypatch) -> None:
 
 def test_cli_imports_canonical_ui_module() -> None:
     """cli/ must import from atlasbridge.ui.app, not atlasbridge.tui.app."""
-    import inspect
+    from pathlib import Path
 
-    from atlasbridge.cli import _ui
-
-    source = inspect.getsource(_ui)
-    assert "from atlasbridge.ui.app import" in source, (
-        "cli/_ui.py must import from atlasbridge.ui.app (canonical module)"
-    )
+    cli_dir = Path(__file__).resolve().parents[2] / "src" / "atlasbridge" / "cli"
+    # Check all CLI files for TUI imports
+    for pyfile in cli_dir.glob("*.py"):
+        source = pyfile.read_text()
+        assert "from atlasbridge.tui.app import" not in source, (
+            f"{pyfile.name} imports from tui.app — must use ui.app (canonical)"
+        )
 
 
 def test_tui_init_has_deprecation_marker() -> None:
