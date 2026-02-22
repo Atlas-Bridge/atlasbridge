@@ -50,6 +50,7 @@ class PromptRouter:
         store: Any,  # Database — for audit/idempotency
         interaction_engine: Any = None,  # InteractionEngine — optional
         chat_mode_handler: Callable[[Reply], Awaitable[Any]] | None = None,
+        conversation_registry: Any = None,  # ConversationRegistry — optional
     ) -> None:
         self._sessions = session_manager
         self._channel = channel
@@ -57,6 +58,7 @@ class PromptRouter:
         self._store = store
         self._interaction_engine = interaction_engine
         self._chat_mode_handler = chat_mode_handler
+        self._conversation_registry = conversation_registry
 
         # Active state machines: prompt_id → PromptStateMachine
         self._machines: dict[str, PromptStateMachine] = {}
@@ -256,6 +258,12 @@ class PromptRouter:
                 value_length=len(reply.value),
                 latency_ms=round(latency, 1) if latency else None,
             )
+
+            # Bind thread→session in conversation registry
+            if self._conversation_registry is not None and reply.thread_id and sm.event.session_id:
+                ch_name = reply.channel_identity.split(":")[0]
+                self._conversation_registry.bind(ch_name, reply.thread_id, sm.event.session_id)
+
             await self._resolve_next(sm.event.session_id)
 
         except Exception as exc:  # noqa: BLE001
@@ -263,18 +271,38 @@ class PromptRouter:
             log.error("reply_injection_failed", error=str(exc))
 
     def _resolve_free_text_reply(self, reply: Reply) -> Reply | None:
-        """Resolve a free-text reply (empty prompt_id) to the active prompt."""
+        """Resolve a free-text reply (empty prompt_id) to the active prompt.
+
+        When a ConversationRegistry is available and the reply has a
+        thread_id, the registry is consulted first for deterministic
+        session resolution.  Falls back to first-match scan.
+        """
+        target_session: str | None = None
+
+        # Try conversation registry first (thread→session binding)
+        if self._conversation_registry is not None and reply.thread_id:
+            channel_name = reply.channel_identity.split(":")[0]
+            target_session = self._conversation_registry.resolve(channel_name, reply.thread_id)
+
         for prompt_id, sm in self._machines.items():
-            if not sm.is_terminal and sm.event.session_id:
-                return Reply(
-                    prompt_id=prompt_id,
-                    session_id=sm.event.session_id,
-                    value=reply.value,
-                    nonce=reply.nonce,
-                    channel_identity=reply.channel_identity,
-                    timestamp=reply.timestamp,
-                    newline_policy=reply.newline_policy,
-                )
+            if sm.is_terminal:
+                continue
+            sid = sm.event.session_id
+            if not sid:
+                continue
+            # If registry resolved a session, match only that session
+            if target_session is not None and sid != target_session:
+                continue
+            return Reply(
+                prompt_id=prompt_id,
+                session_id=sid,
+                value=reply.value,
+                nonce=reply.nonce,
+                channel_identity=reply.channel_identity,
+                timestamp=reply.timestamp,
+                newline_policy=reply.newline_policy,
+                thread_id=reply.thread_id,
+            )
         return None
 
     async def _resolve_next(self, session_id: str) -> None:

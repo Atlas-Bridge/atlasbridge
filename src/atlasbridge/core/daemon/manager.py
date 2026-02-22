@@ -65,6 +65,7 @@ class DaemonManager:
         self._shutdown_event: asyncio.Event = asyncio.Event()
         self._policy: Policy | PolicyV1 | None = None
         self._intent_router: IntentRouter | None = None
+        self._conversation_registry: Any = None  # ConversationRegistry
 
     async def start(self) -> None:
         """Start all subsystems and run until shutdown."""
@@ -77,6 +78,7 @@ class DaemonManager:
             await self._init_channel()
             await self._renotify_pending()
             await self._init_session_manager()
+            self._init_conversation_registry()
             await self._init_router()
             await self._init_autopilot()
             self._init_intent_router()
@@ -187,6 +189,13 @@ class DaemonManager:
 
         self._session_manager = SessionManager()
 
+    def _init_conversation_registry(self) -> None:
+        """Create the conversation registry for thread→session binding."""
+        from atlasbridge.core.conversation.session_binding import ConversationRegistry
+
+        self._conversation_registry = ConversationRegistry()
+        logger.info("conversation_registry_initialized")
+
     async def _init_autopilot(self) -> None:
         """Load the policy for this session (from --policy file or built-in default)."""
         from atlasbridge.core.policy.parser import PolicyParseError, default_policy, load_policy
@@ -228,6 +237,7 @@ class DaemonManager:
             channel=self._channel,
             adapter_map=self._adapters,
             store=self._db,
+            conversation_registry=self._conversation_registry,
         )
 
     # ------------------------------------------------------------------
@@ -312,8 +322,15 @@ class DaemonManager:
         # Wire InteractionEngine and OutputForwarder for Conversation UX v2
         output_forwarder = None
         if self._channel is not None and self._session_manager is not None:
+            from atlasbridge.core.interaction.classifier import InteractionClassifier
             from atlasbridge.core.interaction.engine import InteractionEngine
+            from atlasbridge.core.interaction.fuser import ClassificationFuser
+            from atlasbridge.core.interaction.ml_classifier import NullMLClassifier
             from atlasbridge.core.interaction.output_forwarder import OutputForwarder
+            from atlasbridge.core.interaction.output_router import OutputRouter
+
+            # Classification fuser: deterministic + NullML (ML slot ready)
+            fuser = ClassificationFuser(InteractionClassifier(), NullMLClassifier())
 
             interaction_engine = InteractionEngine(
                 adapter=adapter,
@@ -321,9 +338,14 @@ class DaemonManager:
                 detector=detector,
                 channel=self._channel,
                 session_manager=self._session_manager,
+                fuser=fuser,
             )
 
-            output_forwarder = OutputForwarder(self._channel, session_id)
+            # Output router classifies agent prose vs CLI output
+            output_router = OutputRouter()
+            output_forwarder = OutputForwarder(
+                self._channel, session_id, output_router=output_router
+            )
 
             # Inject into the PromptRouter (works for both PromptRouter and IntentRouter)
             prompt_router = self._router
@@ -334,6 +356,8 @@ class DaemonManager:
             logger.info(
                 "interaction_engine_wired",
                 session_id=session_id[:8],
+                fuser="enabled",
+                output_router="enabled",
             )
 
         async def _read_loop() -> None:
@@ -385,6 +409,10 @@ class DaemonManager:
         finally:
             logger.info("session_ended", session_id=session_id[:8])
             self._session_manager.mark_ended(session_id)
+
+            # Unbind conversation threads for this session
+            if self._conversation_registry is not None:
+                self._conversation_registry.unbind(session_id)
 
             # Session lifecycle: notify channel of session end
             if self._channel is not None:
