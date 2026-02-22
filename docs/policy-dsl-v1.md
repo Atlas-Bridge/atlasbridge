@@ -215,6 +215,114 @@ atlasbridge policy migrate policy.yaml --dry-run
 
 ---
 
+## Combined feature examples
+
+### `any_of` + `none_of` — OR with exclusions
+
+```yaml
+- id: safe-auto-reply
+  description: Auto-reply to yes/no or confirm prompts, but not destructive ones.
+  match:
+    any_of:
+      - prompt_type: [yes_no]
+      - prompt_type: [confirm_enter]
+    none_of:
+      - contains: "rm -rf"
+      - contains: "DROP TABLE"
+      - contains: "destroy"
+  action:
+    type: auto_reply
+    value: "y"
+```
+
+Evaluation: the `any_of` OR block is checked first. If any sub-block matches, the `none_of`
+NOT filter is applied. If any `none_of` sub-block matches, the rule fails.
+
+### `session_tag` + `max_confidence` — scoped low-confidence routing
+
+```yaml
+- id: ci-low-confidence-deny
+  description: Deny ambiguous prompts in CI (no human to escalate to).
+  match:
+    session_tag: "ci"
+    max_confidence: "low"
+  action:
+    type: deny
+    reason: "Low-confidence prompt in CI — cannot escalate."
+```
+
+Both `session_tag` and `max_confidence` must pass (AND logic within the flat block).
+
+### `min_confidence` + `max_confidence` — confidence band
+
+```yaml
+- id: medium-only-notify
+  description: Notify on medium-confidence prompts only.
+  match:
+    min_confidence: medium
+    max_confidence: medium
+  action:
+    type: notify_only
+```
+
+Creates an exact confidence band: only `medium` matches. `low` is below `min_confidence`,
+`high` is above `max_confidence`.
+
+### `any_of` with `session_tag` in sub-blocks
+
+```yaml
+- id: env-specific-auto
+  description: Auto-reply in CI for yes/no, or in staging for confirm.
+  match:
+    any_of:
+      - prompt_type: [yes_no]
+        session_tag: "ci"
+      - prompt_type: [confirm_enter]
+        session_tag: "staging"
+  action:
+    type: auto_reply
+    value: "y"
+```
+
+Each `any_of` sub-block can have its own `session_tag`, `min_confidence`, etc.
+
+---
+
+## Evaluation order (detailed)
+
+For each rule, evaluation proceeds in this order:
+
+1. **Primary match** — either `any_of` OR block or flat AND criteria:
+   - `any_of`: iterate sub-blocks; match if ANY sub-block passes (short-circuit on first match)
+   - Flat AND: check `tool_id` → `repo` → `prompt_type` → `min_confidence` →
+     `max_confidence` → `contains` → `session_tag` (short-circuit on first failure)
+2. **NOT filter** (`none_of`): iterate sub-blocks; fail if ANY sub-block matches
+3. If both pass, the rule matches → execute its action
+
+The `any_of`/flat criteria and `none_of` constraint: `any_of` and flat criteria are mutually
+exclusive on the same block (Pydantic validator rejects this at parse time). `none_of` can
+coexist with either.
+
+---
+
+## Edge cases
+
+| Scenario | Behavior |
+|----------|----------|
+| `match: {}` (empty) | Matches all prompts — all defaults pass. Use as a catch-all. |
+| Empty `rules: []` | No rule matches → falls to `defaults.no_match` or `defaults.low_confidence`. |
+| Overlapping rules | First match wins. Rule order matters. |
+| Unknown YAML fields | Rejected at parse time (`extra: "forbid"` on all models). |
+| `contains: ""` | Rejected at parse time (empty string not allowed). |
+| `max_auto_replies: 0` | Rejected at parse time (must be ≥ 1). |
+| `session_tag` not set on rule | Matches any session, including those without a label. |
+| `max_confidence` not set | No upper bound — matches all confidence levels. |
+| Duplicate rule IDs | Rejected at parse time. |
+| `extends` base is v0 | Rejected at parse time — base must be v1. |
+| Circular `extends` | Detected at parse time → `PolicyParseError`. |
+
+---
+
 ## Migration guide (v0 → v1)
 
 The only required change is `policy_version: "0"` → `"1"`. All v0 syntax is valid v1.

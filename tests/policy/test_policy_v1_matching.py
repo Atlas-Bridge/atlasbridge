@@ -746,3 +746,352 @@ class TestV0BackwardCompat:
             session_tag="ci",  # ignored for v0
         )
         assert d.matched_rule_id == "r1"
+
+
+# ---------------------------------------------------------------------------
+# TestUnknownFieldRejection (extra="forbid" enforcement)
+# ---------------------------------------------------------------------------
+
+
+class TestUnknownFieldRejection:
+    """All v1 models have extra='forbid' — unknown fields must raise."""
+
+    def test_match_criteria_v1_rejects_unknown_field(self) -> None:
+        with pytest.raises(Exception, match="Extra inputs are not permitted"):
+            MatchCriteriaV1(bogus_field="oops")
+
+    def test_policy_rule_v1_rejects_unknown_field(self) -> None:
+        with pytest.raises(Exception, match="Extra inputs are not permitted"):
+            PolicyRuleV1(
+                id="r1",
+                match=MatchCriteriaV1(),
+                action=AutoReplyAction(value="y"),
+                unknown_option=True,
+            )
+
+    def test_policy_v1_rejects_unknown_field(self) -> None:
+        with pytest.raises(Exception, match="Extra inputs are not permitted"):
+            PolicyV1(
+                policy_version="1",
+                name="test",
+                rules=[],
+                secret_mode="turbo",
+            )
+
+    def test_match_criteria_v1_rejects_typo_field(self) -> None:
+        """Common typo: 'session_tags' instead of 'session_tag'."""
+        with pytest.raises(Exception, match="Extra inputs are not permitted"):
+            MatchCriteriaV1(session_tags="ci")
+
+    def test_match_criteria_v1_rejects_v0_only_field(self) -> None:
+        """MatchCriteriaV1 already has all v0 fields, but a truly unknown one rejects."""
+        with pytest.raises(Exception, match="Extra inputs are not permitted"):
+            MatchCriteriaV1(timeout=30)
+
+
+# ---------------------------------------------------------------------------
+# TestCombinedV1Features
+# ---------------------------------------------------------------------------
+
+
+class TestCombinedV1Features:
+    """Test combinations of v1 features that should work together."""
+
+    def test_any_of_with_none_of_on_same_rule(self) -> None:
+        """any_of + none_of: match OR block, then exclude by NOT block."""
+        rule = make_v1_rule(
+            "r1",
+            any_of=[
+                MatchCriteriaV1(prompt_type=["yes_no"]),
+                MatchCriteriaV1(prompt_type=["confirm_enter"]),
+            ],
+            none_of=[MatchCriteriaV1(contains="danger")],
+        )
+        p = make_v1_policy(rule)
+
+        # yes_no, no danger → matches
+        d = _eval_v1(p, prompt_type="yes_no", prompt_text="Continue?")
+        assert d.matched_rule_id == "r1"
+
+        # yes_no, with danger → excluded by none_of
+        d = _eval_v1(p, prompt_type="yes_no", prompt_text="Danger! Continue?")
+        assert d.matched_rule_id is None
+
+        # confirm_enter, no danger → matches via second any_of block
+        d = _eval_v1(p, prompt_type="confirm_enter", prompt_text="Press enter")
+        assert d.matched_rule_id == "r1"
+
+        # free_text → any_of fails entirely
+        d = _eval_v1(p, prompt_type="free_text", prompt_text="Enter name")
+        assert d.matched_rule_id is None
+
+    def test_session_tag_with_max_confidence(self) -> None:
+        """session_tag + max_confidence on same rule: both must pass."""
+        rule = make_v1_rule(
+            "r1",
+            prompt_type=["yes_no"],
+            session_tag="ci",
+            max_confidence=ConfidenceLevel.MED,
+        )
+        p = make_v1_policy(rule)
+
+        # tag=ci, confidence=low → both pass
+        d = _eval_v1(p, session_tag="ci", confidence="low")
+        assert d.matched_rule_id == "r1"
+
+        # tag=ci, confidence=medium → both pass
+        d = _eval_v1(p, session_tag="ci", confidence="medium")
+        assert d.matched_rule_id == "r1"
+
+        # tag=ci, confidence=high → max_confidence fails
+        d = _eval_v1(p, session_tag="ci", confidence="high")
+        assert d.matched_rule_id is None
+
+        # tag=dev, confidence=low → session_tag fails
+        d = _eval_v1(p, session_tag="dev", confidence="low")
+        assert d.matched_rule_id is None
+
+    def test_min_and_max_confidence_band(self) -> None:
+        """min_confidence + max_confidence form a confidence band."""
+        rule = make_v1_rule(
+            "r1",
+            min_confidence=ConfidenceLevel.MED,
+            max_confidence=ConfidenceLevel.MED,
+        )
+        p = make_v1_policy(rule)
+
+        # low → below min
+        d = _eval_v1(p, confidence="low")
+        assert d.matched_rule_id is None
+
+        # medium → in band
+        d = _eval_v1(p, confidence="medium")
+        assert d.matched_rule_id == "r1"
+
+        # high → above max
+        d = _eval_v1(p, confidence="high")
+        assert d.matched_rule_id is None
+
+    def test_none_of_with_session_tag_and_contains(self) -> None:
+        """none_of sub-blocks can reference session_tag and contains together."""
+        rule = make_v1_rule(
+            "r1",
+            prompt_type=["yes_no"],
+            none_of=[
+                MatchCriteriaV1(contains="rm -rf"),
+                MatchCriteriaV1(contains="DROP TABLE"),
+            ],
+        )
+        p = make_v1_policy(rule)
+
+        # Safe prompt → passes none_of
+        d = _eval_v1(p, prompt_text="Continue? [y/n]")
+        assert d.matched_rule_id == "r1"
+
+        # Dangerous (rm -rf) → excluded
+        d = _eval_v1(p, prompt_text="Run rm -rf /tmp? [y/n]")
+        assert d.matched_rule_id is None
+
+        # Dangerous (DROP TABLE) → excluded
+        d = _eval_v1(p, prompt_text="Execute DROP TABLE users? [y/n]")
+        assert d.matched_rule_id is None
+
+    def test_any_of_with_session_tag_in_sub_blocks(self) -> None:
+        """any_of sub-blocks can each have their own session_tag filter."""
+        rule = make_v1_rule(
+            "r1",
+            any_of=[
+                MatchCriteriaV1(prompt_type=["yes_no"], session_tag="ci"),
+                MatchCriteriaV1(prompt_type=["confirm_enter"], session_tag="staging"),
+            ],
+        )
+        p = make_v1_policy(rule)
+
+        # yes_no + ci → first sub-block matches
+        d = _eval_v1(p, prompt_type="yes_no", session_tag="ci")
+        assert d.matched_rule_id == "r1"
+
+        # confirm_enter + staging → second sub-block matches
+        d = _eval_v1(p, prompt_type="confirm_enter", session_tag="staging")
+        assert d.matched_rule_id == "r1"
+
+        # yes_no + staging → neither sub-block matches
+        d = _eval_v1(p, prompt_type="yes_no", session_tag="staging")
+        assert d.matched_rule_id is None
+
+
+# ---------------------------------------------------------------------------
+# TestEdgeCases
+# ---------------------------------------------------------------------------
+
+
+class TestEdgeCases:
+    """Edge cases identified by completeness audit."""
+
+    def test_empty_match_catches_all(self) -> None:
+        """A rule with empty match {} catches everything (all defaults pass)."""
+        rule = make_v1_rule("catch-all", action_type="require_human")
+        p = make_v1_policy(rule)
+        for pt in ("yes_no", "confirm_enter", "free_text", "multiple_choice"):
+            for conf in ("low", "medium", "high"):
+                d = _eval_v1(p, prompt_type=pt, confidence=conf)
+                assert d.matched_rule_id == "catch-all"
+
+    def test_empty_rules_list_uses_defaults(self) -> None:
+        """Policy with no rules falls to defaults."""
+        p = PolicyV1(policy_version="1", name="empty", rules=[])
+        d = _eval_v1(p)
+        assert d.matched_rule_id is None
+        assert d.action_type == "require_human"
+
+    def test_empty_rules_deny_default(self) -> None:
+        """Policy with no rules and deny default falls to deny."""
+        p = PolicyV1(
+            policy_version="1",
+            name="empty-deny",
+            rules=[],
+            defaults=PolicyDefaults(no_match="deny"),
+        )
+        d = _eval_v1(p, confidence="high")
+        assert d.action_type == "deny"
+
+    def test_overlapping_rules_first_match_wins(self) -> None:
+        """When multiple rules could match, the first one wins."""
+        r1 = make_v1_rule("r1", "auto_reply", "y", prompt_type=["yes_no"])
+        r2 = make_v1_rule("r2", "deny", prompt_type=["yes_no"])
+        r3 = make_v1_rule("r3", "require_human", prompt_type=["yes_no"])
+        p = make_v1_policy(r1, r2, r3)
+        d = _eval_v1(p)
+        assert d.matched_rule_id == "r1"
+        assert d.action_type == "auto_reply"
+
+    def test_rule_id_validation_rejects_empty(self) -> None:
+        """Empty rule ID should fail validation."""
+        with pytest.raises(Exception):
+            PolicyRuleV1(
+                id="",
+                match=MatchCriteriaV1(),
+                action=AutoReplyAction(value="y"),
+            )
+
+    def test_rule_id_validation_rejects_special_chars(self) -> None:
+        """Rule ID with spaces or special chars should fail."""
+        with pytest.raises(Exception):
+            PolicyRuleV1(
+                id="bad rule id!",
+                match=MatchCriteriaV1(),
+                action=AutoReplyAction(value="y"),
+            )
+
+    def test_contains_empty_string_rejected(self) -> None:
+        """contains='' is explicitly rejected by the validator."""
+        with pytest.raises(Exception, match="contains must not be empty"):
+            MatchCriteriaV1(contains="")
+
+    def test_contains_is_regex_with_invalid_pattern(self) -> None:
+        """Invalid regex in contains_is_regex=true should raise."""
+        with pytest.raises(Exception, match="Invalid regex"):
+            MatchCriteriaV1(contains="[invalid", contains_is_regex=True)
+
+    def test_max_auto_replies_must_be_positive(self) -> None:
+        """max_auto_replies=0 should fail (ge=1)."""
+        with pytest.raises(Exception):
+            PolicyRuleV1(
+                id="r1",
+                match=MatchCriteriaV1(),
+                action=AutoReplyAction(value="y"),
+                max_auto_replies=0,
+            )
+
+
+# ---------------------------------------------------------------------------
+# TestV0FixturesUnderV1Evaluator
+# ---------------------------------------------------------------------------
+
+
+class TestV0FixturesUnderV1Evaluator:
+    """All v0 fixtures should migrate to v1 and produce identical results."""
+
+    FIXTURES_DIR = Path(__file__).parent / "fixtures"
+
+    def _migrate_and_load(self, fixture_name: str, tmp_path: Path) -> PolicyV1:
+        """Migrate a v0 fixture to v1 and return the loaded policy."""
+        from atlasbridge.core.policy.migrate import migrate_v0_to_v1
+
+        src = self.FIXTURES_DIR / fixture_name
+        dest = tmp_path / fixture_name
+        migrate_v0_to_v1(src, dest=dest)
+        policy = load_policy(dest)
+        assert isinstance(policy, PolicyV1)
+        return policy
+
+    def test_basic_fixture_migrates_and_evaluates(self, tmp_path: Path) -> None:
+        policy = self._migrate_and_load("basic.yaml", tmp_path)
+        # yes_no + medium confidence → auto_reply y
+        d = evaluate(
+            policy=policy,
+            prompt_text="Continue?",
+            prompt_type="yes_no",
+            confidence="medium",
+            prompt_id="p1",
+            session_id="s1",
+        )
+        assert d.matched_rule_id == "yes-no-auto-yes"
+        assert d.action_type == "auto_reply"
+        assert d.action_value == "y"
+
+    def test_basic_fixture_confirm_enter(self, tmp_path: Path) -> None:
+        policy = self._migrate_and_load("basic.yaml", tmp_path)
+        d = evaluate(
+            policy=policy,
+            prompt_text="Press enter",
+            prompt_type="confirm_enter",
+            confidence="high",
+            prompt_id="p1",
+            session_id="s1",
+        )
+        assert d.matched_rule_id == "confirm-enter-auto"
+        assert d.action_type == "auto_reply"
+
+    def test_full_auto_fixture_migrates(self, tmp_path: Path) -> None:
+        policy = self._migrate_and_load("full_auto.yaml", tmp_path)
+        assert len(policy.rules) == 4
+
+    def test_escalation_fixture_deny_destructive(self, tmp_path: Path) -> None:
+        policy = self._migrate_and_load("escalation.yaml", tmp_path)
+        d = evaluate(
+            policy=policy,
+            prompt_text="Run rm -rf /tmp?",
+            prompt_type="yes_no",
+            confidence="high",
+            prompt_id="p1",
+            session_id="s1",
+        )
+        assert d.matched_rule_id == "deny-destructive"
+        assert d.action_type == "deny"
+
+    def test_escalation_fixture_notify_deploy(self, tmp_path: Path) -> None:
+        policy = self._migrate_and_load("escalation.yaml", tmp_path)
+        d = evaluate(
+            policy=policy,
+            prompt_text="Deploy to production?",
+            prompt_type="yes_no",
+            confidence="high",
+            prompt_id="p1",
+            session_id="s1",
+        )
+        assert d.matched_rule_id == "notify-deploy"
+        assert d.action_type == "notify_only"
+
+    def test_all_v0_fixtures_migrate_successfully(self, tmp_path: Path) -> None:
+        """Every .yaml in fixtures/ with policy_version '0' should migrate cleanly."""
+        from atlasbridge.core.policy.migrate import migrate_v0_to_v1
+
+        for yaml_path in sorted(self.FIXTURES_DIR.glob("*.yaml")):
+            content = yaml_path.read_text()
+            if 'policy_version: "0"' not in content:
+                continue
+            dest = tmp_path / yaml_path.name
+            migrate_v0_to_v1(yaml_path, dest=dest)
+            policy = load_policy(dest)
+            assert isinstance(policy, PolicyV1), f"{yaml_path.name} did not migrate to PolicyV1"
