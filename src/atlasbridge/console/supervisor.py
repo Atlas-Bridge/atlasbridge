@@ -11,8 +11,8 @@ import os
 import signal
 import socket
 import sys
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import UTC, datetime
 
 
 @dataclass
@@ -30,7 +30,7 @@ class ProcessInfo:
     def uptime_seconds(self) -> float:
         if self.started_at is None or not self.running:
             return 0.0
-        return (datetime.now(timezone.utc) - self.started_at).total_seconds()
+        return (datetime.now(UTC) - self.started_at).total_seconds()
 
     @property
     def uptime_display(self) -> str:
@@ -92,7 +92,10 @@ class ProcessSupervisor:
         """
         try:
             proc = await asyncio.create_subprocess_exec(
-                sys.executable, "-m", "atlasbridge", "start",
+                sys.executable,
+                "-m",
+                "atlasbridge",
+                "start",
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.DEVNULL,
             )
@@ -151,12 +154,18 @@ class ProcessSupervisor:
         try:
             self._dashboard_port = port
             self._dashboard_proc = await asyncio.create_subprocess_exec(
-                sys.executable, "-m", "atlasbridge",
-                "dashboard", "start", "--no-browser", "--port", str(port),
+                sys.executable,
+                "-m",
+                "atlasbridge",
+                "dashboard",
+                "start",
+                "--no-browser",
+                "--port",
+                str(port),
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.DEVNULL,
             )
-            self._dashboard_started = datetime.now(timezone.utc)
+            self._dashboard_started = datetime.now(UTC)
             # Give server time to bind
             await asyncio.sleep(1.0)
         except Exception:  # noqa: BLE001
@@ -174,7 +183,7 @@ class ProcessSupervisor:
             proc.terminate()
             try:
                 await asyncio.wait_for(proc.wait(), timeout=3.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 proc.kill()
             self._dashboard_proc = None
             self._dashboard_started = None
@@ -202,9 +211,7 @@ class ProcessSupervisor:
     # Agent
     # ------------------------------------------------------------------
 
-    async def start_agent(
-        self, tool: str = "claude", args: list[str] | None = None
-    ) -> ProcessInfo:
+    async def start_agent(self, tool: str = "claude", args: list[str] | None = None) -> ProcessInfo:
         """Start an agent subprocess via ``atlasbridge run <tool>``."""
         if self._agent_proc is not None and self._agent_proc.returncode is None:
             return self.agent_status()
@@ -220,7 +227,7 @@ class ProcessSupervisor:
                 stdin=asyncio.subprocess.DEVNULL,
             )
             self._agent_tool = tool
-            self._agent_started = datetime.now(timezone.utc)
+            self._agent_started = datetime.now(UTC)
         except Exception:  # noqa: BLE001
             return ProcessInfo(name="agent", running=False, tool=tool)
 
@@ -236,7 +243,7 @@ class ProcessSupervisor:
             proc.terminate()
             try:
                 await asyncio.wait_for(proc.wait(), timeout=5.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 proc.kill()
             self._agent_proc = None
             self._agent_started = None

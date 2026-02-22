@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
-import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from atlasbridge.console.supervisor import ProcessInfo, ProcessSupervisor, _pid_alive, _port_listening
-
+from atlasbridge.console.supervisor import (
+    ProcessInfo,
+    ProcessSupervisor,
+    _pid_alive,
+    _port_listening,
+)
 
 # ---------------------------------------------------------------------------
 # ProcessInfo dataclass
@@ -32,7 +35,7 @@ class TestProcessInfo:
         assert info.uptime_display == "0s"
 
     def test_uptime_when_running(self):
-        started = datetime(2020, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+        started = datetime(2020, 1, 1, 0, 0, 0, tzinfo=UTC)
         info = ProcessInfo(name="daemon", running=True, started_at=started)
         assert info.uptime_seconds > 0
         # Display should be hours format for such a long uptime
@@ -41,7 +44,7 @@ class TestProcessInfo:
     def test_uptime_display_minutes(self):
         from datetime import timedelta
 
-        started = datetime.now(timezone.utc) - timedelta(minutes=5, seconds=32)
+        started = datetime.now(UTC) - timedelta(minutes=5, seconds=32)
         info = ProcessInfo(name="dashboard", running=True, started_at=started)
         display = info.uptime_display
         assert "m" in display
@@ -49,7 +52,7 @@ class TestProcessInfo:
     def test_uptime_display_seconds(self):
         from datetime import timedelta
 
-        started = datetime.now(timezone.utc) - timedelta(seconds=45)
+        started = datetime.now(UTC) - timedelta(seconds=45)
         info = ProcessInfo(name="agent", running=True, started_at=started)
         display = info.uptime_display
         assert "s" in display
@@ -90,10 +93,9 @@ class TestHelpers:
 class TestDaemonLifecycle:
     def test_daemon_status_when_not_running(self):
         supervisor = ProcessSupervisor()
-        with patch(
-            "atlasbridge.console.supervisor._pid_alive", return_value=False
-        ), patch(
-            "atlasbridge.cli._daemon._read_pid", return_value=None
+        with (
+            patch("atlasbridge.console.supervisor._pid_alive", return_value=False),
+            patch("atlasbridge.cli._daemon._read_pid", return_value=None),
         ):
             status = supervisor.daemon_status()
             assert status.name == "daemon"
@@ -101,10 +103,9 @@ class TestDaemonLifecycle:
 
     def test_daemon_status_when_running(self):
         supervisor = ProcessSupervisor()
-        with patch(
-            "atlasbridge.cli._daemon._read_pid", return_value=1234
-        ), patch(
-            "atlasbridge.console.supervisor._pid_alive", return_value=True
+        with (
+            patch("atlasbridge.cli._daemon._read_pid", return_value=1234),
+            patch("atlasbridge.console.supervisor._pid_alive", return_value=True),
         ):
             status = supervisor.daemon_status()
             assert status.name == "daemon"
@@ -117,12 +118,10 @@ class TestDaemonLifecycle:
         mock_proc = AsyncMock()
         mock_proc.wait = AsyncMock(return_value=0)
 
-        with patch(
-            "asyncio.create_subprocess_exec", return_value=mock_proc
-        ), patch(
-            "atlasbridge.cli._daemon._read_pid", return_value=9999
-        ), patch(
-            "atlasbridge.console.supervisor._pid_alive", return_value=True
+        with (
+            patch("asyncio.create_subprocess_exec", return_value=mock_proc),
+            patch("atlasbridge.cli._daemon._read_pid", return_value=9999),
+            patch("atlasbridge.console.supervisor._pid_alive", return_value=True),
         ):
             result = await supervisor.start_daemon()
             assert result.name == "daemon"
@@ -131,12 +130,10 @@ class TestDaemonLifecycle:
     @pytest.mark.asyncio
     async def test_stop_daemon_success(self):
         supervisor = ProcessSupervisor()
-        with patch(
-            "atlasbridge.cli._daemon._read_pid", return_value=1234
-        ), patch(
-            "atlasbridge.cli._daemon._pid_alive", return_value=False
-        ) as mock_alive, patch(
-            "os.kill"
+        with (
+            patch("atlasbridge.cli._daemon._read_pid", return_value=1234),
+            patch("atlasbridge.cli._daemon._pid_alive", return_value=False),
+            patch("os.kill"),
         ):
             # Daemon is not alive after SIGTERM
             result = await supervisor.stop_daemon()
@@ -151,9 +148,7 @@ class TestDaemonLifecycle:
 class TestDashboardLifecycle:
     def test_dashboard_status_not_running(self):
         supervisor = ProcessSupervisor()
-        with patch(
-            "atlasbridge.console.supervisor._port_listening", return_value=False
-        ):
+        with patch("atlasbridge.console.supervisor._port_listening", return_value=False):
             status = supervisor.dashboard_status(8787)
             assert status.name == "dashboard"
             assert status.running is False
@@ -166,10 +161,9 @@ class TestDashboardLifecycle:
         mock_proc.returncode = None
         mock_proc.pid = 5555
 
-        with patch(
-            "asyncio.create_subprocess_exec", new_callable=AsyncMock, return_value=mock_proc
-        ), patch(
-            "atlasbridge.console.supervisor._port_listening", return_value=True
+        with (
+            patch("asyncio.create_subprocess_exec", new_callable=AsyncMock, return_value=mock_proc),
+            patch("atlasbridge.console.supervisor._port_listening", return_value=True),
         ):
             result = await supervisor.start_dashboard(port=8787)
             assert result.name == "dashboard"
@@ -289,10 +283,9 @@ class TestLifecycle:
 
     def test_all_status_returns_list(self):
         supervisor = ProcessSupervisor()
-        with patch(
-            "atlasbridge.cli._daemon._read_pid", return_value=None
-        ), patch(
-            "atlasbridge.console.supervisor._port_listening", return_value=False
+        with (
+            patch("atlasbridge.cli._daemon._read_pid", return_value=None),
+            patch("atlasbridge.console.supervisor._port_listening", return_value=False),
         ):
             statuses = supervisor.all_status()
             assert len(statuses) == 3

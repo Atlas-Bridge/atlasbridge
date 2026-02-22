@@ -12,12 +12,12 @@ from importlib.resources import files
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Container, Horizontal, Vertical
+from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Label, RichLog, Static
 
 from atlasbridge import __version__
-from atlasbridge.console.supervisor import ProcessInfo, ProcessSupervisor
+from atlasbridge.console.supervisor import ProcessSupervisor
 
 _CSS_TEXT: str = files("atlasbridge.console.css").joinpath("console.tcss").read_text("utf-8")
 
