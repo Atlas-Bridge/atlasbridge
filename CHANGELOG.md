@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Dashboard integration e2e test** — 11 tests verifying real HTTP server binding, route responses, and loopback-only enforcement (#101)
 - **Per-agent getting started guides** — Claude Code, OpenAI Codex CLI, and Gemini CLI guides with setup, prompt patterns, policy examples, and troubleshooting (#99)
+- **Policy cookbook** — copy-paste-ready patterns for git, CI/CD, Dependabot, package managers, session scoping, compound conditions, and rate limiting (#100)
 
 ### Changed
 

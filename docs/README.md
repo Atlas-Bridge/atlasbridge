@@ -23,11 +23,12 @@ This index helps you find the right document fast, whether you are a new user, a
 
 ### B) Power Users — writing policies and tuning autopilot
 
-1. [Policy DSL v0 Reference](policy-dsl.md) — full schema, evaluation semantics
-2. [Policy DSL v1 Extensions](policy-dsl-v1.md) — compound conditions, session tags, inheritance
-3. [Autopilot Engine](autopilot.md) — engine architecture, decision trace, kill switch
-4. [QA Top 20 Failure Scenarios](qa-top-20-failure-scenarios.md) — what can go wrong and how it is tested
-5. [Reliability](reliability.md) — PTY supervisor, failure modes, recovery
+1. [Policy Cookbook](policy-cookbook.md) — copy-paste-ready patterns for common scenarios
+2. [Policy DSL v0 Reference](policy-dsl.md) — full schema, evaluation semantics
+3. [Policy DSL v1 Extensions](policy-dsl-v1.md) — compound conditions, session tags, inheritance
+4. [Autopilot Engine](autopilot.md) — engine architecture, decision trace, kill switch
+5. [QA Top 20 Failure Scenarios](qa-top-20-failure-scenarios.md) — what can go wrong and how it is tested
+6. [Reliability](reliability.md) — PTY supervisor, failure modes, recovery
 
 ### C) Contributors — I want to develop AtlasBridge
 
@@ -62,6 +63,7 @@ This index helps you find the right document fast, whether you are a new user, a
 | [cli-ux.md](cli-ux.md) | Both | CLI design principles, command overview, TUI behavior | When learning or extending CLI commands | Current |
 | [data-model.md](data-model.md) | Contributor | SQLite schema design, migration strategy, audit log schema | When modifying the database layer | Current |
 | [dev-workflow-multi-agent.md](dev-workflow-multi-agent.md) | Contributor | Multi-agent team structure, branch model, agent roles and ownership | When onboarding as a contributor | Current |
+| [policy-cookbook.md](policy-cookbook.md) | User | Copy-paste-ready policy patterns: git, CI/CD, Dependabot, rate limits, session scoping | When looking for real-world policy examples | Current |
 | [policy-authoring.md](policy-authoring.md) | User | Quick start guide for writing policies: syntax, patterns, debugging, FAQ | When writing your first policy | Current |
 | [policy-dsl.md](policy-dsl.md) | Both | Full DSL v0 reference: schema, match fields, action types, regex safety, validation | When you need precise DSL semantics | Current |
 | [policy-dsl-v1.md](policy-dsl-v1.md) | Both | DSL v1 extensions: `any_of`/`none_of`, `session_tag`, `max_confidence`, `extends`, trace rotation | When using compound conditions or policy inheritance | Current |
