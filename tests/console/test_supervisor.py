@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -77,6 +78,7 @@ class TestHelpers:
 
         assert _pid_alive(os.getpid()) is True
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="os.kill hangs for large PIDs on Windows")
     def test_pid_alive_returns_false_for_invalid_pid(self):
         assert _pid_alive(999999999) is False
 
