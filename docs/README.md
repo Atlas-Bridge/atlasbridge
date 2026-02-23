@@ -11,19 +11,24 @@ This index helps you find the right document fast, whether you are a new user, a
 ### A) Users — I just installed AtlasBridge
 
 1. [Channel Token Setup](channel-token-setup.md) — get Telegram or Slack credentials
-2. [Autonomy Modes](autonomy-modes.md) — understand Off / Assist / Full
-3. [Policy Authoring Guide](policy-authoring.md) — write your first policy
-4. [CLI UX](cli-ux.md) — learn the commands and TUI
-5. [Dashboard](dashboard.md) — local governance dashboard, SSH tunnel access, session export
-6. [Setup (Non-interactive)](setup-noninteractive.md) — headless / CI deployment
+2. **Per-agent quick start** — pick your AI tool:
+   - [Claude Code](claude-code-getting-started.md) — `atlasbridge run claude`
+   - [OpenAI Codex CLI](openai-getting-started.md) — `atlasbridge run openai`
+   - [Gemini CLI](gemini-getting-started.md) — `atlasbridge run gemini`
+3. [Autonomy Modes](autonomy-modes.md) — understand Off / Assist / Full
+4. [Policy Authoring Guide](policy-authoring.md) — write your first policy
+5. [CLI UX](cli-ux.md) — learn the commands and TUI
+6. [Dashboard](dashboard.md) — local governance dashboard, SSH tunnel access, session export
+7. [Setup (Non-interactive)](setup-noninteractive.md) — headless / CI deployment
 
 ### B) Power Users — writing policies and tuning autopilot
 
-1. [Policy DSL v0 Reference](policy-dsl.md) — full schema, evaluation semantics
-2. [Policy DSL v1 Extensions](policy-dsl-v1.md) — compound conditions, session tags, inheritance
-3. [Autopilot Engine](autopilot.md) — engine architecture, decision trace, kill switch
-4. [QA Top 20 Failure Scenarios](qa-top-20-failure-scenarios.md) — what can go wrong and how it is tested
-5. [Reliability](reliability.md) — PTY supervisor, failure modes, recovery
+1. [Policy Cookbook](policy-cookbook.md) — copy-paste-ready patterns for common scenarios
+2. [Policy DSL v0 Reference](policy-dsl.md) — full schema, evaluation semantics
+3. [Policy DSL v1 Extensions](policy-dsl-v1.md) — compound conditions, session tags, inheritance
+4. [Autopilot Engine](autopilot.md) — engine architecture, decision trace, kill switch
+5. [QA Top 20 Failure Scenarios](qa-top-20-failure-scenarios.md) — what can go wrong and how it is tested
+6. [Reliability](reliability.md) — PTY supervisor, failure modes, recovery
 
 ### C) Contributors — I want to develop AtlasBridge
 
@@ -43,6 +48,9 @@ This index helps you find the right document fast, whether you are a new user, a
 | Document | Audience | What you'll learn | When to read it | Status |
 |----------|----------|-------------------|-----------------|--------|
 | [architecture.md](architecture.md) | Contributor | System design: PTY supervisor, tri-signal detection, state machine, routing, adapters, channels, audit, invariants | Before making structural changes | Current |
+| [claude-code-getting-started.md](claude-code-getting-started.md) | User | Claude Code setup, prompt patterns, policy examples, troubleshooting | When starting with Claude Code | Current |
+| [openai-getting-started.md](openai-getting-started.md) | User | OpenAI Codex CLI setup, prompt patterns, policy examples, troubleshooting | When starting with Codex CLI | Current |
+| [gemini-getting-started.md](gemini-getting-started.md) | User | Gemini CLI setup, prompt patterns, policy examples, troubleshooting | When starting with Gemini CLI | Current |
 | [autonomy-modes.md](autonomy-modes.md) | Both | The three operational modes (Off / Assist / Full) and when each applies | After install, before choosing a mode | Current |
 | [autopilot.md](autopilot.md) | Both | Autopilot engine architecture, policy evaluation flow, decision trace, kill switch | Before enabling autopilot | Current |
 | [adapters.md](adapters.md) | Contributor | BaseAdapter interface, contract spec, vendor-neutral philosophy | When writing or modifying an adapter | Current |
@@ -55,6 +63,7 @@ This index helps you find the right document fast, whether you are a new user, a
 | [cli-ux.md](cli-ux.md) | Both | CLI design principles, command overview, TUI behavior | When learning or extending CLI commands | Current |
 | [data-model.md](data-model.md) | Contributor | SQLite schema design, migration strategy, audit log schema | When modifying the database layer | Current |
 | [dev-workflow-multi-agent.md](dev-workflow-multi-agent.md) | Contributor | Multi-agent team structure, branch model, agent roles and ownership | When onboarding as a contributor | Current |
+| [policy-cookbook.md](policy-cookbook.md) | User | Copy-paste-ready policy patterns: git, CI/CD, Dependabot, rate limits, session scoping | When looking for real-world policy examples | Current |
 | [policy-authoring.md](policy-authoring.md) | User | Quick start guide for writing policies: syntax, patterns, debugging, FAQ | When writing your first policy | Current |
 | [policy-dsl.md](policy-dsl.md) | Both | Full DSL v0 reference: schema, match fields, action types, regex safety, validation | When you need precise DSL semantics | Current |
 | [policy-dsl-v1.md](policy-dsl-v1.md) | Both | DSL v1 extensions: `any_of`/`none_of`, `session_tag`, `max_confidence`, `extends`, trace rotation | When using compound conditions or policy inheritance | Current |
