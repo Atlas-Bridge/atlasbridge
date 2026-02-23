@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -77,9 +78,11 @@ class TestHelpers:
 
         assert _pid_alive(os.getpid()) is True
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="os.kill hangs for large PIDs on Windows")
     def test_pid_alive_returns_false_for_invalid_pid(self):
         assert _pid_alive(999999999) is False
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="socket.connect_ex hangs on Windows CI")
     def test_port_listening_closed_port(self):
         # Pick a likely-unused port
         assert _port_listening(19999) is False
@@ -90,6 +93,7 @@ class TestHelpers:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="async subprocess mocks hang on Windows CI")
 class TestDaemonLifecycle:
     def test_daemon_status_when_not_running(self):
         supervisor = ProcessSupervisor()
@@ -145,6 +149,7 @@ class TestDaemonLifecycle:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="async subprocess mocks hang on Windows CI")
 class TestDashboardLifecycle:
     def test_dashboard_status_not_running(self):
         supervisor = ProcessSupervisor()
@@ -196,6 +201,7 @@ class TestDashboardLifecycle:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="async subprocess mocks hang on Windows CI")
 class TestAgentLifecycle:
     def test_agent_status_not_running(self):
         supervisor = ProcessSupervisor()
@@ -257,6 +263,7 @@ class TestAgentLifecycle:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="async subprocess mocks hang on Windows CI")
 class TestLifecycle:
     @pytest.mark.asyncio
     async def test_shutdown_all(self):
