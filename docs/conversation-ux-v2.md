@@ -1,8 +1,8 @@
 # Conversation UX v2 — Interaction Pipeline
 
 **Status:** Current
-**Phase:** C.Y — Local UX improvement
-**Version:** v0.9.0+
+**Phase:** C.Y + C.Y2 — Local UX improvement
+**Version:** v0.9.7+
 
 ---
 
@@ -55,10 +55,12 @@ Refines `PromptType` into a finer-grained `InteractionClass`:
 | `FREE_TEXT` | TYPE_FREE_TEXT | Generic text input |
 | `PASSWORD_INPUT` | TYPE_FREE_TEXT (refined) | Sensitive credential input |
 | `CHAT_INPUT` | N/A (no prompt) | Conversational mode |
+| `FOLDER_TRUST` | ML-only | "Trust this folder?" special case |
+| `RAW_TERMINAL` | ML-only | Arrow-key / cursor-based prompts (always escalates) |
 
 Password detection uses regex patterns matching common credential prompts (password, token, API key, secret, etc.).
 
-**Design:** `InteractionClass` does NOT replace `PromptType`. It is a refinement layer used only within the interaction engine.
+**Design:** `InteractionClass` does NOT replace `PromptType`. It is a refinement layer used only within the interaction engine. FOLDER_TRUST and RAW_TERMINAL are ML-only types that the deterministic classifier cannot produce; they are introduced by the ClassificationFuser when an ML classifier provides them.
 
 ### InteractionPlan (`core/interaction/plan.py`)
 
@@ -107,6 +109,59 @@ Batches PTY output and forwards to channel as monospace messages:
 | `MAX_MESSAGES_PER_MINUTE` | 15 | Rate limit |
 | `MIN_MEANINGFUL_CHARS` | 10 | Skip tiny fragments |
 
+### MLClassifier Protocol (`core/interaction/ml_classifier.py`)
+
+Defines the interface for optional ML-assisted classification:
+
+- `MLClassifier` — runtime-checkable `Protocol` with `classify(text, prompt_type) -> MLClassification | None`
+- `NullMLClassifier` — default no-op (always returns None); deterministic classifier wins
+- `MLClassification` — StrEnum (9 values) including ML-only types FOLDER_TRUST, RAW_TERMINAL
+
+**Design:** No actual ML model is shipped. The Protocol is a clean extension point for future ML classifiers without adding runtime dependencies.
+
+### ClassificationFuser (`core/interaction/fuser.py`)
+
+Fuses deterministic and ML classifications with safety-first rules:
+
+| Rule | Condition | Result |
+|------|-----------|--------|
+| 1 | Deterministic HIGH | Deterministic wins, ignore ML |
+| 2 | ML returns None/UNKNOWN | Deterministic wins |
+| 3 | Deterministic MED + ML agrees | Boosted to "fused" HIGH |
+| 4 | Deterministic MED + ML disagrees | Escalate (disagreement=True) |
+| 5 | Deterministic LOW + ML has opinion | Use ML |
+| 6 | ML returns FOLDER_TRUST/RAW_TERMINAL | Use ML (no deterministic equivalent) |
+
+**Safety invariant:** ML output never triggers execution without deterministic confirmation at HIGH confidence.
+
+### OutputRouter (`core/interaction/output_router.py`)
+
+Classifies PTY output into three kinds:
+
+- **AGENT_MESSAGE** — prose text (markdown, complete sentences) → `send_agent_message()`
+- **CLI_OUTPUT** — commands, stack traces, build output → `send_output()`
+- **NOISE** — too short, whitespace-only → discarded
+
+When `show_raw_output=True`, classification is bypassed and everything becomes CLI_OUTPUT.
+
+### ConversationRegistry (`core/conversation/session_binding.py`)
+
+Thread-to-session binding with TTL and state tracking:
+
+- `bind(channel, thread_id, session_id)` — create/update binding
+- `resolve(channel, thread_id)` — deterministic session lookup
+- `unbind(session_id)` — cleanup on session end
+- `prune_expired()` — remove stale bindings (default TTL: 4 hours)
+
+State machine: IDLE → RUNNING → AWAITING_INPUT → RUNNING → STOPPED
+
+### BaseChannel.send_agent_message()
+
+Non-abstract default method that delegates to `notify()`. Channels override for rich formatting:
+- Telegram: HTML formatting (no `<pre>`)
+- Slack: mrkdwn formatting (no code block)
+- Multi: fan-out to all sub-channels
+
 ---
 
 ## Operator Feedback Messages
@@ -140,10 +195,13 @@ Both are backwards-compatible: without these params, the existing direct injecti
 
 In `DaemonManager._run_adapter_session()`:
 
-1. After the detector is obtained, `InteractionEngine` and `OutputForwarder` are created
-2. The engine is injected into `PromptRouter` via `_interaction_engine` and `_chat_mode_handler`
-3. `OutputForwarder.feed()` is called in the read loop for every PTY output chunk
-4. `OutputForwarder.flush_loop()` runs as a task in the session's `TaskGroup`
+1. `ConversationRegistry` is created at daemon start and passed to `PromptRouter`
+2. `ClassificationFuser(InteractionClassifier(), NullMLClassifier())` is created per session
+3. `InteractionEngine` is created with the fuser injected
+4. `OutputRouter` is created per session and injected into `OutputForwarder`
+5. The engine is injected into `PromptRouter` via `_interaction_engine` and `_chat_mode_handler`
+6. Session start/stop lifecycle notifications are sent via `channel.notify()`
+7. On session end, conversation bindings are unbound via `registry.unbind(session_id)`
 
 ---
 
@@ -162,6 +220,8 @@ All existing correctness invariants remain enforced:
 | Bounded memory | Rolling 4096-byte buffer unchanged |
 | CR semantics | All PTY injection uses `\r` (never `\n`) |
 | Password safety | `suppress_value=True` prevents credentials in feedback/logs |
+| ML never executes | Fuser outputs classification only; execution goes through deterministic plan→executor |
+| Thread isolation | ConversationRegistry prevents cross-thread session leakage |
 
 ---
 
@@ -176,6 +236,12 @@ All existing correctness invariants remain enforced:
 | `test_output_forwarder.py` | 17 | ANSI stripping, batching, truncation, rate limiting, flush loop |
 | `test_router.py` | 15 | Forward/return path + interaction engine + chat mode integration |
 | `test_interaction_flow.py` | 6 | End-to-end pipeline: yes/no, confirm-enter, password, chat mode |
-| `test_interaction_safety.py` | 27 | CR semantics, password redaction, echo suppression, determinism |
+| `test_interaction_safety.py` | 29 | CR semantics, password redaction, echo suppression, determinism |
+| `test_ml_classifier.py` | 5 | NullMLClassifier, Protocol compliance, enum values |
+| `test_fuser.py` | 12 | All 6 fusion rules, NullML equivalence, determinism |
+| `test_output_router.py` | 16 | Agent prose, CLI output, noise, bypass mode, determinism |
+| `test_session_binding.py` | 20 | Bind/resolve/unbind, TTL, state transitions, multi-channel |
+| `test_conversation_flow.py` | 8 | End-to-end conversation binding lifecycle |
+| `test_ml_safety.py` | 7 | ML cannot override HIGH, disagreement flags, escalation |
 
-**Total:** 132 tests covering the interaction pipeline.
+**Total:** 200+ tests covering the interaction pipeline and conversation subsystem.
