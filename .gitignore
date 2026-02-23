@@ -50,6 +50,9 @@ atlasbridge.db-wal
 aegis.db
 .aegis/
 
+# Claude Code (rules stay local, not in repo)
+.claude/
+
 # IDE
 .idea/
 .vscode/
