@@ -21,6 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Binary menu normalization** — detect semantic yes/no numbered menus and map natural language replies to correct option numbers (#166)
 - **Channel gating safety tests** — 24 safety tests proving gate structure, injection safety, and invariant preservation (#162)
 - **Channel message gating documentation** — evaluation order, session states, rejection reasons, rate limiting, troubleshooting (#163)
+- **Policy DSL v1 gating rules** — `session_state`, `channel_message`, `deny_input_types` fields for channel message policy rules (#157)
+- **Router gate integration** — ChannelMessageGate evaluated before any injection; all message queueing removed (#158)
+- **Audit: gate decision logging** — `channel_message_accepted` / `channel_message_rejected` events with SHA-256 body hash and redacted excerpts (#161)
+- **Trust folder prompt** — natural yes/no/trust/ok normalization verified end-to-end for Claude Code's startup prompt (#165)
 
 ### Changed
 
