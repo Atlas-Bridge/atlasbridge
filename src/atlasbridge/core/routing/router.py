@@ -30,7 +30,8 @@ from typing import Any
 
 import structlog
 
-from atlasbridge.core.gate.engine import GateContext, GateDecision, evaluate_gate
+from atlasbridge.core.audit.writer import AuditWriter
+from atlasbridge.core.gate.engine import GateContext, GateDecision, GateRejectReason, evaluate_gate
 from atlasbridge.core.gate.messages import format_gate_decision
 from atlasbridge.core.prompt.models import Confidence, PromptEvent, PromptStatus, Reply
 from atlasbridge.core.prompt.state import PromptStateMachine
@@ -56,6 +57,7 @@ class PromptRouter:
         interaction_engine: Any = None,  # InteractionEngine — optional
         chat_mode_handler: Callable[[Reply], Awaitable[Any]] | None = None,
         conversation_registry: Any = None,  # ConversationRegistry — optional
+        audit_writer: AuditWriter | None = None,
     ) -> None:
         self._sessions = session_manager
         self._channel = channel
@@ -64,6 +66,7 @@ class PromptRouter:
         self._interaction_engine = interaction_engine
         self._chat_mode_handler = chat_mode_handler
         self._conversation_registry = conversation_registry
+        self._audit_writer = audit_writer
 
         # Active state machines: prompt_id → PromptStateMachine
         self._machines: dict[str, PromptStateMachine] = {}
@@ -160,9 +163,15 @@ class PromptRouter:
                 reason_code=decision.reason_code,
                 session_id=session_id[:8] if session_id else "",
             )
+            self._audit_gate_decision(reply, decision, session_id)
             if self._channel is not None:
                 await self._channel.notify(feedback, session_id=session_id)
             return
+
+        # Audit accepted gate decision
+        if decision is not None and decision.action == "accept":
+            session_id = reply.session_id or self._resolve_session_for_reply(reply) or ""
+            self._audit_gate_decision(reply, decision, session_id)
 
         # Free-text replies have empty prompt_id — resolve to active prompt
         if not reply.prompt_id:
@@ -352,6 +361,53 @@ class PromptRouter:
         )
 
         return evaluate_gate(ctx)
+
+    def _audit_gate_decision(
+        self, reply: Reply, decision: GateDecision, session_id: str
+    ) -> None:
+        """Write an audit event for a gate decision."""
+        if self._audit_writer is None:
+            return
+
+        channel = reply.channel_identity.split(":")[0] if reply.channel_identity else ""
+        user_id = reply.channel_identity
+        # Determine conversation state from gate context (best effort)
+        state = ""
+        if self._conversation_registry is not None and reply.thread_id:
+            binding = self._conversation_registry.get_binding(channel, reply.thread_id)
+            if binding is not None:
+                state = binding.state.value
+
+        is_password = (
+            decision.reason_code == GateRejectReason.REJECT_UNSAFE_INPUT_TYPE
+        )
+        is_rate_limited = (
+            decision.reason_code == GateRejectReason.REJECT_RATE_LIMITED
+        )
+
+        if decision.action == "accept":
+            self._audit_writer.channel_message_accepted(
+                session_id=session_id,
+                prompt_id=None,
+                channel=channel,
+                user_id=user_id,
+                body=reply.value,
+                conversation_state=state,
+                accept_type=decision.accept_type.value if decision.accept_type else "reply",
+                is_password=is_password,
+            )
+        else:
+            self._audit_writer.channel_message_rejected(
+                session_id=session_id,
+                prompt_id=None,
+                channel=channel,
+                user_id=user_id,
+                body=reply.value,
+                conversation_state=state,
+                reason_code=decision.reason_code.value if decision.reason_code else "unknown",
+                is_password=is_password,
+                is_rate_limited=is_rate_limited,
+            )
 
     def _resolve_free_text_reply(self, reply: Reply) -> Reply | None:
         """Resolve a free-text reply (empty prompt_id) to the active prompt.
