@@ -18,7 +18,7 @@ Conversation UX v2 upgrades the human-operator experience from a raw terminal re
 - **Password redaction** — credentials are never shown in feedback messages or logs
 - **Operator feedback** — "Sent: y + Enter", "CLI advanced", "Sent: [REDACTED] + Enter"
 - **Plan detection** — agent execution plans are detected and presented with Execute/Modify/Cancel buttons
-- **Streaming state** — PTY output transitions session to STREAMING; user messages are queued until output settles
+- **Streaming state** — PTY output transitions session to STREAMING; user messages are rejected by the gate with feedback
 - **Secret redaction** — tokens and API keys are stripped from output before reaching channels
 
 ---
@@ -45,7 +45,7 @@ Streaming + Plan Detection (v0.10.0):
   PTY output → OutputForwarder → StreamingManager.accumulate()
     → detect_plan() → DetectedPlan? → channel.send_plan() (buttons)
   State: RUNNING → STREAMING (output active) → RUNNING (idle)
-  User message during STREAMING → queued → drained on RUNNING
+  User message during STREAMING → gate rejects → feedback to user
 ```
 
 ---
@@ -221,10 +221,10 @@ In `DaemonManager._run_adapter_session()`:
 
 The `ConversationState` enum includes a `STREAMING` state. When the OutputForwarder detects active PTY output, it transitions the conversation to STREAMING. During STREAMING:
 
-- User messages are **queued** in `ConversationBinding.queued_messages`, not injected
-- The channel notifies the user: "Queued for next turn."
+- User messages are **rejected by the gate** with feedback ("Agent is working. Wait for the current operation to finish.")
+- No messages are queued — the gate returns an immediate verdict
 - After 2 idle flush cycles (no new output), state transitions back to RUNNING
-- Queued messages are drained and injected as chat input
+- Users can send messages again once the state returns to RUNNING
 
 State diagram: `IDLE → RUNNING → STREAMING → RUNNING → AWAITING_INPUT → RUNNING → STOPPED`
 
@@ -271,7 +271,7 @@ All existing correctness invariants remain enforced:
 | No secret leakage | `_redact()` strips tokens before any channel send |
 | Plan never injects on Execute | Execute decision notifies only; no PTY injection |
 | Bounded accumulator | StreamingManager capped at 8192 chars |
-| State-driven routing | STREAMING queues messages; STOPPED drops; RUNNING→chat; AWAITING_INPUT→prompt |
+| State-driven routing | STREAMING rejects via gate; STOPPED rejects; RUNNING→chat; AWAITING_INPUT→prompt |
 
 ---
 

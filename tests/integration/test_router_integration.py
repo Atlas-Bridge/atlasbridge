@@ -119,30 +119,25 @@ class TestRouterWithRealSQLite:
         assert sm.latency_ms >= 0
 
     @pytest.mark.asyncio
-    async def test_queued_prompt_dispatched_after_resolution(
+    async def test_second_prompt_supersedes_first(
         self,
         router: PromptRouter,
         session: Session,
         mock_channel: AsyncMock,
         mock_adapter: AsyncMock,
     ) -> None:
-        """Second prompt should dispatch after first resolves."""
+        """New prompts supersede old ones — both dispatched immediately."""
         e1 = _event(session.session_id)
         e2 = _event(session.session_id)
 
         await router.route_event(e1)  # dispatched
-        await router.route_event(e2)  # queued
+        await router.route_event(e2)  # supersedes — also dispatched
 
-        assert mock_channel.send_prompt.call_count == 1
-
-        # Resolve first prompt
-        router._adapter_map[session.session_id] = mock_adapter
-        reply = _reply(e1.prompt_id, session.session_id, "y")
-        await router.handle_reply(reply)
-
-        # Second prompt should now be dispatched
+        # Both dispatched (no queueing)
         assert mock_channel.send_prompt.call_count == 2
+        sm1 = router._machines[e1.prompt_id]
         sm2 = router._machines[e2.prompt_id]
+        assert sm1.status == PromptStatus.AWAITING_REPLY
         assert sm2.status == PromptStatus.AWAITING_REPLY
 
     @pytest.mark.asyncio

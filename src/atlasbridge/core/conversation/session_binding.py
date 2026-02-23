@@ -67,7 +67,6 @@ class ConversationBinding:
     state: ConversationState = ConversationState.IDLE
     created_at: float = field(default_factory=time.monotonic)
     last_activity: float = field(default_factory=time.monotonic)
-    queued_messages: list[str] = field(default_factory=list)
 
 
 # Default TTL: 4 hours
@@ -177,15 +176,6 @@ class ConversationRegistry:
             if b.session_id == session_id and not self._is_expired(b):
                 return b.state
         return None
-
-    def drain_queued_messages(self, session_id: str) -> list[str]:
-        """Pop and return all queued messages for a session."""
-        messages: list[str] = []
-        for b in self._bindings.values():
-            if b.session_id == session_id and not self._is_expired(b):
-                messages.extend(b.queued_messages)
-                b.queued_messages.clear()
-        return messages
 
     def unbind(self, session_id: str) -> int:
         """Remove all bindings for a session (called on session end).

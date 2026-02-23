@@ -258,27 +258,14 @@ class TestGetStateForSession:
         assert reg.get_state_for_session("nonexistent") is None
 
 
-class TestQueuedMessages:
-    def test_queued_messages_accumulate(self) -> None:
+class TestNoMessageQueueing:
+    """Verify that message queueing has been removed (no queued_messages, no drain)."""
+
+    def test_binding_has_no_queued_messages_attr(self) -> None:
         reg = ConversationRegistry()
         b = reg.bind("telegram", "12345", "sess-001")
-        b.queued_messages.append("hello")
-        b.queued_messages.append("world")
-        assert len(b.queued_messages) == 2
+        assert not hasattr(b, "queued_messages")
 
-    def test_drain_queued_messages(self) -> None:
+    def test_registry_has_no_drain_method(self) -> None:
         reg = ConversationRegistry()
-        b = reg.bind("telegram", "12345", "sess-001")
-        b.queued_messages.extend(["msg1", "msg2", "msg3"])
-        drained = reg.drain_queued_messages("sess-001")
-        assert drained == ["msg1", "msg2", "msg3"]
-        assert len(b.queued_messages) == 0
-
-    def test_drain_empty_returns_empty(self) -> None:
-        reg = ConversationRegistry()
-        reg.bind("telegram", "12345", "sess-001")
-        assert reg.drain_queued_messages("sess-001") == []
-
-    def test_drain_nonexistent_session_returns_empty(self) -> None:
-        reg = ConversationRegistry()
-        assert reg.drain_queued_messages("nonexistent") == []
+        assert not hasattr(reg, "drain_queued_messages")

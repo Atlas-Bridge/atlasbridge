@@ -74,6 +74,8 @@ def _eval_v1(
     tool_id: str = "*",
     repo: str = "",
     session_tag: str = "",
+    session_state: str = "",
+    channel_message: bool = False,
 ) -> object:
     return evaluate(
         policy=policy,
@@ -85,6 +87,8 @@ def _eval_v1(
         tool_id=tool_id,
         repo=repo,
         session_tag=session_tag,
+        session_state=session_state,
+        channel_message=channel_message,
     )
 
 
@@ -746,3 +750,350 @@ class TestV0BackwardCompat:
             session_tag="ci",  # ignored for v0
         )
         assert d.matched_rule_id == "r1"
+
+    def test_channel_gate_params_ignored_for_v0(self) -> None:
+        """session_state and channel_message are silently ignored for v0."""
+        from atlasbridge.core.policy.model import (
+            MatchCriteria,
+            Policy,
+            PolicyRule,
+        )
+
+        rule = PolicyRule(
+            id="r1",
+            match=MatchCriteria(prompt_type=["yes_no"]),
+            action=AutoReplyAction(value="y"),
+        )
+        p = Policy(policy_version="0", name="test", rules=[rule])
+        d = evaluate(
+            policy=p,
+            prompt_text="Continue?",
+            prompt_type="yes_no",
+            confidence="high",
+            prompt_id="p1",
+            session_id="s1",
+            session_state="awaiting_input",
+            channel_message=True,
+        )
+        assert d.matched_rule_id == "r1"
+
+
+# ---------------------------------------------------------------------------
+# TestSessionStateMatching
+# ---------------------------------------------------------------------------
+
+
+class TestSessionStateMatching:
+    def test_session_state_matches_awaiting_input(self) -> None:
+        rule = make_v1_rule("r1", session_state=["awaiting_input"])
+        p = make_v1_policy(rule)
+        d = evaluate(
+            policy=p,
+            prompt_text="Continue?",
+            prompt_type="yes_no",
+            confidence="high",
+            prompt_id="p1",
+            session_id="s1",
+            session_state="awaiting_input",
+        )
+        assert d.matched_rule_id == "r1"
+
+    def test_session_state_no_match_wrong_state(self) -> None:
+        rule = make_v1_rule("r1", session_state=["awaiting_input"])
+        p = make_v1_policy(rule)
+        d = evaluate(
+            policy=p,
+            prompt_text="Continue?",
+            prompt_type="yes_no",
+            confidence="high",
+            prompt_id="p1",
+            session_id="s1",
+            session_state="streaming",
+        )
+        assert d.matched_rule_id is None
+
+    def test_session_state_matches_multiple_states(self) -> None:
+        rule = make_v1_rule("r1", session_state=["idle", "running"])
+        p = make_v1_policy(rule)
+        for state in ("idle", "running"):
+            d = evaluate(
+                policy=p,
+                prompt_text="x",
+                prompt_type="yes_no",
+                confidence="high",
+                prompt_id="p1",
+                session_id="s1",
+                session_state=state,
+            )
+            assert d.matched_rule_id == "r1"
+
+    def test_session_state_no_match_empty_state(self) -> None:
+        rule = make_v1_rule("r1", session_state=["idle"])
+        p = make_v1_policy(rule)
+        d = evaluate(
+            policy=p,
+            prompt_text="x",
+            prompt_type="yes_no",
+            confidence="high",
+            prompt_id="p1",
+            session_id="s1",
+            session_state="",
+        )
+        assert d.matched_rule_id is None
+
+    def test_session_state_not_set_matches_any(self) -> None:
+        rule = make_v1_rule("r1", prompt_type=["yes_no"])
+        p = make_v1_policy(rule)
+        d = evaluate(
+            policy=p,
+            prompt_text="x",
+            prompt_type="yes_no",
+            confidence="high",
+            prompt_id="p1",
+            session_id="s1",
+            session_state="streaming",
+        )
+        assert d.matched_rule_id == "r1"
+
+    def test_session_state_validation_rejects_invalid(self) -> None:
+        with pytest.raises(Exception, match="Unknown session_state"):
+            MatchCriteriaV1(session_state=["invalid_state"])
+
+    def test_session_state_validation_accepts_all_valid(self) -> None:
+        for state in ("idle", "running", "streaming", "awaiting_input", "stopped"):
+            m = MatchCriteriaV1(session_state=[state])
+            assert m.session_state == [state]
+
+
+# ---------------------------------------------------------------------------
+# TestChannelMessageMatching
+# ---------------------------------------------------------------------------
+
+
+class TestChannelMessageMatching:
+    def test_channel_message_true_matches_channel(self) -> None:
+        rule = make_v1_rule("r1", channel_message=True)
+        p = make_v1_policy(rule)
+        d = evaluate(
+            policy=p,
+            prompt_text="x",
+            prompt_type="yes_no",
+            confidence="high",
+            prompt_id="p1",
+            session_id="s1",
+            channel_message=True,
+        )
+        assert d.matched_rule_id == "r1"
+
+    def test_channel_message_true_no_match_local(self) -> None:
+        rule = make_v1_rule("r1", channel_message=True)
+        p = make_v1_policy(rule)
+        d = evaluate(
+            policy=p,
+            prompt_text="x",
+            prompt_type="yes_no",
+            confidence="high",
+            prompt_id="p1",
+            session_id="s1",
+            channel_message=False,
+        )
+        assert d.matched_rule_id is None
+
+    def test_channel_message_not_set_matches_any(self) -> None:
+        rule = make_v1_rule("r1")
+        p = make_v1_policy(rule)
+        for ch in (True, False):
+            d = evaluate(
+                policy=p,
+                prompt_text="x",
+                prompt_type="yes_no",
+                confidence="high",
+                prompt_id="p1",
+                session_id="s1",
+                channel_message=ch,
+            )
+            assert d.matched_rule_id == "r1"
+
+
+# ---------------------------------------------------------------------------
+# TestDenyInputTypesMatching
+# ---------------------------------------------------------------------------
+
+
+class TestDenyInputTypesMatching:
+    def test_deny_input_types_matches_password(self) -> None:
+        rule = make_v1_rule("r1", action_type="deny", deny_input_types=["password_input"])
+        p = make_v1_policy(rule)
+        d = evaluate(
+            policy=p,
+            prompt_text="Enter password:",
+            prompt_type="password_input",
+            confidence="high",
+            prompt_id="p1",
+            session_id="s1",
+        )
+        assert d.matched_rule_id == "r1"
+        assert d.action_type == "deny"
+
+    def test_deny_input_types_no_match_other_type(self) -> None:
+        rule = make_v1_rule("r1", action_type="deny", deny_input_types=["password_input"])
+        p = make_v1_policy(rule)
+        d = evaluate(
+            policy=p,
+            prompt_text="Continue?",
+            prompt_type="yes_no",
+            confidence="high",
+            prompt_id="p1",
+            session_id="s1",
+        )
+        assert d.matched_rule_id is None
+
+    def test_deny_input_types_not_set_matches_any(self) -> None:
+        rule = make_v1_rule("r1")
+        p = make_v1_policy(rule)
+        d = evaluate(
+            policy=p,
+            prompt_text="x",
+            prompt_type="password_input",
+            confidence="high",
+            prompt_id="p1",
+            session_id="s1",
+        )
+        assert d.matched_rule_id == "r1"
+
+    def test_deny_input_types_validation_rejects_invalid(self) -> None:
+        with pytest.raises(Exception, match="Unknown deny_input_type"):
+            MatchCriteriaV1(deny_input_types=["nonexistent_type"])
+
+    def test_deny_input_types_validation_accepts_all_valid(self) -> None:
+        valid = ["yes_no", "confirm_enter", "multiple_choice", "free_text", "password_input"]
+        m = MatchCriteriaV1(deny_input_types=valid)
+        assert m.deny_input_types == valid
+
+
+# ---------------------------------------------------------------------------
+# TestChannelGateFixture
+# ---------------------------------------------------------------------------
+
+
+class TestChannelGateFixture:
+    def test_awaiting_input_channel_reply_allowed(self) -> None:
+        policy = load_policy(FIXTURES_V1_DIR / "channel_gate_rules.yaml")
+        d = evaluate(
+            policy=policy,
+            prompt_text="Continue? [y/n]",
+            prompt_type="yes_no",
+            confidence="high",
+            prompt_id="p1",
+            session_id="s1",
+            session_state="awaiting_input",
+            channel_message=True,
+        )
+        assert d.matched_rule_id == "allow-replies-awaiting"
+        assert d.action_type == "auto_reply"
+
+    def test_idle_chat_turn_allowed(self) -> None:
+        policy = load_policy(FIXTURES_V1_DIR / "channel_gate_rules.yaml")
+        d = evaluate(
+            policy=policy,
+            prompt_text="Hello!",
+            prompt_type="free_text",
+            confidence="high",
+            prompt_id="p1",
+            session_id="s1",
+            session_state="idle",
+            channel_message=True,
+        )
+        assert d.matched_rule_id == "allow-chat-idle"
+
+    def test_streaming_channel_denied(self) -> None:
+        policy = load_policy(FIXTURES_V1_DIR / "channel_gate_rules.yaml")
+        d = evaluate(
+            policy=policy,
+            prompt_text="Hello!",
+            prompt_type="free_text",
+            confidence="high",
+            prompt_id="p1",
+            session_id="s1",
+            session_state="streaming",
+            channel_message=True,
+        )
+        assert d.matched_rule_id == "deny-interrupts"
+        assert d.action_type == "deny"
+
+    def test_running_channel_denied(self) -> None:
+        policy = load_policy(FIXTURES_V1_DIR / "channel_gate_rules.yaml")
+        d = evaluate(
+            policy=policy,
+            prompt_text="Hello!",
+            prompt_type="free_text",
+            confidence="high",
+            prompt_id="p1",
+            session_id="s1",
+            session_state="running",
+            channel_message=True,
+        )
+        assert d.matched_rule_id == "deny-interrupts"
+        assert d.action_type == "deny"
+
+    def test_password_channel_denied(self) -> None:
+        policy = load_policy(FIXTURES_V1_DIR / "channel_gate_rules.yaml")
+        d = evaluate(
+            policy=policy,
+            prompt_text="Enter API key:",
+            prompt_type="password_input",
+            confidence="high",
+            prompt_id="p1",
+            session_id="s1",
+            session_state="awaiting_input",
+            channel_message=True,
+        )
+        assert d.matched_rule_id == "deny-password-channel"
+        assert d.action_type == "deny"
+
+    def test_local_prompt_not_gated(self) -> None:
+        policy = load_policy(FIXTURES_V1_DIR / "channel_gate_rules.yaml")
+        d = evaluate(
+            policy=policy,
+            prompt_text="Continue? [y/n]",
+            prompt_type="yes_no",
+            confidence="high",
+            prompt_id="p1",
+            session_id="s1",
+            session_state="awaiting_input",
+            channel_message=False,
+        )
+        # Not a channel message → falls to local-catch-all
+        assert d.matched_rule_id == "local-catch-all"
+        assert d.action_type == "require_human"
+
+    def test_backward_compat_no_gate_params(self) -> None:
+        """Existing policy without gate fields works unchanged."""
+        policy = load_policy(FIXTURES_V1_DIR / "session_tag_match.yaml")
+        d = evaluate(
+            policy=policy,
+            prompt_text="Continue?",
+            prompt_type="yes_no",
+            confidence="high",
+            prompt_id="p1",
+            session_id="s1",
+            session_tag="ci",
+            session_state="awaiting_input",
+            channel_message=True,
+        )
+        assert d.matched_rule_id == "ci-auto-reply"
+
+    def test_explain_includes_gate_fields(self) -> None:
+        from atlasbridge.core.policy.explain import explain_policy
+
+        policy = load_policy(FIXTURES_V1_DIR / "channel_gate_rules.yaml")
+        output = explain_policy(
+            policy=policy,
+            prompt_text="Hello!",
+            prompt_type="free_text",
+            confidence="high",
+            session_state="streaming",
+            channel_message=True,
+        )
+        assert "session_state" in output
+        assert "channel_message" in output

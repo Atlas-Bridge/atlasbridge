@@ -288,13 +288,12 @@ class OutputForwarder:
                 )
 
     async def _transition_to_running(self) -> None:
-        """Transition from STREAMING → RUNNING and drain queued messages."""
+        """Transition from STREAMING → RUNNING."""
         if self._conversation_registry is None:
             return
 
         from atlasbridge.core.conversation.session_binding import ConversationState
 
-        transitioned = False
         for binding in self._conversation_registry.bindings_for_session(self._session_id):
             if binding.state == ConversationState.STREAMING:
                 self._conversation_registry.transition_state(
@@ -302,18 +301,3 @@ class OutputForwarder:
                     binding.thread_id,
                     ConversationState.RUNNING,
                 )
-                transitioned = True
-
-        if transitioned:
-            messages = self._conversation_registry.drain_queued_messages(self._session_id)
-            if messages:
-                logger.info(
-                    "drained_queued_messages",
-                    session_id=self._session_id[:8],
-                    count=len(messages),
-                )
-                for msg in messages:
-                    await self._channel.notify(
-                        f"(queued) {msg}",
-                        session_id=self._session_id,
-                    )

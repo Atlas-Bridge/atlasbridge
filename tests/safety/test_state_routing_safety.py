@@ -2,7 +2,7 @@
 
 These tests verify that conversation state correctly controls message routing:
   - RUNNING routes to chat mode
-  - STREAMING queues messages
+  - STREAMING rejects messages via the channel message gate
   - AWAITING_INPUT routes to prompt resolution
   - No cross-session routing via state lookup
   - STOPPED state drops messages
@@ -11,7 +11,7 @@ These tests verify that conversation state correctly controls message routing:
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -19,6 +19,7 @@ from atlasbridge.core.conversation.session_binding import (
     ConversationRegistry,
     ConversationState,
 )
+from atlasbridge.core.gate.engine import GateDecision, GateRejectReason
 from atlasbridge.core.prompt.models import Confidence, PromptEvent, PromptType, Reply
 from atlasbridge.core.routing.router import PromptRouter
 from atlasbridge.core.session.manager import SessionManager
@@ -72,26 +73,37 @@ class TestRunningRoutesToChat:
             conversation_registry=registry,
         )
 
-        reply = _reply(thread_id="chat-100")
-        await router.handle_reply(reply)
+        # Bypass gate (this test verifies routing, not gate logic)
+        with patch.object(router, "_evaluate_gate", return_value=None):
+            reply = _reply(thread_id="chat-100")
+            await router.handle_reply(reply)
 
         # RUNNING → chat mode handler
         chat_handler.assert_called_once()
 
 
-class TestStreamingQueuesMessage:
+class TestStreamingRejectsViaGate:
     @pytest.mark.asyncio
-    async def test_streaming_queues_message(self) -> None:
+    async def test_streaming_rejects_message(self) -> None:
+        """When STREAMING, messages are rejected by the gate, not queued."""
         ch = _make_channel()
         sm = SessionManager()
         session = Session(session_id="sess-s-1", tool="claude")
         sm.register(session)
 
         registry = ConversationRegistry()
-        binding = registry.bind("telegram", "chat-200", "sess-s-1")
+        registry.bind("telegram", "chat-200", "sess-s-1")
         registry.transition_state("telegram", "chat-200", ConversationState.STREAMING)
 
         chat_handler = AsyncMock()
+
+        # The gate rejects STREAMING messages
+        reject = GateDecision(
+            action="reject",
+            reason_code=GateRejectReason.REJECT_BUSY_STREAMING,
+            reason_message="Agent is working.",
+        )
+
         router = PromptRouter(
             session_manager=sm,
             channel=ch,
@@ -101,12 +113,12 @@ class TestStreamingQueuesMessage:
             conversation_registry=registry,
         )
 
-        reply = _reply(thread_id="chat-200", value="please wait")
-        await router.handle_reply(reply)
+        with patch.object(router, "_evaluate_gate", return_value=reject):
+            reply = _reply(thread_id="chat-200", value="please wait")
+            await router.handle_reply(reply)
 
-        # STREAMING → queued, NOT chat mode
+        # STREAMING → rejected by gate, NOT chat mode
         chat_handler.assert_not_called()
-        assert "please wait" in binding.queued_messages
         ch.notify.assert_called_once()
 
 
@@ -141,9 +153,11 @@ class TestAwaitingInputRoutesToPrompt:
         )
         await router.route_event(event)
 
-        # Free text should resolve to the active prompt
-        reply = _reply(thread_id="chat-300", value="y")
-        await router.handle_reply(reply)
+        # Bypass gate (this test verifies routing, not gate logic)
+        with patch.object(router, "_evaluate_gate", return_value=None):
+            # Free text should resolve to the active prompt
+            reply = _reply(thread_id="chat-300", value="y")
+            await router.handle_reply(reply)
 
         # Should have been injected (resolved to the active prompt)
         adapter.inject_reply.assert_called_once()
@@ -174,9 +188,11 @@ class TestNoCrossSessionViaState:
             conversation_registry=registry,
         )
 
-        # Message in thread A should only reach session A
-        reply = _reply(thread_id="chat-A", value="message for A")
-        await router.handle_reply(reply)
+        # Bypass gate (this test verifies session isolation, not gate logic)
+        with patch.object(router, "_evaluate_gate", return_value=None):
+            # Message in thread A should only reach session A
+            reply = _reply(thread_id="chat-A", value="message for A")
+            await router.handle_reply(reply)
 
         if chat_handler.called:
             # If it was routed, the session should be A (not B)
@@ -187,7 +203,7 @@ class TestNoCrossSessionViaState:
 class TestStoppedDropsMessage:
     @pytest.mark.asyncio
     async def test_stopped_state_drops_message(self) -> None:
-        """Messages to a STOPPED session are not routed."""
+        """Messages to a STOPPED session are rejected by the gate."""
         ch = _make_channel()
         sm = SessionManager()
         session = Session(session_id="sess-stop-1", tool="claude")
@@ -199,6 +215,14 @@ class TestStoppedDropsMessage:
         assert binding.state == ConversationState.STOPPED
 
         chat_handler = AsyncMock()
+
+        # The gate rejects STOPPED session messages
+        reject = GateDecision(
+            action="reject",
+            reason_code=GateRejectReason.REJECT_NO_ACTIVE_SESSION,
+            reason_message="No active session.",
+        )
+
         router = PromptRouter(
             session_manager=sm,
             channel=ch,
@@ -208,12 +232,10 @@ class TestStoppedDropsMessage:
             conversation_registry=registry,
         )
 
-        reply = _reply(thread_id="chat-stop", value="hello stopped session")
-        await router.handle_reply(reply)
+        with patch.object(router, "_evaluate_gate", return_value=reject):
+            reply = _reply(thread_id="chat-stop", value="hello stopped session")
+            await router.handle_reply(reply)
 
-        # Stopped state: get_binding returns None (it gets deleted as expired or
-        # _get_conversation_state returns the state). The router sees no
-        # STREAMING state, so it falls through to chat mode — which is fine,
-        # the session itself is stopped. The important thing is the message
-        # is NOT queued (no queue on a stopped binding).
-        assert len(binding.queued_messages) == 0
+        # STOPPED → rejected by gate, not routed to chat
+        chat_handler.assert_not_called()
+        ch.notify.assert_called_once()

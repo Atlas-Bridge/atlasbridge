@@ -32,6 +32,18 @@ from atlasbridge.core.policy.model import (
 )
 
 # ---------------------------------------------------------------------------
+# v1 validation constants
+# ---------------------------------------------------------------------------
+
+_VALID_SESSION_STATES: frozenset[str] = frozenset(
+    {"idle", "running", "streaming", "awaiting_input", "stopped"}
+)
+
+_VALID_INPUT_TYPES: frozenset[str] = frozenset(
+    {"yes_no", "confirm_enter", "multiple_choice", "free_text", "password_input"}
+)
+
+# ---------------------------------------------------------------------------
 # v1 Match criteria
 # ---------------------------------------------------------------------------
 
@@ -82,6 +94,15 @@ class MatchCriteriaV1(BaseModel):
     session_tag: str | None = None
     """Match only if the session label equals this string exactly."""
 
+    session_state: list[str] | None = None
+    """Match only when session is in one of these conversation states."""
+
+    channel_message: bool | None = None
+    """If true, rule only matches messages originating from a channel (not local)."""
+
+    deny_input_types: list[str] | None = None
+    """Match when the prompt type is in this list (used for deny rules via channel)."""
+
     any_of: list[MatchCriteriaV1] | None = None
     """OR logic: rule matches if ANY sub-criteria block matches."""
 
@@ -93,6 +114,30 @@ class MatchCriteriaV1(BaseModel):
     def validate_contains_not_empty(cls, v: str | None) -> str | None:
         if v is not None and v == "":
             raise ValueError("contains must not be empty string")
+        return v
+
+    @field_validator("session_state")
+    @classmethod
+    def validate_session_state_values(cls, v: list[str] | None) -> list[str] | None:
+        if v is not None:
+            for state in v:
+                if state not in _VALID_SESSION_STATES:
+                    raise ValueError(
+                        f"Unknown session_state {state!r}. "
+                        f"Valid values: {sorted(_VALID_SESSION_STATES)}"
+                    )
+        return v
+
+    @field_validator("deny_input_types")
+    @classmethod
+    def validate_deny_input_types_values(cls, v: list[str] | None) -> list[str] | None:
+        if v is not None:
+            for input_type in v:
+                if input_type not in _VALID_INPUT_TYPES:
+                    raise ValueError(
+                        f"Unknown deny_input_type {input_type!r}. "
+                        f"Valid values: {sorted(_VALID_INPUT_TYPES)}"
+                    )
         return v
 
     @model_validator(mode="after")
@@ -125,6 +170,9 @@ class MatchCriteriaV1(BaseModel):
                 self.session_tag is not None,
                 self.max_confidence is not None,
                 self.min_confidence != ConfidenceLevel.LOW,
+                self.session_state is not None,
+                self.channel_message is not None,
+                self.deny_input_types is not None,
             ]
         )
         if self.any_of is not None and has_flat:
