@@ -62,8 +62,7 @@ def build_plan(interaction_class: InteractionClass) -> InteractionPlan:
                 feedback_on_advance="CLI advanced",
                 feedback_on_stall='CLI did not respond to "{value}", retrying...',
                 escalation_template=(
-                    'CLI did not respond to "{value}" after retries. '
-                    "Please respond locally."
+                    'CLI did not respond to "{value}" after retries. Please respond locally.'
                 ),
                 button_layout="yes_no",
             )
@@ -79,8 +78,7 @@ def build_plan(interaction_class: InteractionClass) -> InteractionPlan:
                 feedback_on_advance="CLI advanced",
                 feedback_on_stall="CLI did not advance after Enter, retrying...",
                 escalation_template=(
-                    "CLI did not advance after pressing Enter. "
-                    "Please continue locally."
+                    "CLI did not advance after pressing Enter. Please continue locally."
                 ),
                 button_layout="confirm_enter",
             )
@@ -96,8 +94,7 @@ def build_plan(interaction_class: InteractionClass) -> InteractionPlan:
                 feedback_on_advance="Option {value} accepted",
                 feedback_on_stall='CLI did not accept option "{value}", retrying...',
                 escalation_template=(
-                    'CLI did not accept option "{value}" after retries. '
-                    "Please select locally."
+                    'CLI did not accept option "{value}" after retries. Please select locally.'
                 ),
                 button_layout="numbered",
             )
@@ -113,8 +110,7 @@ def build_plan(interaction_class: InteractionClass) -> InteractionPlan:
                 feedback_on_advance="CLI accepted input",
                 feedback_on_stall="CLI may still be processing...",
                 escalation_template=(
-                    "CLI did not accept input after injection. "
-                    "Please enter text locally."
+                    "CLI did not accept input after injection. Please enter text locally."
                 ),
                 button_layout="none",
             )
@@ -131,8 +127,7 @@ def build_plan(interaction_class: InteractionClass) -> InteractionPlan:
                 feedback_on_advance="CLI accepted credential",
                 feedback_on_stall="CLI did not advance after credential input",
                 escalation_template=(
-                    "CLI did not accept credential after injection. "
-                    "Please enter locally."
+                    "CLI did not accept credential after injection. Please enter locally."
                 ),
                 button_layout="none",
             )
@@ -149,8 +144,7 @@ def build_plan(interaction_class: InteractionClass) -> InteractionPlan:
                 feedback_on_advance="Folder trust accepted",
                 feedback_on_stall='CLI did not respond to trust "{value}", retrying...',
                 escalation_template=(
-                    "Folder trust prompt did not advance. "
-                    "Please respond locally."
+                    "Folder trust prompt did not advance. Please respond locally."
                 ),
                 button_layout="trust_folder",
             )
@@ -167,8 +161,7 @@ def build_plan(interaction_class: InteractionClass) -> InteractionPlan:
                 feedback_on_advance="",
                 feedback_on_stall="",
                 escalation_template=(
-                    "This prompt could not be handled remotely. "
-                    "Please respond locally."
+                    "This prompt could not be handled remotely. Please respond locally."
                 ),
                 button_layout="none",
             )
