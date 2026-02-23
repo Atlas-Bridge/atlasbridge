@@ -20,29 +20,28 @@ IDLE ──► RUNNING ──► STREAMING ──► RUNNING (cycle)
 |-------|-------------|---------------|
 | `IDLE` | Bound but session not yet started | Dropped |
 | `RUNNING` | Agent active, accepting input | Routed to chat mode (injected into PTY) |
-| `STREAMING` | Agent producing output | Queued for next turn |
+| `STREAMING` | Agent producing output | Rejected by gate with feedback |
 | `AWAITING_INPUT` | Prompt detected, waiting on user | Resolved to active prompt |
-| `STOPPED` | Session ended | Dropped |
+| `STOPPED` | Session ended | Rejected by gate |
 
 ## State-Driven Routing
 
-When a user sends a message (not a button response), the router checks the conversation state:
+When a user sends a message (not a button response), the router first evaluates the **ChannelMessageGate**. The gate reads a frozen context snapshot (session state, identity, active prompt) and returns an immediate accept/reject decision. No messages are ever queued.
 
-1. **STREAMING** -- The message is queued in the binding's `queued_messages` list. The user sees "Queued for next turn." When the agent finishes streaming (2 idle flush cycles), the forwarder transitions to RUNNING and drains queued messages.
+1. **STREAMING** -- The gate rejects the message. The user sees feedback: "Agent is working. Wait for the current operation to finish."
 
-2. **RUNNING / IDLE** -- The message goes to the chat mode handler, which injects it into the agent's PTY stdin via `execute_chat_input()`.
+2. **RUNNING / IDLE** -- If accepted by the gate, the message goes to the chat mode handler, which injects it into the agent's PTY stdin via `execute_chat_input()`.
 
 3. **AWAITING_INPUT** -- If there's an active prompt, the message resolves to that prompt. Otherwise, falls through to chat mode.
 
-## Message Queuing
+## Channel Message Gate
 
-During the STREAMING state, user messages are accumulated in `ConversationBinding.queued_messages`. When the `OutputForwarder` detects 2 consecutive idle flush cycles (no output from the agent), it:
+Every incoming channel message is evaluated by the gate before any state mutation or injection. The gate is a pure, deterministic function that reads a `GateContext` snapshot and returns a `GateDecision`:
 
-1. Transitions the binding from STREAMING to RUNNING
-2. Drains all queued messages
-3. Delivers them to the channel as "(queued) {message}"
+- **Accept** — message proceeds to routing (chat mode or prompt resolution)
+- **Reject** — message is dropped and the user gets feedback with a reason and next-action hint
 
-This prevents user messages from being lost when the agent is actively producing output.
+Rejection reasons include: busy (streaming/running), no active session, identity not allowlisted, TTL expired, unsafe input type (password), policy deny.
 
 ## Conversation Registry
 

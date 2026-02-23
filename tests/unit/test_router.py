@@ -130,7 +130,7 @@ class TestRouteEvent:
         assert sm.status == PromptStatus.AWAITING_REPLY
 
     @pytest.mark.asyncio
-    async def test_second_prompt_queued_while_active(
+    async def test_second_prompt_supersedes_first(
         self,
         router: PromptRouter,
         session: Session,
@@ -139,11 +139,12 @@ class TestRouteEvent:
         e1 = _event(session.session_id)
         e2 = _event(session.session_id)
         await router.route_event(e1)  # dispatched
-        await router.route_event(e2)  # queued
-        # Only one send_prompt call (e1), e2 is queued
-        assert mock_channel.send_prompt.call_count == 1
-        queue = router._pending.get(session.session_id, [])
-        assert any(e.prompt_id == e2.prompt_id for e in queue)
+        await router.route_event(e2)  # supersedes — dispatched immediately
+        # Both prompts are dispatched (no queueing)
+        assert mock_channel.send_prompt.call_count == 2
+        # Both have state machines registered
+        assert e1.prompt_id in router._machines
+        assert e2.prompt_id in router._machines
 
 
 # ---------------------------------------------------------------------------

@@ -139,6 +139,38 @@ def _match_session_tag(criterion: str | None, session_tag: str) -> tuple[bool, s
     )
 
 
+def _match_session_state(criterion: list[str] | None, session_state: str) -> tuple[bool, str]:
+    if criterion is None:
+        return True, "session_state: not specified (always matches)"
+    if not session_state:
+        return False, f"session_state: no state provided, required one of {criterion}"
+    matched = session_state in criterion
+    return (
+        matched,
+        f"session_state: {session_state!r} {'in' if matched else 'not in'} {criterion}",
+    )
+
+
+def _match_channel_message(criterion: bool | None, channel_message: bool) -> tuple[bool, str]:
+    if criterion is None:
+        return True, "channel_message: not specified (always matches)"
+    matched = criterion == channel_message
+    return (
+        matched,
+        f"channel_message: {criterion!r} {'==' if matched else '!='} {channel_message!r}",
+    )
+
+
+def _match_deny_input_types(criterion: list[str] | None, prompt_type: str) -> tuple[bool, str]:
+    if criterion is None:
+        return True, "deny_input_types: not specified (always matches)"
+    matched = prompt_type in criterion
+    return (
+        matched,
+        f"deny_input_types: {prompt_type!r} {'in' if matched else 'not in'} {criterion}",
+    )
+
+
 def _match_contains(
     contains: str | None,
     contains_is_regex: bool,
@@ -226,6 +258,8 @@ def _eval_criteria_block(
     tool_id: str,
     repo: str,
     session_tag: str,
+    session_state: str = "",
+    channel_message: bool = False,
 ) -> tuple[bool, list[str]]:
     """
     Evaluate a MatchCriteriaV1 block (flat OR any_of), returning (matched, reasons).
@@ -239,7 +273,15 @@ def _eval_criteria_block(
         # OR semantics: match if ANY sub-block passes
         for i, sub in enumerate(m.any_of):
             sub_matched, sub_reasons = _eval_criteria_block(
-                sub, prompt_type, confidence, excerpt, tool_id, repo, session_tag
+                sub,
+                prompt_type,
+                confidence,
+                excerpt,
+                tool_id,
+                repo,
+                session_tag,
+                session_state,
+                channel_message,
             )
             reasons.append(f"any_of[{i}]: {'✓ matched' if sub_matched else '✗ no match'}")
             for r in sub_reasons:
@@ -257,6 +299,9 @@ def _eval_criteria_block(
         _match_max_confidence(m.max_confidence, confidence),
         _match_contains(m.contains, m.contains_is_regex, excerpt),
         _match_session_tag(m.session_tag, session_tag),
+        _match_session_state(m.session_state, session_state),
+        _match_channel_message(m.channel_message, channel_message),
+        _match_deny_input_types(m.deny_input_types, prompt_type),
     ]
 
     all_pass = True
@@ -277,6 +322,8 @@ def _evaluate_rule_v1(
     tool_id: str,
     repo: str,
     session_tag: str,
+    session_state: str = "",
+    channel_message: bool = False,
 ) -> RuleMatchResult:
     """
     Evaluate a single v1 rule.
@@ -290,7 +337,15 @@ def _evaluate_rule_v1(
 
     # Step 1: primary match (flat AND or any_of)
     primary_matched, primary_reasons = _eval_criteria_block(
-        m, prompt_type, confidence, excerpt, tool_id, repo, session_tag
+        m,
+        prompt_type,
+        confidence,
+        excerpt,
+        tool_id,
+        repo,
+        session_tag,
+        session_state,
+        channel_message,
     )
     reasons.extend(primary_reasons)
 
@@ -301,7 +356,15 @@ def _evaluate_rule_v1(
     if m.none_of is not None:
         for i, sub in enumerate(m.none_of):
             sub_matched, sub_reasons = _eval_criteria_block(
-                sub, prompt_type, confidence, excerpt, tool_id, repo, session_tag
+                sub,
+                prompt_type,
+                confidence,
+                excerpt,
+                tool_id,
+                repo,
+                session_tag,
+                session_state,
+                channel_message,
             )
             if sub_matched:
                 reasons.append(f"✗ none_of[{i}]: matched (excluded by NOT condition)")
@@ -328,6 +391,8 @@ def evaluate(
     tool_id: str = "*",
     repo: str = "",
     session_tag: str = "",
+    session_state: str = "",
+    channel_message: bool = False,
 ) -> PolicyDecision:
     """
     Evaluate the policy against a prompt event. First-match-wins.
@@ -344,6 +409,8 @@ def evaluate(
         tool_id:      Adapter/tool name (e.g. "claude_code").
         repo:         Working directory of the session.
         session_tag:  Session label (v1 only; used for session_tag rule matching).
+        session_state: Current conversation state (v1 only; e.g. "idle", "running").
+        channel_message: Whether message originated from a channel (v1 only).
 
     Returns:
         :class:`PolicyDecision` with matched rule, action, and explanation.
@@ -366,6 +433,8 @@ def evaluate(
                 tool_id=tool_id,
                 repo=repo,
                 session_tag=session_tag,
+                session_state=session_state,
+                channel_message=channel_message,
             )
         else:
             result = _evaluate_rule(

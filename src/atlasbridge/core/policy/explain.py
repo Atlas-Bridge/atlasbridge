@@ -59,6 +59,8 @@ def explain_policy(
     tool_id: str = "*",
     repo: str = "",
     session_tag: str = "",
+    session_state: str = "",
+    channel_message: bool = False,
 ) -> str:
     """
     Walk all rules in the policy and show which matched / failed, then show the final decision.
@@ -80,6 +82,10 @@ def explain_policy(
         lines.append(f"        repo={repo!r}")
     if session_tag:
         lines.append(f"        session_tag={session_tag!r}")
+    if session_state:
+        lines.append(f"        session_state={session_state!r}")
+    if channel_message:
+        lines.append(f"        channel_message={channel_message!r}")
     lines.append("")
 
     first_match: RuleMatchResult | None = None
@@ -93,6 +99,8 @@ def explain_policy(
                 tool_id=tool_id,
                 repo=repo,
                 session_tag=session_tag,
+                session_state=session_state,
+                channel_message=channel_message,
             )
         else:
             result = _evaluate_rule(

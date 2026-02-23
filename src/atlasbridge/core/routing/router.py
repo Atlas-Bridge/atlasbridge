@@ -7,7 +7,7 @@ Forward path:
   PromptEvent → validate → route to channel → update session state
 
 Return path:
-  Reply → validate nonce/TTL/session → inject via adapter → update state
+  Reply → gate evaluation → validate nonce/TTL/session → inject via adapter → update state
 
 Routing rules:
   HIGH confidence  → route immediately
@@ -15,18 +15,23 @@ Routing rules:
   LOW confidence   → ambiguity protocol (send SHOW_LAST_OUTPUT; wait for reply)
   No signal        → discard
 
-One active prompt per session:
-  If a new PromptEvent arrives while a prompt is AWAITING_REPLY, it is
-  held in the session's pending queue until the active prompt is resolved.
+Channel message gating:
+  Every incoming reply is evaluated by the ChannelMessageGate before any
+  state mutation or injection. Rejected messages are never queued — the
+  gate returns an immediate verdict and the caller receives feedback.
 """
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
 
+from atlasbridge.core.gate.engine import GateContext, GateDecision, evaluate_gate
+from atlasbridge.core.gate.messages import format_gate_decision
 from atlasbridge.core.prompt.models import Confidence, PromptEvent, PromptStatus, Reply
 from atlasbridge.core.prompt.state import PromptStateMachine
 from atlasbridge.core.session.manager import SessionManager
@@ -62,8 +67,6 @@ class PromptRouter:
 
         # Active state machines: prompt_id → PromptStateMachine
         self._machines: dict[str, PromptStateMachine] = {}
-        # Per-session pending queue: session_id → [PromptEvent, ...]
-        self._pending: dict[str, list[PromptEvent]] = {}
 
     # ------------------------------------------------------------------
     # Forward path
@@ -83,11 +86,9 @@ class PromptRouter:
             log.warning("event_dropped_unknown_session")
             return
 
-        # Queue if another prompt is already active for this session
+        # New prompts supersede old ones — no queueing
         if session.active_prompt_id:
-            self._pending.setdefault(event.session_id, []).append(event)
-            log.debug("event_queued", active_prompt=session.active_prompt_id)
-            return
+            log.debug("prompt_superseded", old_prompt=session.active_prompt_id)
 
         # Confidence gate: LOW is routed to the channel so the user can decide.
         # The channel message labels it as "low (ambiguous)" so the user knows.
@@ -137,7 +138,10 @@ class PromptRouter:
     # ------------------------------------------------------------------
 
     async def handle_reply(self, reply: Reply) -> None:
-        """Process an incoming Reply from the channel."""
+        """Process an incoming Reply from the channel.
+
+        Gate evaluation runs first — rejected messages are never injected.
+        """
         # Plan response handling (sentinel prompt_id)
         if reply.prompt_id == "__plan__":
             await self.handle_plan_response(
@@ -146,24 +150,25 @@ class PromptRouter:
             )
             return
 
+        # Gate evaluation — evaluate before any state mutation
+        decision = self._evaluate_gate(reply)
+        if decision is not None and decision.action == "reject":
+            session_id = reply.session_id or self._resolve_session_for_reply(reply) or ""
+            feedback = format_gate_decision(decision)
+            logger.info(
+                "channel_message_rejected",
+                reason_code=decision.reason_code,
+                session_id=session_id[:8] if session_id else "",
+            )
+            if self._channel is not None:
+                await self._channel.notify(feedback, session_id=session_id)
+            return
+
         # Free-text replies have empty prompt_id — resolve to active prompt
         if not reply.prompt_id:
             resolved = self._resolve_free_text_reply(reply)
             if resolved is None:
-                # No active prompt — check conversation state
-                state = self._get_conversation_state(reply)
-
-                if state is not None and state == "streaming":
-                    self._queue_for_next_turn(reply)
-                    session_id = self._resolve_session_for_reply(reply) or ""
-                    if self._channel is not None:
-                        await self._channel.notify(
-                            "Queued for next turn.",
-                            session_id=session_id,
-                        )
-                    return
-
-                # RUNNING, IDLE, or unknown → chat mode
+                # No active prompt — check conversation state for chat mode
                 if self._chat_mode_handler is not None:
                     logger.info(
                         "chat_mode_input",
@@ -199,7 +204,6 @@ class PromptRouter:
                 "This prompt has expired. The safe default was used.",
                 session_id=reply.session_id,
             )
-            await self._resolve_next(reply.session_id)
             return
 
         # Validate session binding
@@ -235,7 +239,7 @@ class PromptRouter:
                 self._sessions.mark_reply_received(sm.event.session_id)
 
                 # Edit the channel message with structured feedback
-                feedback = result.feedback_message or f"✓ Answered: {result.injected_value!r}"
+                feedback = result.feedback_message or f"\u2713 Answered: {result.injected_value!r}"
                 session = self._sessions.get_or_none(sm.event.session_id)
                 if session:
                     msg_id = session.channel_message_ids.get(reply.prompt_id, "")
@@ -269,7 +273,7 @@ class PromptRouter:
                     if msg_id:
                         await self._channel.edit_prompt_message(
                             msg_id,
-                            f"✓ Answered: {reply.value!r}",
+                            f"\u2713 Answered: {reply.value!r}",
                             session_id=sm.event.session_id,
                         )
 
@@ -285,11 +289,69 @@ class PromptRouter:
                 ch_name = reply.channel_identity.split(":")[0]
                 self._conversation_registry.bind(ch_name, reply.thread_id, sm.event.session_id)
 
-            await self._resolve_next(sm.event.session_id)
-
         except Exception as exc:  # noqa: BLE001
             sm.transition(PromptStatus.FAILED, str(exc))
             log.error("reply_injection_failed", error=str(exc))
+
+    def _evaluate_gate(self, reply: Reply) -> GateDecision | None:
+        """Build a GateContext and evaluate the channel message gate.
+
+        Returns None if no conversation registry is available (gate cannot
+        evaluate without session state).
+        """
+        if self._conversation_registry is None:
+            return None
+
+        # Resolve session and state from thread context
+        session_id: str | None = reply.session_id or None
+        state = None
+        active_prompt_id: str | None = None
+
+        if reply.thread_id:
+            channel_name = reply.channel_identity.split(":")[0]
+            binding = self._conversation_registry.get_binding(channel_name, reply.thread_id)
+            if binding is not None:
+                session_id = binding.session_id
+                state = binding.state
+            if session_id is None:
+                session_id = self._conversation_registry.resolve(channel_name, reply.thread_id)
+
+        # Look up active prompt
+        if session_id:
+            session = self._sessions.get_or_none(session_id)
+            if session:
+                active_prompt_id = session.active_prompt_id
+
+        # Build identity allowlist from channel
+        allowlist: frozenset[str] = frozenset()
+        if hasattr(self._channel, "get_allowed_identities"):
+            allowlist = frozenset(self._channel.get_allowed_identities())
+        elif hasattr(self._channel, "is_allowed"):
+            # Fallback: can't enumerate, just mark the user as allowed if they pass
+            if self._channel.is_allowed(reply.channel_identity):
+                allowlist = frozenset({reply.channel_identity})
+
+        # Build channel name from identity
+        channel_name = reply.channel_identity.split(":")[0] if reply.channel_identity else ""
+        user_id = reply.channel_identity
+
+        now = datetime.now(UTC).isoformat()
+
+        ctx = GateContext(
+            session_id=session_id,
+            conversation_state=state,
+            active_prompt_id=active_prompt_id,
+            interaction_class=None,
+            prompt_expires_at=None,
+            channel_user_id=user_id,
+            channel_name=channel_name,
+            message_body=reply.value,
+            message_hash=hashlib.sha256(reply.value.encode()).hexdigest(),
+            identity_allowlist=allowlist,
+            timestamp=now,
+        )
+
+        return evaluate_gate(ctx)
 
     def _resolve_free_text_reply(self, reply: Reply) -> Reply | None:
         """Resolve a free-text reply (empty prompt_id) to the active prompt.
@@ -326,27 +388,9 @@ class PromptRouter:
             )
         return None
 
-    async def _resolve_next(self, session_id: str) -> None:
-        """After a prompt resolves, dispatch the next queued prompt if any."""
-        queue = self._pending.get(session_id, [])
-        if queue:
-            next_event = queue.pop(0)
-            await self._dispatch(next_event)
-
     # ------------------------------------------------------------------
-    # TTL expiry sweep (called by scheduler)
+    # Helpers
     # ------------------------------------------------------------------
-
-    def _get_conversation_state(self, reply: Reply) -> str | None:
-        """Resolve conversation state from a reply's thread context."""
-        if self._conversation_registry is None:
-            return None
-        if reply.thread_id:
-            channel_name = reply.channel_identity.split(":")[0]
-            binding = self._conversation_registry.get_binding(channel_name, reply.thread_id)
-            if binding is not None:
-                return binding.state
-        return None
 
     def _resolve_session_for_reply(self, reply: Reply) -> str | None:
         """Resolve session_id from reply's thread context."""
@@ -356,20 +400,6 @@ class PromptRouter:
             channel_name = reply.channel_identity.split(":")[0]
             return self._conversation_registry.resolve(channel_name, reply.thread_id)
         return None
-
-    def _queue_for_next_turn(self, reply: Reply) -> None:
-        """Queue a message for delivery when the agent finishes streaming."""
-        if self._conversation_registry is None:
-            return
-        if reply.thread_id:
-            channel_name = reply.channel_identity.split(":")[0]
-            binding = self._conversation_registry.get_binding(channel_name, reply.thread_id)
-            if binding is not None:
-                binding.queued_messages.append(reply.value)
-                logger.debug(
-                    "message_queued",
-                    queue_depth=len(binding.queued_messages),
-                )
 
     async def handle_plan_response(self, session_id: str, decision: str) -> None:
         """Handle a plan button response (execute/modify/cancel)."""
@@ -428,7 +458,6 @@ class PromptRouter:
                     if msg_id:
                         await self._channel.edit_prompt_message(
                             msg_id,
-                            "⏰ Prompt expired. Safe default applied.",
+                            "\u23f0 Prompt expired. Safe default applied.",
                             session_id=sm.event.session_id,
                         )
-                await self._resolve_next(sm.event.session_id)

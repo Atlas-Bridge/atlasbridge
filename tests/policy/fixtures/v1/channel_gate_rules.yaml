@@ -1,0 +1,52 @@
+policy_version: "1"
+name: channel-gate-test
+autonomy_mode: full
+
+rules:
+  - id: allow-replies-awaiting
+    description: Allow channel replies when awaiting input.
+    match:
+      session_state: [awaiting_input]
+      channel_message: true
+      prompt_type: [yes_no, confirm_enter, multiple_choice]
+    action:
+      type: auto_reply
+      value: "y"
+
+  - id: allow-chat-idle
+    description: Allow chat turns when idle.
+    match:
+      session_state: [idle]
+      channel_message: true
+      prompt_type: [free_text]
+    action:
+      type: auto_reply
+      value: ""
+
+  - id: deny-interrupts
+    description: Deny messages during streaming.
+    match:
+      session_state: [streaming, running]
+      channel_message: true
+    action:
+      type: deny
+      reason: "Agent is busy. Wait for the current operation to complete."
+
+  - id: deny-password-channel
+    description: Deny password input via channel.
+    match:
+      channel_message: true
+      deny_input_types: [password_input]
+    action:
+      type: deny
+      reason: "Password input must be entered locally."
+
+  - id: local-catch-all
+    description: Non-channel prompts require human.
+    match: {}
+    action:
+      type: require_human
+
+defaults:
+  no_match: require_human
+  low_confidence: require_human

@@ -4,15 +4,14 @@ These tests verify correctness invariants:
   - Secret tokens are NEVER sent to channels unredacted
   - Plan detection NEVER triggers PTY injection
   - Plan Execute does NOT inject into PTY
-  - STREAMING state queues messages, does not inject
-  - Queued messages are delivered on STREAMING → RUNNING transition
+  - STREAMING state rejects messages via the gate (not queued)
   - StreamingManager accumulator is bounded
   - Conversation state transitions are validated
 """
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -21,6 +20,7 @@ from atlasbridge.core.conversation.session_binding import (
     ConversationRegistry,
     ConversationState,
 )
+from atlasbridge.core.gate.engine import GateDecision, GateRejectReason
 from atlasbridge.core.interaction.output_forwarder import OutputForwarder
 from atlasbridge.core.interaction.plan_detector import DetectedPlan, detect_plan
 from atlasbridge.core.interaction.streaming import _MAX_ACCUMULATOR_CHARS, StreamingManager
@@ -159,11 +159,11 @@ class TestPlanDetectionSafety:
 
 
 class TestStreamingStateSafety:
-    """STREAMING state MUST queue messages, not inject."""
+    """STREAMING state MUST reject messages via the gate, not inject."""
 
     @pytest.mark.asyncio
     async def test_streaming_state_blocks_chat_input(self) -> None:
-        """When conversation is STREAMING, messages are queued, not injected."""
+        """When conversation is STREAMING, messages are rejected by the gate."""
         ch = _make_channel()
         sm = SessionManager()
         session = Session(session_id="sess-stream-1", tool="claude")
@@ -175,6 +175,13 @@ class TestStreamingStateSafety:
         assert binding.state == ConversationState.STREAMING
 
         chat_handler = AsyncMock()
+
+        reject = GateDecision(
+            action="reject",
+            reason_code=GateRejectReason.REJECT_BUSY_STREAMING,
+            reason_message="Agent is working.",
+        )
+
         router = PromptRouter(
             session_manager=sm,
             channel=ch,
@@ -195,28 +202,21 @@ class TestStreamingStateSafety:
             timestamp=datetime.now(UTC).isoformat(),
             thread_id="chat-123",
         )
-        await router.handle_reply(reply)
+
+        with patch.object(router, "_evaluate_gate", return_value=reject):
+            await router.handle_reply(reply)
 
         # MUST NOT go to chat handler during STREAMING
         chat_handler.assert_not_called()
-        # MUST be queued
-        assert len(binding.queued_messages) == 1
+        # Gate sends feedback via notify
+        ch.notify.assert_called_once()
 
-    def test_queued_messages_delivered_on_running(self) -> None:
-        """Queued messages are drained when transitioning to RUNNING."""
+    def test_no_message_queueing_on_binding(self) -> None:
+        """ConversationBinding has no queued_messages — gate rejects instead."""
         registry = ConversationRegistry()
         binding = registry.bind("telegram", "chat-123", "sess-drain-1")
-        registry.transition_state("telegram", "chat-123", ConversationState.STREAMING)
-        binding.queued_messages.append("msg1")
-        binding.queued_messages.append("msg2")
-
-        # Transition to RUNNING
-        registry.transition_state("telegram", "chat-123", ConversationState.RUNNING)
-
-        # Drain messages
-        messages = registry.drain_queued_messages("sess-drain-1")
-        assert messages == ["msg1", "msg2"]
-        assert len(binding.queued_messages) == 0
+        assert not hasattr(binding, "queued_messages")
+        assert not hasattr(registry, "drain_queued_messages")
 
 
 class TestAccumulatorBounded:
