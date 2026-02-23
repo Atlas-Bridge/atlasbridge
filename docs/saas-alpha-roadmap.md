@@ -121,6 +121,21 @@ Local Runtime                    Cloud Service
 
 ---
 
+## Program Gate — Required Before Any SaaS Code Merges
+
+Before any SaaS or cloud-execution code can be merged to main, the following must be completed and documented in a decision record (see `docs/decisions/001-saas-program-gate.md`):
+
+1. Threat model updated with cloud-specific attack surfaces
+2. RBAC design documented and reviewed
+3. Data residency policy defined
+4. SOC2 readiness assessment completed
+5. All safety tests passing, new cloud invariant tests added
+6. CI governance guard for SaaS-labeled PRs
+
+This gate applies to Phase G (SaaS Observe-Only) and all subsequent phases. Design documents and stubs are permitted without the gate; production code paths are not.
+
+---
+
 ## What Must NOT Change
 
 These constraints are permanent across all phases:

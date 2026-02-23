@@ -112,6 +112,10 @@ This index helps you find the right document fast, whether you are a new user, a
 | [ga-readiness-checklist.md](ga-readiness-checklist.md) | Contributor | GA readiness audit: contract freeze, coverage, threat model, CI matrix, verdict | Before tagging v1.0 | Current |
 | [saas-alpha-roadmap.md](saas-alpha-roadmap.md) | Contributor | 90-day SaaS Alpha path: stabilization, observe-only cloud, multi-tenant alpha | For post-v1.0 planning | Design Only |
 | [versioning-policy.md](versioning-policy.md) | Both | SemVer, deprecation policy, breaking change protocol, tag-only releases | Before modifying frozen APIs | Current |
+| [phone-first-interaction.md](phone-first-interaction.md) | Both | Phone-first UX: text-only interaction, synonym normalization, boundary messages, Enter semantics | When understanding mobile operator workflow | Current |
+| [ga-boundary.md](ga-boundary.md) | Contributor | GA scope boundary: what is in/out of v1.0 | Before tagging v1.0 | Current |
+| [product-thesis.md](product-thesis.md) | Both | Product thesis: why AtlasBridge exists, problem statement, differentiation | For onboarding or positioning context | Current |
+| [roadmap-12month.md](roadmap-12month.md) | Both | 12-month roadmap: post-v1.0 phases and milestones | For long-term planning context | Current |
 
 ---
 
