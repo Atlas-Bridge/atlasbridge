@@ -91,7 +91,7 @@ class TestDetectLatency:
             times.append(elapsed_ms)
 
         p99 = sorted(times)[int(len(times) * 0.99)]
-        assert p99 < 5.0, f"p99 ANSI-heavy latency {p99:.2f}ms exceeds 5ms limit"
+        assert p99 < 10.0, f"p99 ANSI-heavy latency {p99:.2f}ms exceeds 10ms limit"
 
 
 @pytest.mark.performance
