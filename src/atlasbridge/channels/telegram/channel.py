@@ -171,6 +171,20 @@ class TelegramChannel(BaseChannel):
                 },
             )
 
+    async def send_agent_message(self, text: str, session_id: str = "") -> None:
+        """Send agent prose with HTML formatting (not <pre> monospace)."""
+        if len(text) > 4000:
+            text = text[:4000] + "\n...(truncated)"
+        for uid in self._allowed:
+            await self._api(
+                "sendMessage",
+                {
+                    "chat_id": uid,
+                    "text": text,
+                    "parse_mode": "HTML",
+                },
+            )
+
     async def edit_prompt_message(
         self,
         message_id: str,
@@ -271,6 +285,9 @@ class TelegramChannel(BaseChannel):
         except ValueError:
             return
 
+        # Extract chat_id for thread binding
+        cb_chat_id = cb.get("message", {}).get("chat", {}).get("id")
+
         reply = Reply(
             prompt_id=prompt_id,
             session_id=session_id,
@@ -278,6 +295,7 @@ class TelegramChannel(BaseChannel):
             nonce=nonce,
             channel_identity=f"telegram:{user_id}",
             timestamp=_utcnow(),
+            thread_id=str(cb_chat_id) if cb_chat_id else "",
         )
         await self._reply_queue.put(reply)
 
@@ -319,6 +337,7 @@ class TelegramChannel(BaseChannel):
             channel_identity=f"telegram:{user_id}",
             timestamp=_utcnow(),
             newline_policy="append",
+            thread_id=str(chat_id) if chat_id else "",
         )
         await self._reply_queue.put(reply)
 

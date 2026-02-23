@@ -55,10 +55,17 @@ class TestCRSemantics:
         assert b"\n" not in written_bytes, f"Must not contain \\n: {written_bytes!r}"
 
     def test_all_plans_append_cr(self) -> None:
-        """Every interaction plan has append_cr=True."""
+        """Every interaction plan has append_cr=True (except RAW_TERMINAL)."""
         for ic in InteractionClass:
+            if ic == InteractionClass.RAW_TERMINAL:
+                continue  # RAW_TERMINAL intentionally does not inject CR
             plan = build_plan(ic)
             assert plan.append_cr is True, f"{ic} plan must have append_cr=True"
+
+    def test_raw_terminal_no_cr(self) -> None:
+        """RAW_TERMINAL must not append CR — it never injects input."""
+        plan = build_plan(InteractionClass.RAW_TERMINAL)
+        assert plan.append_cr is False
 
 
 class TestPasswordRedaction:
@@ -223,7 +230,8 @@ class TestAllInteractionClassesValid:
     @pytest.mark.parametrize("ic", list(InteractionClass))
     def test_plan_has_button_layout(self, ic: InteractionClass) -> None:
         plan = build_plan(ic)
-        assert plan.button_layout in {"yes_no", "confirm_enter", "numbered", "none"}, (
+        valid = {"yes_no", "confirm_enter", "numbered", "trust_folder", "none"}
+        assert plan.button_layout in valid, (
             f"{ic} has unexpected button_layout: {plan.button_layout}"
         )
 

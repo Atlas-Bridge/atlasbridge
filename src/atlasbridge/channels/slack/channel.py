@@ -129,6 +129,18 @@ class SlackChannel(BaseChannel):
                     {"channel": ch_id, "text": formatted},
                 )
 
+    async def send_agent_message(self, text: str, session_id: str = "") -> None:
+        """Send agent prose with mrkdwn formatting (not code block)."""
+        if len(text) > 3500:
+            text = text[:3500] + "\n...(truncated)"
+        for uid in self._allowed:
+            ch_id = await self._get_dm_channel(uid)
+            if ch_id:
+                await self._api(
+                    "chat.postMessage",
+                    {"channel": ch_id, "text": text, "mrkdwn": True},
+                )
+
     async def edit_prompt_message(
         self,
         message_id: str,
@@ -206,10 +218,15 @@ class SlackChannel(BaseChannel):
                     payload = json.loads(raw) if isinstance(raw, str) else raw
                     if payload.get("type") == "block_actions":
                         user_id = payload.get("user", {}).get("id", "")
+                        # Extract thread context for conversation binding
+                        ch_info = payload.get("channel", {})
+                        ch_id = ch_info.get("id", "") if isinstance(ch_info, dict) else ""
+                        msg_ts = payload.get("message", {}).get("ts", "")
+                        thread_id = f"{ch_id}:{msg_ts}" if ch_id and msg_ts else ""
                         for action in payload.get("actions", []):
                             value = action.get("value", "")
                             if value:
-                                await self._handle_action(value, user_id)
+                                await self._handle_action(value, user_id, thread_id=thread_id)
                 elif req.type == "slash_commands":
                     payload = req.payload or {}
                     cmd = payload.get("command", "").lower()
@@ -245,7 +262,7 @@ class SlackChannel(BaseChannel):
         finally:
             await client.close()
 
-    async def _handle_action(self, value: str, user_id: str) -> None:
+    async def _handle_action(self, value: str, user_id: str, *, thread_id: str = "") -> None:
         """Parse callback value and enqueue Reply."""
         if not self.is_allowed(f"slack:{user_id}"):
             logger.warning("slack_action_rejected", user_id=user_id, reason="not_allowed")
@@ -265,6 +282,7 @@ class SlackChannel(BaseChannel):
             nonce=nonce,
             channel_identity=f"slack:{user_id}",
             timestamp=datetime.now(UTC).isoformat(),
+            thread_id=thread_id,
         )
         await self._reply_queue.put(reply)
 

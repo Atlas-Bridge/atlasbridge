@@ -61,6 +61,10 @@ docs/                    — all design documents
 | `src/atlasbridge/core/interaction/executor.py` | InteractionExecutor — injection, retry, advance verification |
 | `src/atlasbridge/core/interaction/engine.py` | InteractionEngine — per-session classify → plan → execute orchestrator |
 | `src/atlasbridge/core/interaction/output_forwarder.py` | OutputForwarder — batched PTY output → channel messages |
+| `src/atlasbridge/core/interaction/ml_classifier.py` | MLClassifier protocol + NullMLClassifier default |
+| `src/atlasbridge/core/interaction/fuser.py` | ClassificationFuser — deterministic + ML fusion rules |
+| `src/atlasbridge/core/interaction/output_router.py` | OutputRouter — agent prose vs CLI output classification |
+| `src/atlasbridge/core/conversation/session_binding.py` | ConversationRegistry — thread→session binding + state machine |
 | `src/atlasbridge/core/session/manager.py` | SessionManager (in-memory registry) |
 | `src/atlasbridge/core/store/database.py` | SQLite WAL store + decide_prompt() guard |
 | `src/atlasbridge/core/audit/writer.py` | Hash-chained audit event writer |
@@ -170,4 +174,6 @@ CREATED → ROUTED → AWAITING_REPLY → REPLY_RECEIVED → INJECTED → RESOLV
 | v0.9.4 | Phase D | Released | Platform automation — CI hardening, secret scan, coverage governance, release automation |
 | v0.9.5 | Phase C.X | Released | Operator console — `atlasbridge console` single-screen process management TUI |
 | v0.9.6 | Phase H | Released | Hard freeze — contract surface audit, tag-only publish, coverage governance, 1336 tests |
+| v0.9.7 | Phase C.Y | Released | Conversation UX v2 — interaction pipeline (classify→plan→execute), chat mode, output forwarding |
+| v0.9.8 | Phase C.Y2 | Released | Conversation session binding, ML classifier protocol, classification fuser, output router |
 | v1.0.0 | GA | Planned | Stable adapter + channel API, all platforms, all agents |

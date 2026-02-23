@@ -102,3 +102,4 @@ class Reply:
     channel_identity: str  # e.g. "telegram:123456789"
     timestamp: str  # ISO8601
     newline_policy: str = "append"  # "append" | "none" | "replace"
+    thread_id: str = ""  # Channel thread identifier (e.g. Telegram chat_id)
