@@ -253,7 +253,8 @@ class TestEscalation:
 
         assert result.escalated is True
         assert result.success is False
-        assert "arrow keys" in result.feedback_message
+        assert "did not respond" in result.feedback_message
+        assert "arrow keys" not in result.feedback_message
 
 
 # ---------------------------------------------------------------------------
