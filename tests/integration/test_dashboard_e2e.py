@@ -17,9 +17,11 @@ import threading
 import time
 from pathlib import Path
 
-import httpx
 import pytest
-import uvicorn
+
+pytest.importorskip("fastapi")
+uvicorn = pytest.importorskip("uvicorn")
+httpx = pytest.importorskip("httpx")
 
 
 def _find_free_port() -> int:
