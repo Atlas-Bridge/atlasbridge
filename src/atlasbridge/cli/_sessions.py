@@ -46,9 +46,7 @@ def sessions_show(session_id: str, as_json: bool = False) -> None:
     default=None,
     help="Filter by event type (e.g. prompt_detected, response_injected).",
 )
-def sessions_trace(
-    session_id: str, as_json: bool = False, event_type: str | None = None
-) -> None:
+def sessions_trace(session_id: str, as_json: bool = False, event_type: str | None = None) -> None:
     """Show chronological governance trace for a session."""
     cmd_sessions_trace(
         session_id=session_id, as_json=as_json, event_type=event_type, console=console

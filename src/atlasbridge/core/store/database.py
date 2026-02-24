@@ -296,9 +296,7 @@ class Database:
             "SELECT * FROM audit_events ORDER BY timestamp DESC LIMIT ?", (limit,)
         ).fetchall()
 
-    def get_audit_events_for_session(
-        self, session_id: str, limit: int = 500
-    ) -> list[sqlite3.Row]:
+    def get_audit_events_for_session(self, session_id: str, limit: int = 500) -> list[sqlite3.Row]:
         """Return audit events for a session, ordered chronologically (oldest first)."""
         return self._db.execute(
             "SELECT * FROM audit_events WHERE session_id = ? ORDER BY timestamp ASC LIMIT ?",
