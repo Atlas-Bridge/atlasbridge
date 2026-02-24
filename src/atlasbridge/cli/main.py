@@ -92,6 +92,7 @@ from atlasbridge.cli._console import console_cmd  # noqa: E402
 from atlasbridge.cli._daemon import start_cmd, stop_cmd  # noqa: E402
 from atlasbridge.cli._dashboard import dashboard_group  # noqa: E402
 from atlasbridge.cli._db import db_group  # noqa: E402
+from atlasbridge.cli._audit_cmd import audit_group  # noqa: E402
 from atlasbridge.cli._debug import debug_group  # noqa: E402
 from atlasbridge.cli._doctor import doctor_cmd  # noqa: E402
 from atlasbridge.cli._enterprise import cloud_group, edition_cmd, features_cmd  # noqa: E402
@@ -126,6 +127,7 @@ cli.add_command(cloud_group)
 cli.add_command(edition_cmd)
 cli.add_command(features_cmd)
 cli.add_command(trace_group)
+cli.add_command(audit_group)
 cli.add_command(pause_cmd)
 cli.add_command(resume_cmd)
 cli.add_command(lab_group)
