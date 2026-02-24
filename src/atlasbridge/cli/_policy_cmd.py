@@ -10,7 +10,7 @@ import sys
 import click
 
 from atlasbridge.core.policy.evaluator import evaluate
-from atlasbridge.core.policy.explain import explain_decision, explain_policy
+from atlasbridge.core.policy.explain import debug_policy, explain_decision, explain_policy
 from atlasbridge.core.policy.parser import PolicyParseError, load_policy
 
 
@@ -71,6 +71,12 @@ def policy_validate(policy_file: str) -> None:
     default=False,
     help="Show per-rule match details (verbose).",
 )
+@click.option(
+    "--debug",
+    is_flag=True,
+    default=False,
+    help="Full debug trace — evaluate ALL rules with no short-circuit (implies --explain).",
+)
 def policy_test(
     policy_file: str,
     prompt_text: str,
@@ -80,6 +86,7 @@ def policy_test(
     repo: str,
     session_tag: str,
     explain: bool,
+    debug: bool,
 ) -> None:
     """
     Test a policy against a synthetic prompt and show the decision.
@@ -98,6 +105,20 @@ def policy_test(
     except PolicyParseError as exc:
         click.echo(str(exc), err=True)
         sys.exit(1)
+
+    if debug:
+        click.echo(
+            debug_policy(
+                policy=policy,
+                prompt_text=prompt_text,
+                prompt_type=prompt_type,
+                confidence=confidence,
+                tool_id=tool_id,
+                repo=repo,
+                session_tag=session_tag,
+            )
+        )
+        return
 
     if explain:
         click.echo(
