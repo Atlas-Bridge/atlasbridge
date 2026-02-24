@@ -21,7 +21,13 @@ def policy_group() -> None:
 
 @policy_group.command("validate")
 @click.argument("policy_file", type=click.Path(exists=True, dir_okay=False))
-def policy_validate(policy_file: str) -> None:
+@click.option(
+    "--check-overlaps",
+    is_flag=True,
+    default=False,
+    help="Detect rules with overlapping match criteria.",
+)
+def policy_validate(policy_file: str, check_overlaps: bool = False) -> None:
     """
     Validate a policy YAML file against the AtlasBridge Policy DSL schema (v0 or v1).
 
@@ -36,6 +42,17 @@ def policy_validate(policy_file: str) -> None:
             f"{len(policy.rules)} rule(s), mode={policy.autonomy_mode.value}, "
             f"hash={policy.content_hash()})"
         )
+
+        if check_overlaps:
+            from atlasbridge.core.policy.overlap import detect_overlaps
+
+            warnings = detect_overlaps(policy)
+            if warnings:
+                click.echo(f"\n⚠  {len(warnings)} overlap warning(s):")
+                for w in warnings:
+                    click.echo(f"  - {w}")
+            else:
+                click.echo("\n✓  No overlapping rules detected.")
     except PolicyParseError as exc:
         click.echo(str(exc), err=True)
         sys.exit(1)
