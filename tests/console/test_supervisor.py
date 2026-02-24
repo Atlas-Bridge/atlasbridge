@@ -10,6 +10,7 @@ import pytest
 from atlasbridge.console.supervisor import (
     ProcessInfo,
     ProcessSupervisor,
+    _dashboard_healthy,
     _pid_alive,
     _port_listening,
 )
@@ -85,6 +86,53 @@ class TestHelpers:
         assert _port_listening(19999) is False
 
 
+class TestDashboardHealthy:
+    def test_returns_false_when_no_server(self):
+        assert _dashboard_healthy(19999) is False
+
+    def test_returns_true_for_overview_response(self):
+        import json
+        from unittest.mock import MagicMock
+
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = json.dumps({"activeSessions": 0}).encode()
+        mock_resp.__enter__ = MagicMock(return_value=mock_resp)
+        mock_resp.__exit__ = MagicMock(return_value=False)
+
+        with patch("urllib.request.urlopen", return_value=mock_resp):
+            assert _dashboard_healthy(8787) is True
+
+    def test_returns_true_for_legacy_stats_response(self):
+        import json
+        from unittest.mock import MagicMock
+
+        def mock_urlopen(req, timeout=None):
+            if "/api/overview" in req.full_url:
+                raise ConnectionError("not found")
+            mock_resp = MagicMock()
+            mock_resp.read.return_value = json.dumps(
+                {"sessions": 0, "prompts": 0, "active_sessions": 0}
+            ).encode()
+            mock_resp.__enter__ = MagicMock(return_value=mock_resp)
+            mock_resp.__exit__ = MagicMock(return_value=False)
+            return mock_resp
+
+        with patch("urllib.request.urlopen", side_effect=mock_urlopen):
+            assert _dashboard_healthy(8787) is True
+
+    def test_returns_false_for_non_atlasbridge_response(self):
+        import json
+        from unittest.mock import MagicMock
+
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = json.dumps({"hello": "world"}).encode()
+        mock_resp.__enter__ = MagicMock(return_value=mock_resp)
+        mock_resp.__exit__ = MagicMock(return_value=False)
+
+        with patch("urllib.request.urlopen", return_value=mock_resp):
+            assert _dashboard_healthy(8787) is False
+
+
 # ---------------------------------------------------------------------------
 # ProcessSupervisor — daemon
 # ---------------------------------------------------------------------------
@@ -148,7 +196,7 @@ class TestDaemonLifecycle:
 class TestDashboardLifecycle:
     def test_dashboard_status_not_running(self):
         supervisor = ProcessSupervisor()
-        with patch("atlasbridge.console.supervisor._port_listening", return_value=False):
+        with patch("atlasbridge.console.supervisor._dashboard_healthy", return_value=False):
             status = supervisor.dashboard_status(8787)
             assert status.name == "dashboard"
             assert status.running is False
@@ -163,7 +211,7 @@ class TestDashboardLifecycle:
 
         with (
             patch("asyncio.create_subprocess_exec", new_callable=AsyncMock, return_value=mock_proc),
-            patch("atlasbridge.console.supervisor._port_listening", return_value=True),
+            patch("atlasbridge.console.supervisor._dashboard_healthy", return_value=True),
         ):
             result = await supervisor.start_dashboard(port=8787)
             assert result.name == "dashboard"
@@ -285,7 +333,7 @@ class TestLifecycle:
         supervisor = ProcessSupervisor()
         with (
             patch("atlasbridge.cli._daemon._read_pid", return_value=None),
-            patch("atlasbridge.console.supervisor._port_listening", return_value=False),
+            patch("atlasbridge.console.supervisor._dashboard_healthy", return_value=False),
         ):
             statuses = supervisor.all_status()
             assert len(statuses) == 3
