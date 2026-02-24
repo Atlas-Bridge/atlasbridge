@@ -212,12 +212,12 @@ def debug_policy(
         if result.matched:
             match_count += 1
             if first_match_id is None:
-                first_match_id = rule.id
+                first_match_id = rule.id  # type: ignore[attr-defined]
                 marker = "  ← WINNER (first match)"
 
-        desc = f"  ({rule.description})" if rule.description else ""
-        lines.append(f"  [{idx}/{len(policy.rules)}] Rule {rule.id!r}{desc}")
-        lines.append(f"       Result: {status}  Action: {rule.action.type}{marker}")
+        desc = f"  ({rule.description})" if rule.description else ""  # type: ignore[attr-defined]
+        lines.append(f"  [{idx}/{len(policy.rules)}] Rule {rule.id!r}{desc}")  # type: ignore[attr-defined]
+        lines.append(f"       Result: {status}  Action: {rule.action.type}{marker}")  # type: ignore[attr-defined]
         for reason in result.reasons:
             lines.append(f"       {reason}")
         lines.append("")
