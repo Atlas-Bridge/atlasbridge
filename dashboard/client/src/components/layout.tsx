@@ -41,7 +41,7 @@ function TopNav() {
 
   return (
     <nav className="border-b bg-card" data-testid="nav-top">
-      <div className="max-w-[1400px] mx-auto px-4">
+      <div className="w-full px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between gap-2 h-14">
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 mr-4">
@@ -133,7 +133,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <HeaderBanner />
       <TopNav />
       <main className="flex-1 overflow-auto">
-        <div className="max-w-[1400px] mx-auto px-4 py-6">
+        <div className="w-full px-4 sm:px-6 lg:px-8 py-6">
           {children}
         </div>
       </main>
