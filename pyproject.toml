@@ -243,6 +243,8 @@ skips = [
     "B101",
     "B105",  # hardcoded_password_string — false positive on empty default token fields
     "B110",
+    "B112",  # try_except_continue — used in health check loop over endpoints
+    "B310",  # urllib_urlopen — only hits localhost (127.0.0.1) for dashboard health check
     "B404",
     "B602",
     "B603",

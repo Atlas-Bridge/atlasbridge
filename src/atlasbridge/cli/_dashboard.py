@@ -152,7 +152,7 @@ def _start_legacy_dashboard(
     show_default=True,
     help="Bind address (default: loopback only)",
 )
-@click.option("--port", default=5000, show_default=True, help="Port to listen on")
+@click.option("--port", default=3737, show_default=True, help="Port to listen on")
 @click.option(
     "--no-browser",
     is_flag=True,
@@ -194,7 +194,7 @@ def dashboard_start(
 
     if legacy:
         # Legacy defaults to port 8787 unless user overrode
-        if port == 5000:
+        if port == 3737:
             port = 8787
         _start_legacy_dashboard(host, port, no_browser, i_understand_risk)
         return
@@ -225,14 +225,40 @@ def dashboard_start(
 
 
 @dashboard_group.command("status")
-@click.option("--port", default=5000, show_default=True, help="Port to check")
+@click.option("--port", default=3737, show_default=True, help="Port to check")
 def dashboard_status(port: int) -> None:
     """Check if the dashboard server is running."""
+    import json
+    import urllib.request
+
+    # Try Node.js dashboard endpoint (localhost-only, safe)
+    try:
+        req = urllib.request.Request(f"http://127.0.0.1:{port}/api/overview", method="GET")
+        with urllib.request.urlopen(req, timeout=2) as resp:  # noqa: S310
+            data = json.loads(resp.read())
+            if "activeSessions" in data:
+                click.echo(f"Dashboard is running on port {port}")
+                return
+    except Exception:  # noqa: BLE001
+        pass
+
+    # Try legacy FastAPI dashboard endpoint (localhost-only, safe)
+    try:
+        req = urllib.request.Request(f"http://127.0.0.1:{port}/api/stats", method="GET")
+        with urllib.request.urlopen(req, timeout=2) as resp:  # noqa: S310
+            data = json.loads(resp.read())
+            if "active_sessions" in data:
+                click.echo(f"Dashboard is running on port {port} (legacy)")
+                return
+    except Exception:  # noqa: BLE001
+        pass
+
+    # Neither endpoint matched — check if port is in use by something else
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
         result = sock.connect_ex(("127.0.0.1", port))
         if result == 0:
-            click.echo(f"Dashboard is running on port {port}")
+            click.echo(f"Port {port} is in use by another service (not AtlasBridge dashboard)")
         else:
             click.echo(f"Dashboard is not running on port {port}")
     finally:

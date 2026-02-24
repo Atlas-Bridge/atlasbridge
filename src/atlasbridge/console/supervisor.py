@@ -102,6 +102,24 @@ def _port_listening(port: int, host: str = "127.0.0.1") -> bool:
         sock.close()
 
 
+def _dashboard_healthy(port: int, host: str = "127.0.0.1") -> bool:
+    """Check if an AtlasBridge dashboard is responding on the given port."""
+    import json
+    import urllib.request
+
+    for path in ("/api/overview", "/api/stats"):
+        try:
+            url = f"http://{host}:{port}{path}"
+            req = urllib.request.Request(url, method="GET")  # noqa: S310
+            with urllib.request.urlopen(req, timeout=2) as resp:  # noqa: S310
+                data = json.loads(resp.read())
+                if "activeSessions" in data or "active_sessions" in data:
+                    return True
+        except Exception:  # noqa: BLE001, S112
+            continue
+    return False
+
+
 class ProcessSupervisor:
     """Manages daemon, dashboard, and agent subprocesses.
 
@@ -233,7 +251,7 @@ class ProcessSupervisor:
     def dashboard_status(self, port: int = 8787) -> ProcessInfo:
         """Check dashboard status via socket probe."""
         effective_port = port or self._dashboard_port
-        listening = _port_listening(effective_port)
+        listening = _dashboard_healthy(effective_port)
         pid: int | None = None
         if self._dashboard_proc is not None and self._dashboard_proc.returncode is None:
             pid = self._dashboard_proc.pid

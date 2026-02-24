@@ -87,7 +87,7 @@ app.use((req, res, next) => {
   }
 
   const host = process.env.HOST || "127.0.0.1";
-  const port = parseInt(process.env.PORT || "5000", 10);
+  const port = parseInt(process.env.PORT || "3737", 10);
   httpServer.listen({ port, host }, () => {
     log(`serving on http://${host}:${port}`);
   });
