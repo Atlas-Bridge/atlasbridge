@@ -112,8 +112,8 @@ def analyze_coverage(policy: Policy | PolicyV1) -> PolicyCoverage:
             _analyze_v1_rule(rule, covered_types, covered_conf, has_wildcard_set=None)
             # Check any_of branches for wildcards and types
             m = rule.match
-            if m.any_of is not None:
-                for sub in m.any_of:
+            if m.any_of is not None:  # type: ignore[union-attr]
+                for sub in m.any_of:  # type: ignore[union-attr]
                     _collect_criteria(sub, covered_types, covered_conf)
                     if sub.prompt_type and PromptTypeFilter.ANY in sub.prompt_type:
                         has_wildcard = True
