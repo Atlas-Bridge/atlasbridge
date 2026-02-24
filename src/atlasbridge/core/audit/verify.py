@@ -48,9 +48,7 @@ def verify_audit_chain(
         rows = db.get_audit_events_for_session(session_id)
     else:
         # Get all events in chronological order
-        rows = db._db.execute(
-            "SELECT * FROM audit_events ORDER BY timestamp ASC"
-        ).fetchall()
+        rows = db._db.execute("SELECT * FROM audit_events ORDER BY timestamp ASC").fetchall()
 
     total = len(rows)
     result = AuditVerifyResult(valid=True, total_events=total)

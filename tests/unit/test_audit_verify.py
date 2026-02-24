@@ -262,9 +262,7 @@ class TestFormatVerifyResult:
 
     def test_truncated_errors(self):
         errors = [f"error-{i}" for i in range(15)]
-        result = AuditVerifyResult(
-            valid=False, total_events=15, verified_events=15, errors=errors
-        )
+        result = AuditVerifyResult(valid=False, total_events=15, verified_events=15, errors=errors)
         text = format_verify_result(result)
         assert "and 5 more" in text
 

@@ -82,9 +82,7 @@ def audit_verify(session_id: str, as_json: bool) -> None:
                 )
             )
         else:
-            click.echo(
-                format_verify_result(result, session_id=session_id or None)
-            )
+            click.echo(format_verify_result(result, session_id=session_id or None))
 
         sys.exit(0 if result.valid else 1)
     finally:
