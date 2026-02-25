@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.8] — 2026-02-25
+
+### Fixed
+- **"Agent is busy" on valid Telegram replies** — OutputForwarder no longer overwrites `AWAITING_INPUT` state to `STREAMING`/`RUNNING`, so user replies are accepted immediately instead of being rejected as "Agent is busy" (#336, #340)
+- **Gate session status authority** — gate evaluation now uses session status `AWAITING_REPLY` as authoritative source, overriding stale conversation binding state (#340)
+- 5 new tests (2393 total)
+
+---
+
 ## [1.1.7] — 2026-02-25
 
 ### Fixed
