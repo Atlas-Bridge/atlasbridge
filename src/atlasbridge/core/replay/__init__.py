@@ -235,8 +235,8 @@ class ReplayReport:
         if self.diffs:
             lines.append("DIFFERENCES:")
             lines.append("-" * 60)
-            for d in self.diffs:
-                lines.append(f"  [{d.prompt_id[:8]}] {d.field}: {d.original!r} → {d.replayed!r}")
+            for dd in self.diffs:
+                lines.append(f"  [{dd.prompt_id[:8]}] {dd.field}: {dd.original!r} → {dd.replayed!r}")
             lines.append("")
 
         lines.append("=" * 60)

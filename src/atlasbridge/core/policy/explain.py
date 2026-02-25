@@ -553,13 +553,13 @@ def full_explain(
 
         is_winner = result.matched and first_match_id is None
         if is_winner:
-            first_match_id = rule.id  # type: ignore[attr-defined]
+            first_match_id = rule.id
 
         rule_traces.append(
             RuleTrace(
-                rule_id=rule.id,  # type: ignore[attr-defined]
-                description=rule.description or "",  # type: ignore[attr-defined]
-                action_type=rule.action.type,  # type: ignore[attr-defined]
+                rule_id=rule.id,
+                description=rule.description or "",
+                action_type=rule.action.type,
                 matched=result.matched,
                 reasons=result.reasons,
                 is_winner=is_winner,
