@@ -92,6 +92,7 @@ This index helps you find the right document fast, whether you are a new user, a
 | [enterprise-trust-boundaries.md](enterprise-trust-boundaries.md) | Contributor | 6 trust domains, secret handling, transport security | For security review | Design Only |
 | [enterprise-prompts.md](enterprise-prompts.md) | Contributor | Enterprise prompt patterns and escalation workflows | When working on enterprise escalation | Design Only |
 | [ethics-and-safety-guarantees.md](ethics-and-safety-guarantees.md) | Both | Safety invariants, CI enforcement, ethics gate | Before modifying safety-critical code | Current |
+| [roadmap-12month.md](roadmap-12month.md) | Both | 12-month product strategy: deterministic core, enterprise governance, ecosystem | For long-term planning | Current |
 | [roadmap-enterprise-90-days.md](roadmap-enterprise-90-days.md) | Contributor | 90-day enterprise roadmap: Phase A/B/C milestones | For enterprise planning context | Current |
 | [enterprise-dashboard-product-spec.md](enterprise-dashboard-product-spec.md) | Contributor | Phase C dashboard: personas, feature matrix, MVP scope, success metrics | For Phase C planning | Design Only |
 | [enterprise-dashboard-ui-map.md](enterprise-dashboard-ui-map.md) | Contributor | Phase C dashboard: 8 screens with wireframes, navigation flow, component hierarchy | For Phase C UI design | Design Only |
@@ -109,6 +110,8 @@ This index helps you find the right document fast, whether you are a new user, a
 | [streaming-behavior.md](streaming-behavior.md) | Both | Streaming architecture: OutputForwarder, secret redaction, plan detection, StreamingConfig | When understanding or configuring streaming behavior | Current |
 | [project-hygiene.md](project-hygiene.md) | Contributor | Operating protocol for project board hygiene: Done evidence rules, sprint convention, status definitions | When updating project board after merging work | Current |
 | [positioning-v1.md](positioning-v1.md) | Both | v1.0 positioning: what AtlasBridge is/is not, target audience, invariants, compatibility | Before v1.0 launch | Current |
+| [product-thesis.md](product-thesis.md) | Both | Product thesis: core identity, governance primitives, competitive positioning | For strategic context | Current |
+| [ga-boundary.md](ga-boundary.md) | Contributor | v1.0 GA scope boundary: six mandatory capabilities, explicit deferrals | Before modifying GA scope | Current |
 | [ga-readiness-checklist.md](ga-readiness-checklist.md) | Contributor | GA readiness audit: contract freeze, coverage, threat model, CI matrix, verdict | Before tagging v1.0 | Current |
 | [saas-alpha-roadmap.md](saas-alpha-roadmap.md) | Contributor | 90-day SaaS Alpha path: stabilization, observe-only cloud, multi-tenant alpha | For post-v1.0 planning | Design Only |
 | [versioning-policy.md](versioning-policy.md) | Both | SemVer, deprecation policy, breaking change protocol, tag-only releases | Before modifying frozen APIs | Current |

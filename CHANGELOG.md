@@ -11,6 +11,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.6] — 2026-02-25
+
+### Added
+- **GA core runtime features** — deterministic risk classification, policy explain with `autopilot explain --explain`, and session replay engine with `atlasbridge replay` (#268, #270, #272, #337)
+- **Prompt delivery dedup** — `prompt_deliveries` table (schema v2) with `UNIQUE(prompt_id, channel, channel_identity)` constraint; prompts survive daemon restarts without re-sending (#336, #338)
+- **Callback ref store** — server-side reference store for callback_data exceeding Telegram's 64-byte limit; short `ref:{key}:{value}` format with 10-minute TTL cleanup (#336)
+- **Terminal hint stripping** — centralized `strip_terminal_hints()` with 28 phrases (ctrl shortcuts, arrow keys, VS Code references, vim hints) for phone-first UX (#336)
+- **Reply alias normalization** — `yes/yeah/yep → y`, `no/nah/nope → n` for natural-language Telegram replies (#336)
+- **Reply acknowledgements** — visible toast on button tap and channel notification after successful injection (#336)
+- **Rate-limit collapse message** — sends user-visible "Rate limit" message instead of silently dropping (#336)
+- **Documentation** — GA boundary scope (`ga-boundary.md`), product thesis (`product-thesis.md`), 12-month roadmap (`roadmap-12month.md`)
+- 44 new tests (2391 total)
+
+### Fixed
+- **Telegram callback_data overflow** — compound key (84+ bytes) silently broke inline keyboard buttons; now always fits within 64-byte limit (#336)
+- **mypy errors** in `explain.py` and replay engine (#337)
+
+---
+
+## [1.1.5] — 2026-02-25
+
+### Fixed
+- **Claude trust prompt relay** — workspace trust prompts forwarded to Telegram are now phone-first and workspace-centric instead of terminal/folder-centric (#316, #333)
+- **Free-text reply binding** — `yes`/`no`/`1`/`2` replies from Telegram are now bound to the active prompt before gate evaluation, eliminating spurious "No active session" errors (#333)
+- **Terminal hint stripping** — strips 7 terminal-only hints from relayed questions while preserving deterministic mapping to injected values (#333)
+
+---
+
 ## [1.1.4] — 2026-02-24
 
 ### Added
@@ -622,7 +650,21 @@ AtlasBridge v1.0.0 is the first stable release. All 8 contract surfaces are froz
 
 ---
 
-[Unreleased]: https://github.com/abdulraoufatia/atlasbridge/compare/v0.9.6...HEAD
+[Unreleased]: https://github.com/abdulraoufatia/atlasbridge/compare/v1.1.6...HEAD
+[1.1.6]: https://github.com/abdulraoufatia/atlasbridge/compare/v1.1.5...v1.1.6
+[1.1.5]: https://github.com/abdulraoufatia/atlasbridge/compare/v1.1.4...v1.1.5
+[1.1.4]: https://github.com/abdulraoufatia/atlasbridge/compare/v1.1.3...v1.1.4
+[1.1.3]: https://github.com/abdulraoufatia/atlasbridge/compare/v1.1.2...v1.1.3
+[1.1.2]: https://github.com/abdulraoufatia/atlasbridge/compare/v1.1.1...v1.1.2
+[1.1.1]: https://github.com/abdulraoufatia/atlasbridge/compare/v1.1.0...v1.1.1
+[1.1.0]: https://github.com/abdulraoufatia/atlasbridge/compare/v1.0.1...v1.1.0
+[1.0.1]: https://github.com/abdulraoufatia/atlasbridge/compare/v1.0.0...v1.0.1
+[1.0.0]: https://github.com/abdulraoufatia/atlasbridge/compare/v0.10.1...v1.0.0
+[0.10.1]: https://github.com/abdulraoufatia/atlasbridge/compare/v0.10.0...v0.10.1
+[0.10.0]: https://github.com/abdulraoufatia/atlasbridge/compare/v0.9.9...v0.10.0
+[0.9.9]: https://github.com/abdulraoufatia/atlasbridge/compare/v0.9.8...v0.9.9
+[0.9.8]: https://github.com/abdulraoufatia/atlasbridge/compare/v0.9.7...v0.9.8
+[0.9.7]: https://github.com/abdulraoufatia/atlasbridge/compare/v0.9.6...v0.9.7
 [0.9.6]: https://github.com/abdulraoufatia/atlasbridge/compare/v0.9.5...v0.9.6
 [0.9.5]: https://github.com/abdulraoufatia/atlasbridge/compare/v0.9.4...v0.9.5
 [0.9.4]: https://github.com/abdulraoufatia/atlasbridge/compare/v0.9.3...v0.9.4

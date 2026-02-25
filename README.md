@@ -422,6 +422,9 @@ See [CHANGELOG.md](CHANGELOG.md) for full version history.
 | v0.9.8 | Released | Conversation UX v2 — interaction pipeline, ML classifier protocol, session binding, output router |
 | v0.9.9 | Released | Chat mode UX — per-plan escalation, folder trust detection, no more "arrow keys" messages |
 | v0.10.0 | Released | Full conversational agent mode — streaming state, plan detection, secret redaction |
+| v1.1.6 | Released | GA core runtime — risk classification, policy explain, session replay, Telegram dedup |
+| v1.1.5 | Released | Phone-first trust prompt relay, free-text reply binding |
+| v1.1.0–v1.1.4 | Released | Node.js/React dashboard, bundled pip package, port fixes |
 | v1.0.1 | Released | Prompt spam dedup fix, GA-stable |
 | v1.0.0 | Released | GA — stable APIs, 2005 tests, 8 frozen contract surfaces |
 
