@@ -400,6 +400,139 @@ class TestTrustFolderPromptFlow:
         mock_adapter.inject_reply.assert_not_called()
 
 
+class TestTrustPromptChoicesFallback:
+    """When excerpt is truncated (no numbered options), choices fallback kicks in."""
+
+    # Excerpt truncated to 200 chars — no numbered options visible
+    TRUNCATED_EXCERPT = (
+        "Do you trust the files in this folder? Claude Code may read, "
+        "create, edit, and delete files, install and uninstall packages, "
+        "and execute commands in this folder. Files in this folder could"
+    )
+
+    CHOICES = ["Yes, I trust this folder", "No, exit"]
+
+    @pytest.mark.asyncio
+    async def test_yes_maps_to_1_via_choices_fallback(
+        self,
+        engine: InteractionEngine,
+        mock_adapter: AsyncMock,
+        mock_detector: MagicMock,
+    ) -> None:
+        event = PromptEvent.create(
+            session_id="test-session-abc123",
+            prompt_type=PromptType.TYPE_MULTIPLE_CHOICE,
+            confidence=Confidence.HIGH,
+            excerpt=self.TRUNCATED_EXCERPT,
+            choices=self.CHOICES,
+        )
+        reply = _reply("yes")
+
+        initial = mock_detector.last_output_time
+
+        async def _advance(**kwargs: object) -> None:
+            mock_detector.last_output_time = initial + 2.0
+
+        mock_adapter.inject_reply = AsyncMock(side_effect=_advance)
+
+        result = await engine.handle_prompt_reply(event, reply)
+
+        assert result.success is True
+        call_kwargs = mock_adapter.inject_reply.call_args
+        injected = call_kwargs.kwargs.get("value") or call_kwargs[1].get("value")
+        assert injected == "1"
+
+    @pytest.mark.asyncio
+    async def test_trust_maps_to_1_via_choices_fallback(
+        self,
+        engine: InteractionEngine,
+        mock_adapter: AsyncMock,
+        mock_detector: MagicMock,
+    ) -> None:
+        event = PromptEvent.create(
+            session_id="test-session-abc123",
+            prompt_type=PromptType.TYPE_MULTIPLE_CHOICE,
+            confidence=Confidence.HIGH,
+            excerpt=self.TRUNCATED_EXCERPT,
+            choices=self.CHOICES,
+        )
+        reply = _reply("trust")
+
+        initial = mock_detector.last_output_time
+
+        async def _advance(**kwargs: object) -> None:
+            mock_detector.last_output_time = initial + 2.0
+
+        mock_adapter.inject_reply = AsyncMock(side_effect=_advance)
+
+        result = await engine.handle_prompt_reply(event, reply)
+
+        assert result.success is True
+        call_kwargs = mock_adapter.inject_reply.call_args
+        injected = call_kwargs.kwargs.get("value") or call_kwargs[1].get("value")
+        assert injected == "1"
+
+    @pytest.mark.asyncio
+    async def test_no_maps_to_2_via_choices_fallback(
+        self,
+        engine: InteractionEngine,
+        mock_adapter: AsyncMock,
+        mock_detector: MagicMock,
+    ) -> None:
+        event = PromptEvent.create(
+            session_id="test-session-abc123",
+            prompt_type=PromptType.TYPE_MULTIPLE_CHOICE,
+            confidence=Confidence.HIGH,
+            excerpt=self.TRUNCATED_EXCERPT,
+            choices=self.CHOICES,
+        )
+        reply = _reply("no")
+
+        initial = mock_detector.last_output_time
+
+        async def _advance(**kwargs: object) -> None:
+            mock_detector.last_output_time = initial + 2.0
+
+        mock_adapter.inject_reply = AsyncMock(side_effect=_advance)
+
+        result = await engine.handle_prompt_reply(event, reply)
+
+        assert result.success is True
+        call_kwargs = mock_adapter.inject_reply.call_args
+        injected = call_kwargs.kwargs.get("value") or call_kwargs[1].get("value")
+        assert injected == "2"
+
+    @pytest.mark.asyncio
+    async def test_yeah_maps_to_1_via_choices_fallback(
+        self,
+        engine: InteractionEngine,
+        mock_adapter: AsyncMock,
+        mock_detector: MagicMock,
+    ) -> None:
+        event = PromptEvent.create(
+            session_id="test-session-abc123",
+            prompt_type=PromptType.TYPE_MULTIPLE_CHOICE,
+            confidence=Confidence.HIGH,
+            excerpt=self.TRUNCATED_EXCERPT,
+            choices=self.CHOICES,
+        )
+        reply = _reply("yeah")
+
+        initial = mock_detector.last_output_time
+
+        async def _advance(**kwargs: object) -> None:
+            mock_detector.last_output_time = initial + 2.0
+
+        mock_adapter.inject_reply = AsyncMock(side_effect=_advance)
+
+        result = await engine.handle_prompt_reply(event, reply)
+
+        assert result.success is True
+        call_kwargs = mock_adapter.inject_reply.call_args
+        injected = call_kwargs.kwargs.get("value") or call_kwargs[1].get("value")
+        assert injected == "1"
+
+
 class TestFuserIntegration:
     """Engine uses fuser when provided, falls back to classifier when not."""
 

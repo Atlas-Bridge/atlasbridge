@@ -58,16 +58,6 @@ _RETRY_MAX_S = 60.0
 _CALLBACK_REF_TTL_S = 600.0  # 10 minutes TTL for callback refs
 _TELEGRAM_CALLBACK_MAX = 64  # Telegram callback_data byte limit
 
-# Reply aliases: common natural-language replies mapped to canonical values
-_REPLY_ALIASES: dict[str, str] = {
-    "yes": "y",
-    "yeah": "y",
-    "yep": "y",
-    "no": "n",
-    "nah": "n",
-    "nope": "n",
-}
-
 
 class TelegramConflictError(Exception):
     """Raised when Telegram returns 409 — another poller is active."""
@@ -442,11 +432,6 @@ class TelegramChannel(BaseChannel):
 
         if not self.is_allowed(f"telegram:{user_id}"):
             return
-
-        # Normalize common reply aliases (yes→y, no→n, etc.)
-        alias = _REPLY_ALIASES.get(text.lower())
-        if alias is not None:
-            text = alias
 
         # Free-text reply: nonce is derived from message_id for idempotency
         nonce = secrets.token_hex(8)

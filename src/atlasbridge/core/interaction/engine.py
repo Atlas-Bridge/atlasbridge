@@ -19,7 +19,11 @@ import structlog
 
 from atlasbridge.core.interaction.classifier import InteractionClass, InteractionClassifier
 from atlasbridge.core.interaction.executor import InjectionResult, InteractionExecutor
-from atlasbridge.core.interaction.normalizer import detect_binary_menu, normalize_reply
+from atlasbridge.core.interaction.normalizer import (
+    build_binary_menu_from_choices,
+    detect_binary_menu,
+    normalize_reply,
+)
 from atlasbridge.core.interaction.plan import build_plan
 
 if TYPE_CHECKING:
@@ -109,6 +113,8 @@ class InteractionEngine:
         injection_value = reply.value
         if ic == InteractionClass.NUMBERED_CHOICE:
             menu = detect_binary_menu(event.excerpt)
+            if menu is None and event.choices:
+                menu = build_binary_menu_from_choices(event.choices)
             if menu is not None:
                 normalized = normalize_reply(menu, reply.value)
                 if normalized is not None:
