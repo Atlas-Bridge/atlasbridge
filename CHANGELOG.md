@@ -11,6 +11,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.0] — 2026-02-25
+
+### Fixed
+- **Trust prompt reply semantics** — "yes" now correctly maps to option "1" for numbered-choice prompts (e.g. Claude Code folder trust). Root cause: Telegram channel alias normalization destroyed semantic information before the interaction normalizer could map it (#341)
+- **Choices fallback for truncated excerpts** — when `detect_binary_menu()` fails due to 200-char excerpt truncation, `build_binary_menu_from_choices()` uses the parsed `event.choices` list as fallback (#341)
+- **Reply alias layer removed from Telegram channel** — normalization now handled exclusively in the interaction layer where prompt context is available (#341)
+
+### Added
+- Expanded synonym sets: "yeah", "yep", "sure", "yea" (yes); "nah", "nope" (no)
+- Colloquial forms added to `_NORMALISE[TYPE_YES_NO]` in ClaudeCodeAdapter
+- 16 new tests (2411 total)
+
+---
+
 ## [1.1.9] — 2026-02-25
 
 ### Changed
