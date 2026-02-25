@@ -177,6 +177,18 @@ class ConsoleScreen(Screen):
             app_state = poll_state()
             channel_card = self.query_one("#card-channel", _ConsoleCard)
             channel_card.update_value(app_state.channel_summary or "none")
+
+            # Show update notification if available
+            if app_state.update_available and app_state.latest_version:
+                try:
+                    data_label = self.query_one("#data-paths", Label)
+                    data_label.update(
+                        f"[yellow]Update available: {__version__} → "
+                        f"{app_state.latest_version} "
+                        f"(pip install -U atlasbridge)[/yellow]"
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
         except Exception:  # noqa: BLE001
             pass
 

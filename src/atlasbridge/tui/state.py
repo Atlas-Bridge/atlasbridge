@@ -38,6 +38,8 @@ class AppState:
     session_count: int = 0
     pending_prompt_count: int = 0
     last_error: str = ""
+    update_available: bool = False
+    latest_version: str = ""
 
     @property
     def is_configured(self) -> bool:
