@@ -260,33 +260,22 @@ class TestCallbackRefFallback:
         assert len(data.encode()) <= 64
 
 
-class TestReplyAliases:
-    """Common reply aliases are normalized before creating Reply."""
+class TestReplyAliasesRemovedFromChannel:
+    """Reply aliases removed from channel — normalization is in the interaction layer."""
 
-    def test_yes_normalizes_to_y(self) -> None:
-        from atlasbridge.channels.telegram.channel import _REPLY_ALIASES
+    def test_no_reply_aliases_in_channel(self) -> None:
+        import atlasbridge.channels.telegram.channel as mod
 
-        assert _REPLY_ALIASES["yes"] == "y"
+        assert not hasattr(mod, "_REPLY_ALIASES")
 
-    def test_nope_normalizes_to_n(self) -> None:
-        from atlasbridge.channels.telegram.channel import _REPLY_ALIASES
+    def test_raw_reply_preserved(self) -> None:
+        """Channel should pass raw user text without alias normalization."""
+        from atlasbridge.core.interaction.normalizer import NO_SYNONYMS, YES_SYNONYMS
 
-        assert _REPLY_ALIASES["nope"] == "n"
-
-    def test_yeah_normalizes_to_y(self) -> None:
-        from atlasbridge.channels.telegram.channel import _REPLY_ALIASES
-
-        assert _REPLY_ALIASES["yeah"] == "y"
-
-    def test_nah_normalizes_to_n(self) -> None:
-        from atlasbridge.channels.telegram.channel import _REPLY_ALIASES
-
-        assert _REPLY_ALIASES["nah"] == "n"
-
-    def test_non_alias_not_in_map(self) -> None:
-        from atlasbridge.channels.telegram.channel import _REPLY_ALIASES
-
-        assert "maybe" not in _REPLY_ALIASES
+        assert "yes" in YES_SYNONYMS
+        assert "yeah" in YES_SYNONYMS
+        assert "nope" in NO_SYNONYMS
+        assert "nah" in NO_SYNONYMS
 
 
 class TestGetAllowedIdentities:
