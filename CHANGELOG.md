@@ -11,6 +11,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.0] — 2026-02-25
+
+### Added
+- **Automatic update check** — AtlasBridge now checks PyPI for newer versions with a 24h file-based cache. Notifications appear across all interfaces (#343):
+  - CLI: `atlasbridge version` shows "Update available: X.Y.Z → A.B.C"
+  - Dashboard: dismissable amber banner between header and nav
+  - Console: update notice in the operator status line
+- New `/api/version` endpoint in the React dashboard
+- `VersionInfo` schema type for dashboard frontend
+- 14 new tests for version checker (2427 total)
+
+### Fixed
+- **Dashboard hardcoded version** — `atlasbridge-repo.ts` returned "1.1.4" instead of the actual installed version. Now reads dynamically from the Python package (#343)
+
+### Changed
+- `AppState` extended with `update_available` and `latest_version` fields
+- `poll_state()` includes version check on each poll cycle (cached, effectively free)
+- Updated `docs/upgrade.md` with "Checking for Updates" section
+- Updated `README.md` with "Update" section
+
+---
+
 ## [1.2.1] — 2026-02-25
 
 ### Fixed
