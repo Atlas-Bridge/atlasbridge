@@ -108,12 +108,21 @@ pip install atlasbridge
 
 # With Slack support:
 pip install "atlasbridge[slack]"
-
-# Upgrade to latest version:
-pip install --upgrade atlasbridge
 ```
 
 Requires Python 3.11+. Works on macOS and Linux.
+
+## Update
+
+```bash
+# Upgrade to latest version:
+pip install --upgrade atlasbridge
+
+# Check current version:
+atlasbridge version
+```
+
+AtlasBridge automatically checks for updates and shows a notice in the CLI, dashboard, and console when a new version is available. Your config, tokens, and database are preserved across upgrades. See [docs/upgrade.md](docs/upgrade.md) for details.
 
 ---
 
