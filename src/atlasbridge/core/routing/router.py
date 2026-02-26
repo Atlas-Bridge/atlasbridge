@@ -460,16 +460,17 @@ class PromptRouter:
             session = self._sessions.get_or_none(session_id)
             if session:
                 active_prompt_id = session.active_prompt_id
-                # Fallback: derive a conversation state from the session status when
-                # no explicit ConversationBinding exists yet. This allows first
-                # replies to freshly-routed prompts (e.g. trust prompts) to pass
-                # the gate without reporting "No active session" while still
-                # respecting STOPPED/terminal invariants.
-                # Session status is the authoritative source of truth.
-                # The binding state can be stale (e.g. OutputForwarder
-                # transitioned to RUNNING before the prompt was detected),
-                # so override whenever session status says AWAITING_REPLY.
-                if session.status == SessionStatus.AWAITING_REPLY:
+                # The session model is the authoritative source of truth.
+                # The conversation binding state can be stale due to
+                # OutputForwarder transitions, bind() resets, or timing
+                # races between prompt dispatch and reply arrival.
+                #
+                # Two definitive signals that the session is awaiting input:
+                #   1. session.status == AWAITING_REPLY
+                #   2. session.active_prompt_id is set (prompt dispatched,
+                #      reply not yet received)
+                # Either signal overrides any stale binding state.
+                if session.active_prompt_id or session.status == SessionStatus.AWAITING_REPLY:
                     state = ConversationState.AWAITING_INPUT
                 elif state is None:
                     if session.status in (SessionStatus.STARTING, SessionStatus.RUNNING):
