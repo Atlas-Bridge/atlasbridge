@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.2] — 2026-02-26
+
+### Fixed
+- **Trust prompt misclassified as FREE_TEXT** — Claude Code's folder trust prompt (with Unicode bullet `❯` before numbered items) was detected as FREE_TEXT with medium confidence instead of MULTIPLE_CHOICE with high confidence, causing reply injection to fail (#345)
+- **Choice extraction failed on Unicode bullets** — `extract_choices()` regex now handles `❯ 1. Yes, I trust this folder` style lines (#345)
+- **Trust pattern gap too narrow** — widened `trust…folder` regex gap from 80 to 200 chars to match Claude Code's verbose safety message (#345)
+
+---
+
 ## [1.3.1] — 2026-02-26
 
 ### Fixed

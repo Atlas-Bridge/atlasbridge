@@ -431,6 +431,7 @@ See [CHANGELOG.md](CHANGELOG.md) for full version history.
 | v0.9.8 | Released | Conversation UX v2 — interaction pipeline, ML classifier protocol, session binding, output router |
 | v0.9.9 | Released | Chat mode UX — per-plan escalation, folder trust detection, no more "arrow keys" messages |
 | v0.10.0 | Released | Full conversational agent mode — streaming state, plan detection, secret redaction |
+| v1.3.2 | Released | Fix trust prompt detection — Unicode bullet handling in detector and choice extractor |
 | v1.3.1 | Released | Fix "Agent is busy" gate race, accept natural text replies, phone-first prompt UX |
 | v1.3.0 | Released | Automatic update check across CLI, dashboard, and console |
 | v1.2.1 | Released | Fix FOLDER_TRUST normalization, dashboard path, favicon |
