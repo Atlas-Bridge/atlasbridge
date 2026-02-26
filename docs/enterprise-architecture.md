@@ -160,8 +160,8 @@ Three editions control feature availability:
 | Edition | Feature Flags Enabled | Target User |
 |---------|----------------------|-------------|
 | **COMMUNITY** | None (all flags False) | Individual developers, open source users |
-| **PRO** | decision_trace_v2, risk_classification, policy_pinning, audit_hash_chain | Teams needing governance and compliance |
-| **ENTERPRISE** | All PRO flags + cloud_sync, dashboard_api | Organizations needing centralized visibility |
+| **CORE** | decision_trace_v2, risk_classification, policy_pinning, audit_hash_chain | Teams needing governance and compliance |
+| **ENTERPRISE** | All CORE flags + cloud_sync, dashboard_api | Organizations needing centralized visibility |
 
 ### Resolution Order
 
