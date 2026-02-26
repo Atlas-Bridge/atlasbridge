@@ -11,6 +11,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.6.4] — 2026-02-26
+
+### Added
+- **Operator write actions** — kill switch (`POST /api/operator/kill-switch`) and autonomy mode setter (`POST /api/operator/mode`) on the dashboard; both invoke `atlasbridge autopilot` CLI via `execFile` (#328)
+- **Operator audit log** — new `operator_audit_log` table in dashboard.db; every write action logged with method, path, action, body, result, and error (if any) (#328)
+- **CSRF protection** — server sets `csrf-token` cookie (`httpOnly: false`) on every response; client injects `x-csrf-token` header on all non-GET mutations via `apiRequest()` (#328)
+- **Rate limiting** — in-memory sliding-window limiter (10 req/min per IP+path) on operator endpoints; returns `429` with `Retry-After` header (#328)
+- **OperatorPanel UI** — new Operator Controls card on the overview page: autonomy mode dropdown + kill switch button with AlertDialog confirmation (#328)
+- **15 vitest tests** for operator routes, CSRF middleware, rate limiter, audit log helpers, and mode validation (#328)
+
+---
+
 ## [1.6.3] — 2026-02-26
 
 ### Added
