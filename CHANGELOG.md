@@ -11,6 +11,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.6.5] — 2026-02-26
+
+### Added
+- **`test_audit_attacks.py`** — 24 new safety regression tests covering SHA-256 hash algorithm verification, payload/event-type/hash tampering detection, gap attack, truncation attack, phantom insertion, concurrent sequential writes, and restart simulation (#323)
+- **Prompt injection extensions** — 16 new parametrized safety cases: control character injection (BEL/FF/VT/BS), channel identity spoofing via SQL injection, reply value injection (newline/CRLF/null byte) (#323)
+- **Dashboard: 32 KB payload limit** — `express.json({ limit: "32kb", strict: true })` + `urlencoded({ limit: "32kb" })` (#332)
+- **Dashboard: content-type enforcement** — all `/api` POST/PUT/PATCH requests must send `application/json`; others return 415 (#332)
+- **Dashboard: safe error handler** — production 5xx returns `"Internal Server Error"` only; no stack traces or internal detail in responses (#332)
+- **27 vitest security regression tests** — payload limits, content-type, CSRF logic, rate limiter, localhost binding, safe error handling (#332)
+- **Deployment profiles** — `config/profiles/core.yaml` (default) and `config/profiles/high_assurance.yaml` (stricter defaults for regulated environments) (#346)
+- **`docs/deployment-profiles.md`** — profile reference: usage, invariants preserved, custom profiles (#346)
+- **`docs/audit-export.md`** — JSON export format, SHA-256 chain algorithm, independent verification script, SIEM/S3 integration (#346)
+- **`docs/role-separation.md`** — execution / policy_author / audit_viewer roles; filesystem enforcement; invariants preserved (#346)
+- **`docs/threat-model.md`** — updated from v0.2.0 to v1.6.x: 6 new STRIDE entries (dashboard operator spoofing, operator endpoint abuse, oversized payload, stack trace disclosure, content-type bypass, autopilot DB tampering) (#346)
+
+---
+
 ## [1.6.4] — 2026-02-26
 
 ### Added

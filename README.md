@@ -432,6 +432,7 @@ See [CHANGELOG.md](CHANGELOG.md) for full version history.
 | v1.6.2 | Released | Formal edition contract — router separation, CapabilitySpec enrichment, 41 new enforcement tests |
 | v1.6.3 | Released | Governance Evidence page — real sessions, 36 vitest tests, unified dashboard (one audience), governance-evidence.md |
 | v1.6.4 | Released | Operator write actions — kill switch, autonomy mode, CSRF, rate limiting, audit log, 15 vitest tests |
+| v1.6.5 | Released | P0 hardening sprint — 24 audit attack tests, dashboard payload limits + content-type, deployment profiles, threat model v1.6.x, audit export spec, role separation |
 | v1.6.1 | Released | Security fix — terminal sandbox, loopback-only WebSocket guard |
 | v1.6.0 | Released | Dashboard edition split — Core/Enterprise editions, badge system, capability-gated routes |
 | v1.5.0 | Released | Q1 Foundations — remove tui/, simplify CLI, doctor LLM check, keyring-first, audit export, environment tagging |
