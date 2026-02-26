@@ -11,6 +11,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.1] — 2026-02-26
+
+### Fixed
+- **"Agent is busy" on valid replies** — gate now uses `session.active_prompt_id` as definitive `AWAITING_INPUT` signal, overriding stale conversation binding state from OutputForwarder races (#344)
+- **Natural text replies rejected** — gate no longer validates choices; normalizer maps "yes", "allow", "trust" etc. to option numbers post-gate (#344)
+
+### Changed
+- **Phone-first prompt UX** — Telegram/Slack prompts now say "Tap a button or reply yes / no" instead of "Reply 1 or 2"; button labels show choice text without numbered prefixes (#344)
+- 4 new tests (2431 total)
+
+---
+
 ## [1.3.0] — 2026-02-25
 
 ### Added
