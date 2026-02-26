@@ -121,6 +121,9 @@ jobs:
       - name: atlasbridge console --help
         run: atlasbridge console --help
 
+      - name: atlasbridge profile --help
+        run: atlasbridge profile --help
+
       - name: atlasbridge chat --help
         run: atlasbridge chat --help
 
