@@ -20,31 +20,32 @@ Maturity: Experimental (Phase A — local governance scaffolding)
 
 from __future__ import annotations
 
+import os
 from enum import StrEnum
 
 
 class Edition(StrEnum):
     """AtlasBridge edition tiers.
 
-    COMMUNITY — open-source core; fully functional.
-    PRO       — local enterprise governance (Phase A); open-core.
-    ENTERPRISE — cloud governance + dashboard (Phase B/C); future SaaS.
+    COMMUNITY  — open-source; fully functional local runtime.
+    CORE       — local governance (Phase A); open-core.
+    ENTERPRISE — cloud governance + dashboard (Phase B/C).
     """
 
     COMMUNITY = "community"
-    PRO = "pro"
+    CORE = "core"
     ENTERPRISE = "enterprise"
 
 
 # Feature flag registry: feature_name → minimum edition required
 _FEATURE_FLAGS: dict[str, Edition] = {
-    # Phase A — local governance (Pro)
-    "decision_trace_v2": Edition.PRO,
-    "risk_classifier": Edition.PRO,
-    "policy_pinning": Edition.PRO,
-    "audit_integrity_check": Edition.PRO,
-    "rbac": Edition.PRO,
-    "policy_lifecycle": Edition.PRO,
+    # Phase A — local governance (Core)
+    "decision_trace_v2": Edition.CORE,
+    "risk_classifier": Edition.CORE,
+    "policy_pinning": Edition.CORE,
+    "audit_integrity_check": Edition.CORE,
+    "rbac": Edition.CORE,
+    "policy_lifecycle": Edition.CORE,
     # Phase B — cloud integration (Enterprise)
     "cloud_policy_sync": Edition.ENTERPRISE,
     "cloud_audit_stream": Edition.ENTERPRISE,
@@ -53,17 +54,24 @@ _FEATURE_FLAGS: dict[str, Edition] = {
     "web_dashboard": Edition.ENTERPRISE,
 }
 
+_EDITION_ORDER = [Edition.COMMUNITY, Edition.CORE, Edition.ENTERPRISE]
+
 
 def detect_edition() -> Edition:
-    """Detect the active edition based on available license/config.
+    """Detect the active edition.
 
-    Currently always returns COMMUNITY.  Pro and Enterprise detection
-    will be added when license validation is implemented.
+    Reads the ``ATLASBRIDGE_EDITION`` environment variable.  Valid values
+    are ``community``, ``core``, and ``enterprise`` (case-insensitive).
+    Falls back to COMMUNITY when unset or invalid.
 
     This function is intentionally simple and deterministic — no network
     calls, no side effects.
     """
-    # TODO: check for pro license file or enterprise config
+    env = os.environ.get("ATLASBRIDGE_EDITION", "").lower()
+    if env == "core":
+        return Edition.CORE
+    if env == "enterprise":
+        return Edition.ENTERPRISE
     return Edition.COMMUNITY
 
 
@@ -73,18 +81,16 @@ def is_feature_available(feature: str) -> bool:
     if required is None:
         return False
     current = detect_edition()
-    edition_order = [Edition.COMMUNITY, Edition.PRO, Edition.ENTERPRISE]
-    return edition_order.index(current) >= edition_order.index(required)
+    return _EDITION_ORDER.index(current) >= _EDITION_ORDER.index(required)
 
 
 def list_features() -> dict[str, dict[str, str]]:
     """Return all features with their required edition and availability."""
     current = detect_edition()
-    edition_order = [Edition.COMMUNITY, Edition.PRO, Edition.ENTERPRISE]
-    current_idx = edition_order.index(current)
+    current_idx = _EDITION_ORDER.index(current)
     result: dict[str, dict[str, str]] = {}
     for feature, required in _FEATURE_FLAGS.items():
-        available = edition_order.index(required) <= current_idx
+        available = _EDITION_ORDER.index(required) <= current_idx
         result[feature] = {
             "required_edition": required.value,
             "available": "yes" if available else "no",

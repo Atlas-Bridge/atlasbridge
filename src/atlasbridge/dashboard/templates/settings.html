@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+
+{% block title %}Settings &mdash; AtlasBridge{% endblock %}
+
+{% block content %}
+<h1>Settings</h1>
+
+<h2>Runtime</h2>
+<div class="table-responsive">
+<table>
+    <tbody>
+        <tr><td>Edition</td><td>{{ settings.runtime.edition }}</td></tr>
+        <tr><td>Version</td><td>{{ settings.runtime.version }}</td></tr>
+        <tr><td>Python</td><td>{{ settings.runtime.python_version }}</td></tr>
+        <tr><td>Platform</td><td>{{ settings.runtime.platform }}</td></tr>
+    </tbody>
+</table>
+</div>
+
+<h2>Config Paths</h2>
+<div class="table-responsive">
+<table>
+    <tbody>
+        <tr><td>Config directory</td><td><code>{{ settings.config_paths.config_dir }}</code></td></tr>
+        <tr><td>Config file</td><td><code>{{ settings.config_paths.config_file }}</code></td></tr>
+        <tr><td>Database</td><td><code>{{ settings.config_paths.db_path }}</code></td></tr>
+        <tr><td>Audit log</td><td><code>{{ settings.config_paths.audit_log }}</code></td></tr>
+        <tr><td>Trace file</td><td><code>{{ settings.config_paths.trace_file }}</code></td></tr>
+    </tbody>
+</table>
+</div>
+
+<h2>Dashboard Binding</h2>
+<div class="table-responsive">
+<table>
+    <tbody>
+        <tr><td>Host</td><td>{{ settings.dashboard.host }}</td></tr>
+        <tr><td>Port</td><td>{{ settings.dashboard.port }}</td></tr>
+        <tr><td>Loopback only</td><td>{{ "Yes" if settings.dashboard.loopback_only else "No" }}</td></tr>
+    </tbody>
+</table>
+</div>
+
+<h2>Diagnostics</h2>
+<div class="table-responsive">
+<table>
+    <thead>
+        <tr>
+            <th>Check</th>
+            <th>Status</th>
+            <th>Detail</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for check in settings.diagnostics %}
+        <tr>
+            <td>{{ check.name }}</td>
+            <td>
+                {% if check.status == "pass" %}
+                <span class="status-completed">pass</span>
+                {% elif check.status == "warn" %}
+                <span class="status-running">warn</span>
+                {% elif check.status == "fail" %}
+                <span class="status-crashed">fail</span>
+                {% else %}
+                <span class="status-canceled">{{ check.status }}</span>
+                {% endif %}
+            </td>
+            <td>{{ check.detail }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+
+{% if settings.features %}
+<h2>Feature Flags</h2>
+<div class="table-responsive">
+<table>
+    <thead>
+        <tr>
+            <th>Feature</th>
+            <th>Required Edition</th>
+            <th>Status</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for name, info in settings.features.items() %}
+        <tr>
+            <td>{{ name }}</td>
+            <td>{{ info.required_edition }}</td>
+            <td>
+                {% if info.status == "active" %}
+                <span class="status-completed">active</span>
+                {% else %}
+                <span class="status-canceled">locked</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+{% endif %}
+{% endblock %}

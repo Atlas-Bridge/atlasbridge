@@ -14,6 +14,7 @@ Usage::
 from __future__ import annotations
 
 import logging
+import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -100,6 +101,67 @@ class _AccessLogMiddleware(BaseHTTPMiddleware):
             },
         )
         return response
+
+
+def _collect_settings(db_path: Path, trace_path: Path) -> dict:
+    """Gather read-only settings data for the settings page."""
+    import atlasbridge
+    from atlasbridge.cli._doctor import (
+        _check_adapters,
+        _check_config,
+        _check_database,
+        _check_platform,
+        _check_ptyprocess,
+        _check_python_version,
+        _check_ui_assets,
+    )
+    from atlasbridge.core.config import _config_file_path, atlasbridge_dir
+    from atlasbridge.core.constants import AUDIT_FILENAME
+    from atlasbridge.enterprise import detect_edition, list_features
+
+    edition = detect_edition()
+    config_dir = atlasbridge_dir()
+    config_file = _config_file_path()
+
+    checks_raw = [
+        _check_python_version(),
+        _check_platform(),
+        _check_ptyprocess(),
+        _check_config(),
+        _check_database(),
+        _check_adapters(),
+        _check_ui_assets(),
+    ]
+    diagnostics = [c for c in checks_raw if c is not None]
+
+    vi = sys.version_info
+    data: dict = {
+        "runtime": {
+            "edition": edition.value,
+            "version": atlasbridge.__version__,
+            "python_version": f"{vi.major}.{vi.minor}.{vi.micro}",
+            "platform": sys.platform,
+        },
+        "config_paths": {
+            "config_dir": str(config_dir),
+            "config_file": str(config_file),
+            "db_path": str(db_path),
+            "audit_log": str(config_dir / AUDIT_FILENAME),
+            "trace_file": str(trace_path),
+        },
+        "dashboard": {
+            "host": "127.0.0.1",
+            "port": 8787,
+            "loopback_only": True,
+        },
+        "diagnostics": diagnostics,
+    }
+
+    # Core and Enterprise editions include feature flags
+    if edition.value in ("core", "enterprise"):
+        data["features"] = list_features()
+
+    return data
 
 
 def create_app(
@@ -228,6 +290,31 @@ def create_app(
             },
         )
 
+    @app.get("/settings", response_class=HTMLResponse)
+    async def settings(request: Request):
+        settings_data = _collect_settings(db_path, trace_path)
+        return templates.TemplateResponse(
+            request,
+            "settings.html",
+            {"settings": settings_data},
+        )
+
+    @app.get("/enterprise/settings", response_class=HTMLResponse)
+    async def enterprise_settings(request: Request):
+        from atlasbridge.enterprise import Edition, detect_edition
+
+        if detect_edition() != Edition.ENTERPRISE:
+            return JSONResponse(
+                {"error": "Enterprise settings require Enterprise edition"},
+                status_code=404,
+            )
+        settings_data = _collect_settings(db_path, trace_path)
+        return templates.TemplateResponse(
+            request,
+            "settings.html",
+            {"settings": settings_data},
+        )
+
     # ------------------------------------------------------------------
     # JSON API Routes
     # ------------------------------------------------------------------
@@ -273,6 +360,10 @@ def create_app(
                 "verified_at": datetime.now(timezone.utc).isoformat(),
             }
         )
+
+    @app.get("/api/settings")
+    async def api_settings():
+        return JSONResponse(_collect_settings(db_path, trace_path))
 
     return app
 
