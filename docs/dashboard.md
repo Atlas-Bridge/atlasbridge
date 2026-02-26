@@ -32,13 +32,15 @@ The dashboard supports two editions: **Core** and **Enterprise**.
 
 | Feature | Core | Enterprise |
 |---------|------|------------|
-| Sessions, prompts, traces | Yes | Yes |
-| Integrity verification | Yes | Yes |
-| Session export (JSON/HTML) | Yes | Yes |
-| Settings view | Yes | Yes |
-| Edition badge in header | CORE | ENTERPRISE |
+| Home (sessions + stats) | Yes | Yes |
+| Session detail | Yes | Yes |
+| Settings (runtime, config, diagnostics) | Yes | Yes |
+| Decision Traces (list + detail) | No | Yes |
+| Integrity Verification | No | Yes |
+| Session Export (JSON/HTML) | No | Yes |
+| Capabilities table in Settings | No | Yes |
 | Enterprise Settings page | No | Yes |
-| Extended capability views | No | Yes |
+| Edition badge in header | CORE | ENTERPRISE |
 
 Both editions show invariant badges (**READ-ONLY**, **LOCAL ONLY**) on every page.
 
@@ -60,9 +62,9 @@ atlasbridge dashboard start
 
 ### What changes between editions
 
-**Core** is the default. The dashboard shows sessions, prompts, decision traces, integrity checks, and settings. No enterprise-specific language or navigation appears.
+**Core** is the default. The dashboard shows sessions, basic stats, and settings (runtime info, config paths, dashboard binding, diagnostics). Core nav shows Home and Settings only.
 
-**Enterprise** adds an Enterprise Settings page (`/enterprise/settings`) and shows the enterprise navigation link. Enterprise routes are gated by the capability registry — requesting `/enterprise/settings` on a core edition dashboard returns a 404 JSON response.
+**Enterprise** adds decision trace browsing, integrity verification, session export, and the full capabilities table in settings. Enterprise nav shows Home, Traces, Integrity, Settings, and Enterprise Settings. Enterprise-only routes return a 404 JSON response when accessed on a core edition dashboard.
 
 ### Runtime capabilities API
 

@@ -171,13 +171,15 @@ class TestDashboardE2EServer:
         resp = httpx.get(f"{e2e_server}/sessions/sess-e2e", timeout=5.0)
         assert resp.status_code == 200
 
-    def test_traces_page_returns_200(self, e2e_server):
+    def test_traces_page_gated_on_core(self, e2e_server):
+        """Traces are enterprise-only, returns 404 on default (core) edition."""
         resp = httpx.get(f"{e2e_server}/traces", timeout=5.0)
-        assert resp.status_code == 200
+        assert resp.status_code == 404
 
-    def test_integrity_page_returns_200(self, e2e_server):
+    def test_integrity_page_gated_on_core(self, e2e_server):
+        """Integrity is enterprise-only, returns 404 on default (core) edition."""
         resp = httpx.get(f"{e2e_server}/integrity", timeout=5.0)
-        assert resp.status_code == 200
+        assert resp.status_code == 404
 
     def test_nonexistent_session_returns_200_with_empty(self, e2e_server):
         resp = httpx.get(f"{e2e_server}/sessions/does-not-exist", timeout=5.0)

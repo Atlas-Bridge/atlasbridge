@@ -91,9 +91,17 @@ class TestEditionBadges:
         assert "LOCAL ONLY" in resp.text
 
     def test_badges_on_all_core_pages(self, core_client):
-        """All pages must show edition + invariant badges."""
-        for path in ["/", "/traces", "/integrity", "/settings"]:
+        """All core pages must show edition + invariant badges."""
+        for path in ["/", "/settings"]:
             resp = core_client.get(path)
+            assert "badge-edition" in resp.text, f"No edition badge on {path}"
+            assert "READ-ONLY" in resp.text, f"No READ-ONLY badge on {path}"
+            assert "LOCAL ONLY" in resp.text, f"No LOCAL ONLY badge on {path}"
+
+    def test_badges_on_all_enterprise_pages(self, enterprise_client):
+        """All enterprise pages must show edition + invariant badges."""
+        for path in ["/", "/traces", "/integrity", "/settings"]:
+            resp = enterprise_client.get(path)
             assert "badge-edition" in resp.text, f"No edition badge on {path}"
             assert "READ-ONLY" in resp.text, f"No READ-ONLY badge on {path}"
             assert "LOCAL ONLY" in resp.text, f"No LOCAL ONLY badge on {path}"
@@ -111,9 +119,25 @@ class TestConditionalNav:
         resp = core_client.get("/")
         assert "/enterprise/settings" not in resp.text
 
+    def test_core_nav_excludes_traces(self, core_client):
+        resp = core_client.get("/")
+        assert 'href="/traces"' not in resp.text
+
+    def test_core_nav_excludes_integrity(self, core_client):
+        resp = core_client.get("/")
+        assert 'href="/integrity"' not in resp.text
+
     def test_enterprise_nav_includes_enterprise_settings(self, enterprise_client):
         resp = enterprise_client.get("/")
         assert "/enterprise/settings" in resp.text
+
+    def test_enterprise_nav_includes_traces(self, enterprise_client):
+        resp = enterprise_client.get("/")
+        assert 'href="/traces"' in resp.text
+
+    def test_enterprise_nav_includes_integrity(self, enterprise_client):
+        resp = enterprise_client.get("/")
+        assert 'href="/integrity"' in resp.text
 
     def test_core_nav_has_settings(self, core_client):
         """Core nav still includes the regular Settings link."""
@@ -141,10 +165,10 @@ class TestCoreNoEnterpriseCopy:
         for word in self.FORBIDDEN:
             assert word not in resp.text, f"Found {word!r} in core settings page"
 
-    def test_traces_no_enterprise_language(self, core_client):
+    def test_traces_gated_on_core(self, core_client):
+        """Traces page is enterprise-only, so 404 on core."""
         resp = core_client.get("/traces")
-        for word in self.FORBIDDEN:
-            assert word not in resp.text, f"Found {word!r} in core traces page"
+        assert resp.status_code == 404
 
 
 # ---------------------------------------------------------------------------
@@ -165,6 +189,65 @@ class TestEnterpriseRouteGating:
         resp = core_client.get("/enterprise/settings")
         data = resp.json()
         assert "error" in data
+
+    def test_traces_404_on_core(self, core_client):
+        resp = core_client.get("/traces")
+        assert resp.status_code == 404
+
+    def test_trace_detail_404_on_core(self, core_client):
+        resp = core_client.get("/traces/0")
+        assert resp.status_code == 404
+
+    def test_integrity_404_on_core(self, core_client):
+        resp = core_client.get("/integrity")
+        assert resp.status_code == 404
+
+    def test_export_404_on_core(self, core_client):
+        resp = core_client.get("/api/sessions/fake-id/export")
+        assert resp.status_code == 404
+
+    def test_verify_404_on_core(self, core_client):
+        resp = core_client.post("/api/integrity/verify")
+        assert resp.status_code == 404
+
+    def test_traces_200_on_enterprise(self, enterprise_client):
+        resp = enterprise_client.get("/traces")
+        assert resp.status_code == 200
+
+    def test_integrity_200_on_enterprise(self, enterprise_client):
+        resp = enterprise_client.get("/integrity")
+        assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Settings content differs by edition
+# ---------------------------------------------------------------------------
+
+
+class TestSettingsContent:
+    """Settings page content differs between core and enterprise."""
+
+    def test_core_settings_no_capabilities(self, core_client):
+        """Core settings page must not show Capabilities section."""
+        resp = core_client.get("/settings")
+        assert resp.status_code == 200
+        assert ">Capabilities<" not in resp.text
+
+    def test_enterprise_settings_has_capabilities(self, enterprise_client):
+        """Enterprise settings page shows Capabilities section."""
+        resp = enterprise_client.get("/settings")
+        assert resp.status_code == 200
+        assert ">Capabilities<" in resp.text
+
+    def test_core_settings_has_diagnostics(self, core_client):
+        """Core settings still shows Diagnostics section."""
+        resp = core_client.get("/settings")
+        assert ">Diagnostics<" in resp.text
+
+    def test_core_settings_has_runtime(self, core_client):
+        """Core settings shows Runtime section."""
+        resp = core_client.get("/settings")
+        assert ">Runtime<" in resp.text
 
 
 # ---------------------------------------------------------------------------

@@ -88,10 +88,10 @@ class TestSettingsHTMLPage:
         for forbidden in ("RBAC", "Organization", "Tenant", "GBAC"):
             assert forbidden not in text, f"Found forbidden string {forbidden!r} in settings page"
 
-    def test_settings_contains_capabilities_section(self, client):
-        """Settings page should show Capabilities section."""
+    def test_settings_hides_capabilities_on_core(self, client):
+        """Core settings page hides Capabilities section (enterprise-only)."""
         resp = client.get("/settings")
-        assert "Capabilities" in resp.text
+        assert ">Capabilities<" not in resp.text
 
     def test_settings_contains_authority_mode(self, client):
         """Settings page should show Authority Mode."""
@@ -250,11 +250,11 @@ class TestEditionScopedSettings:
         assert "capabilities" in data
         assert "tooling.decision_trace_v2" in data["capabilities"]
 
-    def test_core_settings_html_shows_capabilities(self, core_client):
-        """Core edition settings page shows Capabilities section."""
+    def test_core_settings_html_hides_capabilities(self, core_client):
+        """Core edition settings page hides Capabilities section."""
         resp = core_client.get("/settings")
         assert resp.status_code == 200
-        assert "Capabilities" in resp.text
+        assert ">Capabilities<" not in resp.text
 
     def test_core_edition_in_runtime(self, core_client):
         """Core edition reports correctly in runtime section."""

@@ -191,9 +191,9 @@ def create_app(
     environment: str = "",
 ) -> FastAPI:
     """Create the FastAPI dashboard application."""
-    from atlasbridge.enterprise.edition import detect_authority_mode, detect_edition
+    from atlasbridge.enterprise.edition import Edition, detect_authority_mode, detect_edition
     from atlasbridge.enterprise.guard import FeatureUnavailableError, require_capability
-    from atlasbridge.enterprise.registry import FeatureRegistry
+    from atlasbridge.enterprise.registry import CapabilityDecision, FeatureRegistry
 
     db_path = db_path or _default_db_path()
     trace_path = trace_path or _default_trace_path()
@@ -241,6 +241,17 @@ def create_app(
     # Module-level throttle state for integrity verify
     last_verify: dict[str, float] = {"ts": 0.0}
 
+    def _require_enterprise() -> None:
+        """Raise FeatureUnavailableError if not enterprise edition."""
+        if edition != Edition.ENTERPRISE:
+            decision = CapabilityDecision(
+                allowed=False,
+                reason_code="EDITION_DENY",
+                capability_class="enterprise",
+                decision_fingerprint="",
+            )
+            raise FeatureUnavailableError(decision, "enterprise_feature")
+
     # ------------------------------------------------------------------
     # HTML Routes
     # ------------------------------------------------------------------
@@ -284,6 +295,7 @@ def create_app(
 
     @app.get("/traces", response_class=HTMLResponse)
     async def traces_list(request: Request):
+        _require_enterprise()
         page = int(request.query_params.get("page") or 1)
         per_page = 20
         action_type = request.query_params.get("action_type") or None
@@ -308,6 +320,7 @@ def create_app(
 
     @app.get("/traces/{index}", response_class=HTMLResponse)
     async def trace_detail(request: Request, index: int):
+        _require_enterprise()
         entries = repo.trace_tail(index + 1)
         entry = entries[index] if index < len(entries) else None
         return templates.TemplateResponse(
@@ -322,6 +335,7 @@ def create_app(
 
     @app.get("/integrity", response_class=HTMLResponse)
     async def integrity(request: Request):
+        _require_enterprise()
         trace_valid, trace_errors = repo.verify_integrity()
         audit_valid, audit_errors = repo.verify_audit_integrity()
         audit_events = repo.list_audit_events(limit=50)
@@ -388,6 +402,7 @@ def create_app(
 
     @app.get("/api/sessions/{session_id}/export")
     async def api_session_export(session_id: str):
+        _require_enterprise()
         from atlasbridge.dashboard.export import export_session_json
 
         bundle = export_session_json(repo, session_id)
@@ -397,6 +412,7 @@ def create_app(
 
     @app.post("/api/integrity/verify")
     async def api_verify_integrity():
+        _require_enterprise()
         now = time.monotonic()
         if now - last_verify["ts"] < _VERIFY_COOLDOWN_SECONDS:
             return JSONResponse(

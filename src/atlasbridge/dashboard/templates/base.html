@@ -21,8 +21,10 @@
             <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation">&#9776;</button>
             <div class="nav-links" id="nav-links">
                 <a href="/">Home</a>
+                {% if edition == "enterprise" %}
                 <a href="/traces">Traces</a>
                 <a href="/integrity">Integrity</a>
+                {% endif %}
                 <a href="/settings">Settings</a>
                 {% if edition == "enterprise" %}
                 <a href="/enterprise/settings">Enterprise Settings</a>
