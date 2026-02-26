@@ -14,16 +14,31 @@ declare module "http" {
   }
 }
 
+// Payload size limit — reject bodies larger than 32 KB
 app.use(
   express.json({
+    limit: "32kb",
+    strict: true,
     verify: (req, _res, buf) => {
       req.rawBody = buf;
     },
   }),
 );
 
-app.use(express.urlencoded({ extended: false }));
+app.use(express.urlencoded({ extended: false, limit: "32kb" }));
 app.use(setCsrfCookie);
+
+// Content-type enforcement for API mutation endpoints
+app.use("/api", (req: Request, res: Response, next: NextFunction) => {
+  if (["POST", "PUT", "PATCH"].includes(req.method)) {
+    const ct = req.headers["content-type"] ?? "";
+    if (!ct.startsWith("application/json")) {
+      res.status(415).json({ error: "Unsupported Media Type — application/json required" });
+      return;
+    }
+  }
+  next();
+});
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -70,15 +85,23 @@ app.use((req, res, next) => {
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
 
-    console.error("Internal Server Error:", err);
+    // Never leak stack traces or internal error details to clients
+    const isProd = process.env.NODE_ENV === "production";
+    const message =
+      isProd && status >= 500 ? "Internal Server Error" : err.message || "Internal Server Error";
+
+    if (!isProd) {
+      console.error("Internal Server Error:", err);
+    } else {
+      console.error(`[${status}] ${err.message ?? "unknown error"}`);
+    }
 
     if (res.headersSent) {
       return next(err);
     }
 
-    return res.status(status).json({ message });
+    return res.status(status).json({ error: message });
   });
 
   if (process.env.NODE_ENV === "production") {
