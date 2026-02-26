@@ -10,6 +10,7 @@ import csv
 import io
 import json
 import sys
+from typing import Any
 
 import click
 
@@ -92,7 +93,7 @@ def audit_verify(session_id: str, as_json: bool) -> None:
         db.close()
 
 
-def _row_to_dict(row) -> dict:
+def _row_to_dict(row: Any) -> dict:
     """Convert a sqlite3.Row to a plain dict."""
     return {k: row[k] for k in row.keys()}
 

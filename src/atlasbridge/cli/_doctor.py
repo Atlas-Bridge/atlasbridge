@@ -630,7 +630,7 @@ def _check_llm_provider() -> dict | None:
     except Exception as exc:  # noqa: BLE001
         provider_name = ""
         try:
-            provider_name = provider_cfg.name  # type: ignore[possibly-undefined]
+            provider_name = provider_cfg.name
         except Exception:  # noqa: BLE001
             pass
         if provider_name:
@@ -653,10 +653,7 @@ def _check_plaintext_tokens() -> dict | None:
         return None
 
     try:
-        try:
-            import tomllib
-        except ModuleNotFoundError:
-            import tomli as tomllib  # type: ignore[no-redef]
+        import tomllib
 
         cfg_path = _config_path()
         if not cfg_path.exists():
