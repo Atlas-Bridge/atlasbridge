@@ -95,8 +95,14 @@ export async function registerRoutes(
 ): Promise<Server> {
   await seedDatabase();
 
+  const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
   const wss = new WebSocketServer({ server: httpServer, path: "/ws/terminal" });
-  wss.on("connection", (ws: WebSocket) => {
+  wss.on("connection", (ws: WebSocket, req) => {
+    const ip = req.socket.remoteAddress ?? "";
+    if (!LOOPBACK.has(ip)) {
+      ws.close(1008, "Terminal access is restricted to loopback connections.");
+      return;
+    }
     handleTerminalConnection(ws);
   });
 

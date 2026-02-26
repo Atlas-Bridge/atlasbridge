@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from "child_process";
+import { tmpdir } from "os";
 import type { WebSocket } from "ws";
 
 interface TerminalSession {
@@ -19,10 +20,17 @@ export function handleTerminalConnection(ws: WebSocket) {
         case "create": {
           sessionCounter++;
           const id = `term-${sessionCounter}`;
-          const shell = process.env.SHELL || "/bin/bash";
+          const shell = "/bin/bash";
+          const safeEnv: NodeJS.ProcessEnv = {
+            TERM: "xterm-256color",
+            COLORTERM: "truecolor",
+            PATH: "/usr/local/bin:/usr/bin:/bin",
+            LANG: process.env.LANG ?? "en_US.UTF-8",
+            HOME: tmpdir(),
+          };
           const proc = spawn(shell, ["-i"], {
-            env: { ...process.env, TERM: "xterm-256color", COLORTERM: "truecolor" },
-            cwd: process.env.HOME || "/home/runner",
+            env: safeEnv,
+            cwd: tmpdir(),
             stdio: ["pipe", "pipe", "pipe"],
           });
 

@@ -365,20 +365,21 @@ See [CHANGELOG.md](CHANGELOG.md) for the full version history, or [GitHub Releas
 
 AtlasBridge ships two editions, both open source (MIT license):
 
-- **Core** — policy engine, PTY supervisor, prompt detection, channel relay, audit log, decision traces, local dashboard, session export. Fully functional. The default.
-- **Enterprise** — everything in Core plus extended settings views, capability-gated routes, and additional dashboard features.
+- **Core** — policy engine, PTY supervisor, prompt detection, channel relay, audit log, local dashboard (sessions + settings). Fully functional. The default.
+- **Enterprise** — everything in Core plus decision trace browsing, integrity verification, session export, capability views, and extended settings.
 
 | Feature | Core | Enterprise |
 |---------|------|------------|
 | Policy DSL v1 | Yes | Yes |
 | Autopilot engine | Yes | Yes |
 | Hash-chained audit log | Yes | Yes |
-| Decision traces | Yes | Yes |
-| Local dashboard | Yes | Yes |
-| Session export (JSON/HTML) | Yes | Yes |
+| Dashboard (sessions + settings) | Yes | Yes |
 | Deterministic risk classifier | Yes | Yes |
+| Decision trace browsing | No | Yes |
+| Integrity verification | No | Yes |
+| Session export (JSON/HTML) | No | Yes |
+| Capabilities view | No | Yes |
 | Enterprise Settings page | No | Yes |
-| Extended capability views | No | Yes |
 
 **Key principles:**
 
