@@ -64,7 +64,9 @@ def providers_list(as_json: bool = False) -> None:
 
         if not rows:
             console.print("[dim]No providers configured.[/dim]")
-            console.print("\nRun [cyan]atlasbridge providers add <provider> <key>[/cyan] to add one.")
+            console.print(
+                "\nRun [cyan]atlasbridge providers add <provider> <key>[/cyan] to add one."
+            )
             return
 
         table = Table(title="AI Providers", show_lines=False)

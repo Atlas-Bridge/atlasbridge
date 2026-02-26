@@ -991,10 +991,7 @@ class TestTryAutoInjectWorkspaceTrust:
         event.cwd = "/tmp/not-trusted"
         log = MagicMock()
 
-
-        with patch(
-            "atlasbridge.core.store.workspace_trust.get_trust", return_value=False
-        ):
+        with patch("atlasbridge.core.store.workspace_trust.get_trust", return_value=False):
             result = await router._try_auto_inject_workspace_trust(event, log)
 
         assert result is False
@@ -1019,10 +1016,7 @@ class TestTryAutoInjectWorkspaceTrust:
         event.cwd = "/tmp/trusted"
         log = MagicMock()
 
-
-        with patch(
-            "atlasbridge.core.store.workspace_trust.get_trust", return_value=True
-        ):
+        with patch("atlasbridge.core.store.workspace_trust.get_trust", return_value=True):
             result = await router._try_auto_inject_workspace_trust(event, log)
 
         assert result is False
@@ -1047,10 +1041,7 @@ class TestTryAutoInjectWorkspaceTrust:
         event.cwd = "/tmp/trusted"
         log = MagicMock()
 
-
-        with patch(
-            "atlasbridge.core.store.workspace_trust.get_trust", return_value=True
-        ):
+        with patch("atlasbridge.core.store.workspace_trust.get_trust", return_value=True):
             result = await router._try_auto_inject_workspace_trust(event, log)
 
         assert result is True
@@ -1076,7 +1067,6 @@ class TestTryAutoInjectWorkspaceTrust:
         event = _folder_trust_event(session.session_id)
         event.cwd = "/tmp/error"
         log = MagicMock()
-
 
         with patch(
             "atlasbridge.core.store.workspace_trust.get_trust",
@@ -1134,10 +1124,10 @@ class TestRecordWorkspaceTrust:
         event.constraints["workspace_trust_path"] = "/tmp/grant-me"
         reply = _reply(event.prompt_id, session.session_id, value="y")
 
-
-        with patch("atlasbridge.core.store.workspace_trust.grant_trust") as mock_grant, patch(
-            "atlasbridge.core.store.workspace_trust.revoke_trust"
-        ) as mock_revoke:
+        with (
+            patch("atlasbridge.core.store.workspace_trust.grant_trust") as mock_grant,
+            patch("atlasbridge.core.store.workspace_trust.revoke_trust") as mock_revoke,
+        ):
             router._record_workspace_trust(event, "1", reply)
 
         mock_grant.assert_called_once()
@@ -1161,10 +1151,10 @@ class TestRecordWorkspaceTrust:
         event.constraints["workspace_trust_path"] = "/tmp/deny-me"
         reply = _reply(event.prompt_id, session.session_id, value="n")
 
-
-        with patch("atlasbridge.core.store.workspace_trust.grant_trust") as mock_grant, patch(
-            "atlasbridge.core.store.workspace_trust.revoke_trust"
-        ) as mock_revoke:
+        with (
+            patch("atlasbridge.core.store.workspace_trust.grant_trust") as mock_grant,
+            patch("atlasbridge.core.store.workspace_trust.revoke_trust") as mock_revoke,
+        ):
             router._record_workspace_trust(event, "2", reply)
 
         mock_revoke.assert_called_once()
@@ -1188,10 +1178,10 @@ class TestRecordWorkspaceTrust:
         event.constraints["workspace_trust_path"] = "/tmp/unknown"
         reply = _reply(event.prompt_id, session.session_id, value="maybe")
 
-
-        with patch("atlasbridge.core.store.workspace_trust.grant_trust") as mock_grant, patch(
-            "atlasbridge.core.store.workspace_trust.revoke_trust"
-        ) as mock_revoke:
+        with (
+            patch("atlasbridge.core.store.workspace_trust.grant_trust") as mock_grant,
+            patch("atlasbridge.core.store.workspace_trust.revoke_trust") as mock_revoke,
+        ):
             router._record_workspace_trust(event, "maybe", reply)
 
         mock_grant.assert_not_called()

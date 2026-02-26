@@ -59,9 +59,7 @@ class TestTrustPromptNoTerminalSemantics:
     @pytest.mark.parametrize("word", TERMINAL_WORDS)
     def test_no_terminal_word(self, path: str, word: str) -> None:
         msg = build_trust_prompt(path)
-        assert word not in msg, (
-            f"Trust prompt for {path!r} contains terminal word {word!r}:\n{msg}"
-        )
+        assert word not in msg, f"Trust prompt for {path!r} contains terminal word {word!r}:\n{msg}"
 
     @pytest.mark.parametrize("path", SAMPLE_PATHS)
     def test_prompt_is_human_readable(self, path: str) -> None:
@@ -135,6 +133,7 @@ class TestExpiredMessageContent:
 class TestProviderChannelSafety:
     def test_no_key_material_in_safe_prefix(self) -> None:
         from atlasbridge.core.store.provider_config import _safe_prefix
+
         full_key = "sk-secret-api-key-123456789"
         prefix = _safe_prefix(full_key)
         assert full_key not in prefix
@@ -142,5 +141,6 @@ class TestProviderChannelSafety:
 
     def test_safe_prefix_ends_with_dots(self) -> None:
         from atlasbridge.core.store.provider_config import _safe_prefix
+
         prefix = _safe_prefix("sk-ant-api03-longkey")
         assert prefix.endswith("...")

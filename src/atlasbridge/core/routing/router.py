@@ -491,9 +491,7 @@ class PromptRouter:
         self._sessions.mark_awaiting_reply(event.session_id, event.prompt_id)
 
         # Detach the injection so we return immediately
-        asyncio.ensure_future(
-            self._auto_inject_trusted_workspace(event, adapter, sm, log)
-        )
+        asyncio.ensure_future(self._auto_inject_trusted_workspace(event, adapter, sm, log))
         log.info("workspace_trust_auto_inject_scheduled", cwd=event.cwd)
         return True
 

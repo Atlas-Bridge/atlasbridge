@@ -23,9 +23,7 @@ _REJECT_HEADLINES: dict[GateRejectReason, str] = {
     GateRejectReason.REJECT_BUSY_RUNNING: (
         "\u23f3 Queued \u2014 I\u2019ll respond after the current step completes."
     ),
-    GateRejectReason.REJECT_NO_ACTIVE_SESSION: (
-        "No active session. Start one from the dashboard."
-    ),
+    GateRejectReason.REJECT_NO_ACTIVE_SESSION: ("No active session. Start one from the dashboard."),
     GateRejectReason.REJECT_NOT_AWAITING_INPUT: (
         "\u23f3 Queued \u2014 I\u2019ll respond after the current step completes."
     ),
@@ -45,9 +43,7 @@ _REJECT_HEADLINES: dict[GateRejectReason, str] = {
 _REJECT_NEXT_ACTIONS: dict[GateRejectReason, str] = {
     GateRejectReason.REJECT_BUSY_STREAMING: "",
     GateRejectReason.REJECT_BUSY_RUNNING: "",
-    GateRejectReason.REJECT_NO_ACTIVE_SESSION: (
-        "Open the dashboard to start a new session."
-    ),
+    GateRejectReason.REJECT_NO_ACTIVE_SESSION: ("Open the dashboard to start a new session."),
     GateRejectReason.REJECT_NOT_AWAITING_INPUT: "",
     GateRejectReason.REJECT_TTL_EXPIRED: ("A new prompt will appear if the agent needs input."),
     GateRejectReason.REJECT_POLICY_DENY: (

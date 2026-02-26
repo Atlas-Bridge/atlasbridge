@@ -440,14 +440,22 @@ def sessions_stop(session_id: str, as_json: bool = False) -> None:
         try:
             os.kill(pid, signal.SIGTERM)
             if as_json:
-                print(json.dumps({"ok": True, "session_id": full_id, "pid": pid, "signal": "SIGTERM"}))
+                print(
+                    json.dumps({"ok": True, "session_id": full_id, "pid": pid, "signal": "SIGTERM"})
+                )
             else:
                 console.print(f"[green]SIGTERM sent[/green] to PID {pid} (session {full_id[:8]})")
         except ProcessLookupError:
             if as_json:
-                print(json.dumps({"ok": False, "error": f"Process {pid} not found (already stopped?)"}))
+                print(
+                    json.dumps(
+                        {"ok": False, "error": f"Process {pid} not found (already stopped?)"}
+                    )
+                )
             else:
-                console.print(f"[yellow]Process {pid} not found — session may have already stopped.[/yellow]")
+                console.print(
+                    f"[yellow]Process {pid} not found — session may have already stopped.[/yellow]"
+                )
         except PermissionError:
             if as_json:
                 print(json.dumps({"ok": False, "error": f"Permission denied to stop PID {pid}"}))
