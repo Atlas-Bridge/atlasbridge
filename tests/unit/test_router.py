@@ -772,6 +772,98 @@ class TestSpamPrevention:
         mock_adapter.inject_reply.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_gate_accepts_natural_text_yes_for_numbered_choice(
+        self,
+        session_manager: SessionManager,
+        mock_channel: AsyncMock,
+        mock_adapter: AsyncMock,
+    ) -> None:
+        """Free-text 'yes' passes gate and reaches injection for normalizer."""
+        from atlasbridge.core.conversation.session_binding import ConversationRegistry
+
+        registry = ConversationRegistry()
+        s = _session()
+        session_manager.register(s)
+
+        router = PromptRouter(
+            session_manager=session_manager,
+            channel=mock_channel,
+            adapter_map={s.session_id: mock_adapter},
+            store=_mock_store(),
+            conversation_registry=registry,
+        )
+
+        event = _event(s.session_id)
+        await router.route_event(event)
+
+        from datetime import datetime
+
+        reply = Reply(
+            prompt_id="",
+            session_id="",
+            value="yes",
+            nonce="test-nonce",
+            channel_identity="telegram:12345",
+            timestamp=datetime.now(UTC).isoformat(),
+            thread_id="12345",
+        )
+        await router.handle_reply(reply)
+
+        # Natural text 'yes' passed the gate and was injected
+        mock_adapter.inject_reply.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_gate_accepts_with_active_prompt_id(
+        self,
+        session_manager: SessionManager,
+        mock_channel: AsyncMock,
+        mock_adapter: AsyncMock,
+    ) -> None:
+        """Gate accepts reply when session.active_prompt_id is set,
+        even if binding state is stale STREAMING."""
+        from atlasbridge.core.conversation.session_binding import (
+            ConversationRegistry,
+            ConversationState,
+        )
+
+        registry = ConversationRegistry()
+        s = _session()
+        session_manager.register(s)
+
+        router = PromptRouter(
+            session_manager=session_manager,
+            channel=mock_channel,
+            adapter_map={s.session_id: mock_adapter},
+            store=_mock_store(),
+            conversation_registry=registry,
+        )
+
+        event = _event(s.session_id)
+        await router.route_event(event)
+
+        # Simulate stale STREAMING state on binding
+        registry.update_state("telegram", "12345", ConversationState.STREAMING)
+        binding = registry.get_binding("telegram", "12345")
+        assert binding is not None
+        assert binding.state == ConversationState.STREAMING
+
+        from datetime import datetime
+
+        reply = Reply(
+            prompt_id="",
+            session_id="",
+            value="allow",
+            nonce="test-nonce",
+            channel_identity="telegram:12345",
+            timestamp=datetime.now(UTC).isoformat(),
+            thread_id="12345",
+        )
+        await router.handle_reply(reply)
+
+        # active_prompt_id on session overrides stale STREAMING → injection succeeded
+        mock_adapter.inject_reply.assert_called_once()
+
+    @pytest.mark.asyncio
     async def test_dedup_allows_after_resolution(
         self,
         session_manager: SessionManager,

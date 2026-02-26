@@ -82,7 +82,7 @@ class TestFormatPrompt:
 class TestFormatPromptResponseInstructions:
     def test_yes_no_instruction(self) -> None:
         text = TelegramChannel._format_prompt(_event(PromptType.TYPE_YES_NO))
-        assert "Tap <b>Yes</b> or <b>No</b> below" in text
+        assert "reply <b>yes</b> / <b>no</b>" in text
 
     def test_confirm_enter_instruction(self) -> None:
         text = TelegramChannel._format_prompt(_event(PromptType.TYPE_CONFIRM_ENTER))
@@ -92,8 +92,7 @@ class TestFormatPromptResponseInstructions:
         text = TelegramChannel._format_prompt(
             _event(PromptType.TYPE_MULTIPLE_CHOICE, choices=["a", "b"])
         )
-        assert "Reply" in text and ("1" in text or "2" in text)
-        assert "tap a button" in text
+        assert "reply <b>yes</b> / <b>no</b>" in text
 
     def test_free_text_instruction(self) -> None:
         text = TelegramChannel._format_prompt(_event(PromptType.TYPE_FREE_TEXT))
@@ -175,7 +174,7 @@ class TestBuildKeyboard:
         kb = ch._build_keyboard(event)
         assert len(kb[0]) == 3
         labels = [b["text"] for b in kb[0]]
-        assert labels == ["1. Alpha", "2. Beta", "3. Gamma"]
+        assert labels == ["Alpha", "Beta", "Gamma"]
 
     def test_free_text_no_buttons(self) -> None:
         ch = _channel()

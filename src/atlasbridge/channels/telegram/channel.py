@@ -496,11 +496,9 @@ class TelegramChannel(BaseChannel):
             Confidence.LOW: "low (ambiguous)",
         }
         response_instructions = {
-            PromptType.TYPE_YES_NO: "Tap <b>Yes</b> or <b>No</b> below.",
+            PromptType.TYPE_YES_NO: "Tap a button or reply <b>yes</b> / <b>no</b>.",
             PromptType.TYPE_CONFIRM_ENTER: "Tap <b>Send Enter</b> below to continue.",
-            PromptType.TYPE_MULTIPLE_CHOICE: (
-                "Reply <b>1</b> or <b>2</b> (or tap a button below)."
-            ),
+            PromptType.TYPE_MULTIPLE_CHOICE: ("Tap a button or reply <b>yes</b> / <b>no</b>."),
             PromptType.TYPE_FREE_TEXT: "Type your response and send it as a message.",
         }
         label = type_labels.get(event.prompt_type, event.prompt_type)
@@ -646,7 +644,7 @@ class TelegramChannel(BaseChannel):
             return [
                 [
                     {
-                        "text": f"{i + 1}. {c[:30]}" if c else str(i + 1),
+                        "text": c[:30] if c else str(i + 1),
                         "callback_data": self._make_callback_data(pid, sid, nonce, str(i + 1)),
                     }
                     for i, c in enumerate(event.choices)
