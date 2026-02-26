@@ -18,6 +18,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.6.0] — 2026-02-26
+
+### Added
+- **Dashboard edition split** — Core and Enterprise editions with `--edition` CLI flag (#304)
+- **Edition badges** — READ-ONLY, LOCAL ONLY, and CORE/ENTERPRISE badges on all dashboard pages
+- **Conditional enterprise nav** — Enterprise Settings link only visible in enterprise edition
+- **Capability-gated routes** — `/enterprise/settings` returns 404 JSON on core edition
+- **Runtime capabilities API** — `/runtime/capabilities` endpoint returns edition, authority mode, and enabled capabilities
+- **18 integration tests** for edition badges, nav gating, enterprise language isolation, and CLI flag
+
+### Changed
+- Updated `docs/dashboard.md` with Dashboard Editions section and port 3737 references
+- Updated `README.md` editions table — Core/Enterprise replaces Community/Pro/Enterprise
+
+---
+
 ## [1.5.0] — 2026-02-26
 
 ### Removed
