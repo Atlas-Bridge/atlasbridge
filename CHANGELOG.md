@@ -11,6 +11,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.6.3] — 2026-02-26
+
+### Added
+- **Governance Evidence page** — real sessions loaded from `/api/sessions`; page title corrected from "Compliance Evidence" to "Governance Evidence" (#305)
+- **36 vitest unit tests** for `evidence-engine.ts` covering `redactSecrets`, `computeGovernanceScore`, `generateEvidenceJSON/CSV/Bundle`, `compliancePacks`, and bundle list tracking (#305)
+- **`docs/governance-evidence.md`** — full guide: what it is/isn't, export formats, bundle verification, governance score formula, policy packs, integrity verification, redaction rules (#305)
+
+### Changed
+- **One dashboard, one audience** — removed `atlasbridge community`, `atlasbridge core`, and `atlasbridge enterprise` CLI commands; `atlasbridge dashboard start` is the single entry point (#305)
+- **`docs/dashboard.md`** — removed Core/Enterprise edition section; dashboard is unified
+- **`README.md`** — replaced edition feature table with unified single-platform table including Governance Evidence entry
+- **CLI surface freeze** — updated safety test to reflect removal of `community`/`core`/`enterprise` top-level commands
+
+---
+
 ## [1.6.2] — 2026-02-26
 
 ### Added
