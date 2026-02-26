@@ -1,5 +1,5 @@
 """
-TUI service layer — thin wrappers over existing application functions.
+UI service layer — thin wrappers over existing application functions.
 
 No business logic lives here; every method delegates to the same
 functions used by the CLI subcommands (single source of truth).
@@ -7,7 +7,7 @@ functions used by the CLI subcommands (single source of truth).
 
 from __future__ import annotations
 
-from atlasbridge.tui.state import AppState, ChannelStatus, ConfigStatus, DaemonStatus
+from atlasbridge.ui.state import AppState, ChannelStatus, ConfigStatus, DaemonStatus
 
 
 class ConfigService:
