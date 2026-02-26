@@ -45,9 +45,6 @@ FROZEN_TOP_LEVEL = frozenset(
         "risk",
         "audit",
         "chat",
-        "community",
-        "core",
-        "enterprise",
     }
 )
 
