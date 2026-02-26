@@ -11,6 +11,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.6.6] — 2026-02-26
+
+### Added
+- **Workspace trust** — runtime consent model replacing broken interactive CLI prompt relay; `workspace_trust` DB table (migration v3), `grant_trust`/`revoke_trust`/`get_trust` store module, auto-inject for pre-trusted paths (#367)
+- **Provider key management** — store OpenAI/Anthropic/Gemini API keys in OS keychain; `provider_configs` DB table (migration v4), `store_key`/`validate_key`/`remove_key` store module (#367)
+- **Dashboard: Providers page** — `/providers` route; add/validate/remove provider keys with masked input, status badges (#367)
+- **Dashboard: Workspaces page** — `/workspaces` route; grant/revoke workspace trust with audit trail (#367)
+- **Dashboard: Session start/stop** — Start Session dialog (adapter, autonomy mode, cwd, label); Stop button per active session (#367)
+- **Message dedup** — `processed_messages` DB table + `mark_processed()` helper; in-memory Telegram dedup ring (#367)
+- **Phone-first gate messages** — `format_gate_decision()` with two-line headline + next-action format; busy reasons single-line "Queued"; no terminal semantics in any channel message (#367)
+- **`atlasbridge workspace` CLI** — `trust`/`revoke`/`list`/`status` subcommands (#367)
+- **`atlasbridge providers` CLI** — `list`/`add`/`validate`/`remove` subcommands (#367)
+- **`atlasbridge sessions start/stop`** — background session launch with detached Popen; SIGTERM stop (#367)
+- **232 new tests** — unit, integration, and safety regression tests covering workspace trust, provider keys, message dedup, gate messages, channel UX, and router workspace helpers (#367)
+
+### Changed
+- `PromptRouter` — workspace trust pre-check before routing FOLDER_TRUST events to channel; `_record_workspace_trust` on reply injection (#367)
+- Gate message format — busy reasons (`REJECT_BUSY_*`, `REJECT_NOT_AWAITING_INPUT`) use single-line format; `REJECT_NO_ACTIVE_SESSION` directs to dashboard not CLI (#367)
+
+---
+
 ## [1.6.5] — 2026-02-26
 
 ### Added
