@@ -83,7 +83,7 @@ def _retrieve_from_keychain(provider: str) -> str | None:
         import keyring
 
         value = keyring.get_password(_KEYRING_SERVICE, _keyring_username(provider))
-        return value  # type: ignore[return-value]
+        return value
     except Exception:
         return _retrieve_from_file(provider)
 
