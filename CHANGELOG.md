@@ -11,6 +11,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.8.0] — 2026-02-27
+
+### Added
+- **Auth provider integration** — wire GitHub App / OIDC auth into scanning flow with token resolution helper, browser OIDC redirect/callback routes, and new Authentication tab in Settings (#376)
+- **CVE database lookups** — OSV.dev batch API (primary) with GitHub Security Advisories GraphQL fallback; CVSS severity mapping (critical/high/medium/low/unknown); graceful degradation on API failures (#376)
+- **Remote repository scanning** — inventory analysis via provider APIs without cloning; detects languages, build systems, CI platforms, frameworks, and sensitive paths (#376)
+- **Container image scanning** — Trivy CLI integration with JSON output parsing; graceful degradation when Trivy not installed (#376)
+- **IaC security analysis** — Terraform and CloudFormation misconfiguration detection (public S3 buckets, open security groups, overly permissive IAM, unencrypted storage) (#376)
+- **Evidence bundle ZIP** — streaming ZIP generation using `archiver` for evidence exports and scan artifact bundles (#376)
+- **Cloud Scan tab** — new tab in repository detail view with remote scan, container scan, and IaC scan triggers (#376)
+- **Vulnerability display** — CVE findings shown in SecurityPanel with severity badges, fix versions, and advisory links (#376)
+- **28 new tests** — vulnerabilities (7), container-scan (4), infra-scan (7), remote-scan (5), zip-builder (5); 199 vitest total (#376)
+
+---
+
 ## [1.7.2] — 2026-02-27
 
 ### Added
