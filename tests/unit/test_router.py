@@ -1333,6 +1333,16 @@ class TestSavePromptOnRouteEvent:
 class TestAutopilotInjection:
     """Tests for PromptRouter.inject_autopilot_reply()."""
 
+    @staticmethod
+    def _prepare_sm(router: PromptRouter, event: PromptEvent) -> None:
+        """Pre-populate the state machine so it's ready for REPLY_RECEIVED."""
+        from atlasbridge.core.prompt.state import PromptStateMachine
+
+        sm = PromptStateMachine(event=event)
+        sm.transition(PromptStatus.ROUTED, "test setup")
+        sm.transition(PromptStatus.AWAITING_REPLY, "test setup")
+        router._machines[event.prompt_id] = sm
+
     @pytest.mark.asyncio
     async def test_autopilot_inject_success(
         self, session_manager: SessionManager, mock_channel: AsyncMock
@@ -1347,6 +1357,7 @@ class TestAutopilotInjection:
             store=_mock_store(),
         )
         event = _event(s.session_id)
+        self._prepare_sm(router, event)
         await router.inject_autopilot_reply(event, "y")
         adapter.inject_reply.assert_called_once()
 
@@ -1364,6 +1375,7 @@ class TestAutopilotInjection:
             store=_mock_store(),
         )
         event = _event(s.session_id)
+        self._prepare_sm(router, event)
         await router.inject_autopilot_reply(event, "y")
         # Should escalate to channel
         mock_channel.send_prompt.assert_called_once()
@@ -1383,6 +1395,7 @@ class TestAutopilotInjection:
             store=_mock_store(),
         )
         event = _event(s.session_id)
+        self._prepare_sm(router, event)
         await router.inject_autopilot_reply(event, "y")
         # Failed injection should escalate to channel
         mock_channel.send_prompt.assert_called_once()
