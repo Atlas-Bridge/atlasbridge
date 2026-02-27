@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.7.1] — 2026-02-27
+
+### Changed
+- **Public messaging cleanup** — neutralise all compliance framework references (SOC 2, ISO 27001, HIPAA, GDPR), rename "Enterprise" to "Extended", remove competitive positioning and warranty language across 23 files (#374)
+- **Dashboard type renames** — `ComplianceMetrics` → `PolicyAdherenceMetrics`, `ComplianceConfig` → `RetentionConfig`, `CompliancePack` → `PolicyPack`, `ComplianceScan` → `QualityScan`; all UI labels, seed data, and tests updated (#374)
+
+---
+
 ## [1.7.0] — 2026-02-27
 
 ### Added
