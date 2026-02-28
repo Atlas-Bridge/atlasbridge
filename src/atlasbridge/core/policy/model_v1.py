@@ -106,6 +106,12 @@ class MatchCriteriaV1(BaseModel):
     environment: str | None = None
     """Match only when runtime environment equals this string (dev/staging/production)."""
 
+    workspace_trusted: bool | None = None
+    """Match only when workspace trust state equals this value."""
+
+    workspace_profile: str | None = None
+    """Match only when workspace posture profile_name equals this string."""
+
     any_of: list[MatchCriteriaV1] | None = None
     """OR logic: rule matches if ANY sub-criteria block matches."""
 
@@ -176,6 +182,8 @@ class MatchCriteriaV1(BaseModel):
                 self.session_state is not None,
                 self.channel_message is not None,
                 self.deny_input_types is not None,
+                self.workspace_trusted is not None,
+                self.workspace_profile is not None,
             ]
         )
         if self.any_of is not None and has_flat:

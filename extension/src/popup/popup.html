@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AtlasBridge Monitor</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; width: 320px; padding: 16px; color: #1a1a2e; background: #f8f9fa; }
+    h1 { font-size: 14px; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+    .status { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+    .status.connected { background: #22c55e; }
+    .status.disconnected { background: #ef4444; }
+    .section { margin-bottom: 16px; }
+    .section-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; margin-bottom: 8px; }
+    .input-group { display: flex; gap: 8px; margin-bottom: 12px; }
+    input[type="text"] { flex: 1; padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 12px; font-family: monospace; }
+    button { padding: 6px 12px; border: none; border-radius: 6px; font-size: 12px; cursor: pointer; font-weight: 500; }
+    .btn-primary { background: #0B2A3C; color: white; }
+    .btn-primary:hover { background: #153d54; }
+    .session-list { list-style: none; }
+    .session-item { display: flex; align-items: center; gap: 8px; padding: 8px; background: white; border-radius: 6px; margin-bottom: 4px; font-size: 12px; }
+    .vendor-badge { font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; }
+    .vendor-chatgpt { background: #e8f5e9; color: #2e7d32; }
+    .vendor-claude { background: #e3f2fd; color: #1565c0; }
+    .vendor-gemini { background: #fff3e0; color: #e65100; }
+    .empty { font-size: 12px; color: #9ca3af; text-align: center; padding: 16px; }
+    .toggle { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+    .toggle label { font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h1>
+    <span class="status" id="status-dot"></span>
+    AtlasBridge Monitor
+  </h1>
+
+  <div class="section">
+    <div class="section-title">Dashboard URL</div>
+    <div class="input-group">
+      <input type="text" id="dashboard-url" placeholder="http://localhost:5000">
+      <button class="btn-primary" id="save-btn">Save</button>
+    </div>
+    <div class="toggle">
+      <input type="checkbox" id="enabled-toggle" checked>
+      <label for="enabled-toggle">Monitoring enabled</label>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Active Sessions</div>
+    <ul class="session-list" id="session-list">
+      <li class="empty">No monitored tabs</li>
+    </ul>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

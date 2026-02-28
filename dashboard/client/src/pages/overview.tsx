@@ -11,7 +11,7 @@ import {
   MonitorDot, Clock, TrendingUp, Cpu, AlertTriangle,
   ShieldCheck, Activity, Brain, Shield, Gauge, X,
   ArrowUpRight, ArrowDownRight, Minus, Lightbulb,
-  CheckCircle, XCircle, ChevronRight, Zap, Target, Eye, FileCheck
+  CheckCircle, XCircle, ChevronRight, Zap, Target, Eye, FileCheck, Globe, Radio
 } from "lucide-react";
 import { OperatorPanel } from "@/components/operator-panel";
 
@@ -342,7 +342,7 @@ function IntegrityPanel({ data }: { data: OverviewData }) {
 }
 
 export default function OverviewPage() {
-  const { data, isLoading } = useQuery<OverviewData>({ queryKey: ["/api/overview"] });
+  const { data, isLoading } = useQuery<OverviewData & { activitySummary?: { activeMonitorSessions: number; totalMonitorSessions: number; vendors: string[]; latestSessionAt: string | null } }>({ queryKey: ["/api/overview"], refetchInterval: 5_000 });
   const [activePanel, setActivePanel] = useState<PanelId>(null);
 
   const toggle = (id: PanelId) => setActivePanel(prev => prev === id ? null : id);
@@ -388,6 +388,41 @@ export default function OverviewPage() {
         <StatCard3D title="System Health" value={`${data.operational.uptime}%`} subtitle={`${data.operational.avgResponseTime}ms avg`} icon={Gauge} variant="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" onClick={() => toggle("operations")} active={activePanel === "operations"} />
         <StatCard3D title="Integrity Status" value={data.integrityStatus} icon={ShieldCheck} variant={integrityColor(data.integrityStatus)} onClick={() => toggle("integrity")} active={activePanel === "integrity"} />
       </div>
+
+      {/* Live Activity Summary — fed by monitor sessions */}
+      {data.activitySummary && data.activitySummary.totalMonitorSessions > 0 && (
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-emerald-500/10">
+                  <Radio className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">AI Activity Feed</p>
+                  <p className="text-xs text-muted-foreground">
+                    {data.activitySummary.activeMonitorSessions} active / {data.activitySummary.totalMonitorSessions} total monitored conversations
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {data.activitySummary.vendors.map(v => (
+                    <Badge key={v} variant="secondary" className="text-[10px]">
+                      <Globe className="w-2.5 h-2.5 mr-1" />{v}
+                    </Badge>
+                  ))}
+                </div>
+                <Link href="/sessions">
+                  <Button variant="secondary" size="sm">
+                    <Eye className="w-3.5 h-3.5 mr-1.5" />View Sessions
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {activePanel && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

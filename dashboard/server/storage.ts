@@ -2,7 +2,7 @@ import { db } from "./db";
 import { eq } from "drizzle-orm";
 import {
   users, groups, roles, apiKeys, securityPolicies, notifications, ipAllowlist, repoConnections, qualityScans, rbacPermissions,
-  localScans, authProviders, containerScans, infraScans,
+  localScans, authProviders, containerScans, infraScans, agents, retentionSettings,
   type InsertUser, type User,
   type InsertGroup, type Group,
   type InsertRole, type Role,
@@ -17,6 +17,8 @@ import {
   type InsertAuthProvider, type AuthProvider,
   type InsertContainerScan, type ContainerScan,
   type InsertInfraScan, type InfraScan,
+  type InsertAgent, type Agent,
+  type InsertRetentionSettings, type RetentionSettings,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -84,6 +86,15 @@ export interface IStorage {
 
   getInfraScans(repoId: number): Promise<InfraScan[]>;
   createInfraScan(data: InsertInfraScan): Promise<InfraScan>;
+
+  getAgents(): Promise<Agent[]>;
+  getAgent(id: number): Promise<Agent | undefined>;
+  createAgent(data: InsertAgent): Promise<Agent>;
+  updateAgent(id: number, data: Partial<InsertAgent>): Promise<Agent | undefined>;
+  deleteAgent(id: number): Promise<boolean>;
+
+  getRetentionSettings(): Promise<RetentionSettings | undefined>;
+  upsertRetentionSettings(data: Partial<InsertRetentionSettings>): Promise<RetentionSettings>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -151,6 +162,23 @@ export class DatabaseStorage implements IStorage {
 
   async getInfraScans(repoId: number) { return db.select().from(infraScans).where(eq(infraScans.repoConnectionId, repoId)); }
   async createInfraScan(data: InsertInfraScan) { const [s] = await db.insert(infraScans).values(data).returning(); return s; }
+
+  async getAgents() { return db.select().from(agents); }
+  async getAgent(id: number) { const [a] = await db.select().from(agents).where(eq(agents.id, id)); return a; }
+  async createAgent(data: InsertAgent) { const [a] = await db.insert(agents).values(data).returning(); return a; }
+  async updateAgent(id: number, data: Partial<InsertAgent>) { const [a] = await db.update(agents).set({ ...data, updatedAt: new Date().toISOString() }).where(eq(agents.id, id)).returning(); return a; }
+  async deleteAgent(id: number) { const result = await db.delete(agents).where(eq(agents.id, id)).returning(); return result.length > 0; }
+
+  async getRetentionSettings() { const [r] = await db.select().from(retentionSettings); return r; }
+  async upsertRetentionSettings(data: Partial<InsertRetentionSettings>) {
+    const existing = await this.getRetentionSettings();
+    if (existing) {
+      const [r] = await db.update(retentionSettings).set({ ...data, updatedAt: new Date().toISOString() }).where(eq(retentionSettings.id, existing.id)).returning();
+      return r;
+    }
+    const [r] = await db.insert(retentionSettings).values({ ...data } as InsertRetentionSettings).returning();
+    return r;
+  }
 }
 
 export const storage = new DatabaseStorage();

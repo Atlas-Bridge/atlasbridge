@@ -84,15 +84,21 @@ class TestCoreEditionContract:
         leaked = ENTERPRISE_ONLY_ROUTES & actual
         assert not leaked, f"Enterprise routes leaked into Core: {leaked}"
 
-    def test_core_route_methods_are_readonly(self, core_app) -> None:
-        """Core edition must have no mutating routes (POST/PUT/DELETE/PATCH)."""
+    def test_core_route_methods_bounded(self, core_app) -> None:
+        """Core edition POST routes must be bounded to known workspace routes."""
         actual = _get_app_routes(core_app)
+        allowed_mutations = {
+            ("POST", "/api/workspaces/scan"),
+            ("POST", "/api/workspaces/trust"),
+            ("POST", "/api/workspaces/posture"),
+        }
         mutating = {
             (method, path)
             for (method, path) in actual
             if method in ("POST", "PUT", "DELETE", "PATCH")
         }
-        assert not mutating, f"Core has mutating routes: {mutating}"
+        unexpected = mutating - allowed_mutations
+        assert not unexpected, f"Core has unexpected mutating routes: {unexpected}"
 
 
 class TestEnterpriseEditionContract:

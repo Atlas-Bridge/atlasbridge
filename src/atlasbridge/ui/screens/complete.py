@@ -28,7 +28,7 @@ class SetupCompleteScreen(Screen):
         Binding("escape", "app.pop_screen", "Done", show=False),
     ]
 
-    def __init__(self, channel: str = "telegram", user_count: int = 0) -> None:
+    def __init__(self, channel: str = "", user_count: int = 0) -> None:
         super().__init__()
         self._channel = channel
         self._user_count = user_count
@@ -44,14 +44,8 @@ class SetupCompleteScreen(Screen):
 
         text = (
             "✓  Setup complete!\n\n"
-            f"  Channel:           {self._channel.capitalize()}\n"
-            f"  Allowlisted users: {self._user_count}\n"
             f"  Config path:       {cfg_path or '~/.atlasbridge/config.toml'}\n\n"
             "Next steps:\n"
-        )
-        if self._channel == "telegram":
-            text += "  • Important: Send /start to your bot in Telegram before running\n"
-        text += (
             "  • Run `atlasbridge run claude` to supervise Claude Code\n"
             "  • Run `atlasbridge doctor` to verify your environment\n\n"
             "  [Q] Done"

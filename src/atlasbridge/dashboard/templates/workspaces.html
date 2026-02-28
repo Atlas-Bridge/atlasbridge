@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}AtlasBridge Dashboard &mdash; Workspaces{% endblock %}
+
+{% block content %}
+<h1>Workspaces</h1>
+
+{% if not db_available %}
+<div class="notice">
+    <h3>No data yet</h3>
+    <p>The AtlasBridge database has not been created. Run a supervised session to start collecting data:</p>
+    <pre class="code-hint">atlasbridge run claude</pre>
+</div>
+{% else %}
+
+<p class="page-description">Workspace governance: trust state, posture bindings, and session activity.</p>
+
+<!-- Trust Workspace panel -->
+<div class="action-panel">
+    <h3>Trust a Workspace</h3>
+    <div class="action-form" id="trust-form">
+        <div class="form-row">
+            <label for="trust-path">Workspace path</label>
+            <input type="text" id="trust-path" placeholder="/path/to/project" class="form-input" />
+        </div>
+        <div class="form-row">
+            <label for="trust-ttl">TTL (optional)</label>
+            <select id="trust-ttl" class="filter-select">
+                <option value="">No expiry</option>
+                <option value="3600">1 hour</option>
+                <option value="28800">8 hours</option>
+                <option value="86400">1 day</option>
+                <option value="604800">7 days</option>
+                <option value="2592000">30 days</option>
+            </select>
+        </div>
+        <button onclick="grantTrust()" class="action-btn action-btn-primary">Grant Trust</button>
+    </div>
+    <div id="trust-result" class="action-result" style="display:none"></div>
+</div>
+
+{% if workspaces %}
+<div class="table-responsive">
+<table>
+    <thead>
+        <tr>
+            <th>Path</th>
+            <th>Trust</th>
+            <th>Expires</th>
+            <th>Profile</th>
+            <th>Autonomy</th>
+            <th>Actor</th>
+            <th>Created</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for w in workspaces %}
+        <tr>
+            <td><a href="/workspaces/{{ w.id }}">{{ w.path }}</a></td>
+            <td>
+                {% if w.trust_state == 'trusted' %}
+                    <span class="status-running">trusted</span>
+                {% elif w.trust_expired %}
+                    <span class="status-canceled">expired</span>
+                {% else %}
+                    <span class="status-crashed">untrusted</span>
+                {% endif %}
+            </td>
+            <td>
+                {% if w.trust_expires_at %}
+                    <span title="{{ w.trust_expires_at }}">{{ w.trust_expires_at|timeago }}</span>
+                {% else %}
+                    &mdash;
+                {% endif %}
+            </td>
+            <td>{{ w.profile_name or '&mdash;' }}</td>
+            <td>{{ w.autonomy_default or '&mdash;' }}</td>
+            <td>{{ w.actor or '&mdash;' }}</td>
+            <td title="{{ w.created_at }}">{{ w.created_at|timeago }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+
+<div class="export-section">
+    <button onclick="exportWorkspaces()" class="filter-btn">Export JSON</button>
+</div>
+
+{% else %}
+<p class="empty">No workspaces recorded yet. Use the form above to grant trust to a workspace path.</p>
+{% endif %}
+
+{% endif %}
+
+<script>
+async function grantTrust() {
+    var pathEl = document.getElementById('trust-path');
+    var ttlEl = document.getElementById('trust-ttl');
+    var resultEl = document.getElementById('trust-result');
+    var path = pathEl.value.trim();
+
+    if (!path) {
+        showResult(resultEl, 'error', 'Workspace path is required.');
+        return;
+    }
+
+    var body = {path: path, trust: true};
+    var ttl = ttlEl.value;
+    if (ttl) { body.ttl_seconds = parseInt(ttl, 10); }
+
+    try {
+        var resp = await fetch('/api/workspaces/trust', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body)
+        });
+        var data = await resp.json();
+        if (resp.ok && data.ok) {
+            showResult(resultEl, 'success', 'Trust granted for: ' + data.path + (ttl ? ' (TTL: ' + ttlEl.options[ttlEl.selectedIndex].text + ')' : ''));
+            setTimeout(function() { location.reload(); }, 1200);
+        } else {
+            showResult(resultEl, 'error', data.error || 'Unknown error');
+        }
+    } catch (e) {
+        showResult(resultEl, 'error', 'Request failed: ' + e.message);
+    }
+}
+
+function showResult(el, type, message) {
+    el.style.display = 'block';
+    el.className = 'action-result action-result-' + type;
+    el.textContent = message;
+}
+
+async function exportWorkspaces() {
+    var resp = await fetch('/api/workspaces');
+    var data = await resp.json();
+    var blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'workspaces.json';
+    a.click();
+    URL.revokeObjectURL(url);
+}
+</script>
+{% endblock %}

@@ -157,6 +157,7 @@ def create_app(
     # ------------------------------------------------------------------
 
     from atlasbridge.dashboard.routers.core import make_core_router
+    from atlasbridge.dashboard.routers.workspaces import make_workspace_router
 
     app.include_router(
         make_core_router(
@@ -167,6 +168,14 @@ def create_app(
             edition_value=edition.value,
             authority_mode_value=authority_mode.value,
             environment=environment,
+        )
+    )
+
+    app.include_router(
+        make_workspace_router(
+            repo=repo,
+            templates=templates,
+            db_path=db_path,
         )
     )
 

@@ -170,6 +170,26 @@ def _match_environment(criterion: str | None, environment: str) -> tuple[bool, s
     return False, f"environment: {criterion!r} != {environment!r}"
 
 
+def _match_workspace_trusted(criterion: bool | None, workspace_trusted: bool) -> tuple[bool, str]:
+    if criterion is None:
+        return True, "workspace_trusted: not specified (always matches)"
+    matched = criterion == workspace_trusted
+    return (
+        matched,
+        f"workspace_trusted: {criterion!r} {'==' if matched else '!='} {workspace_trusted!r}",
+    )
+
+
+def _match_workspace_profile(criterion: str | None, workspace_profile: str) -> tuple[bool, str]:
+    if criterion is None:
+        return True, "workspace_profile: not specified (always matches)"
+    matched = criterion == workspace_profile
+    return (
+        matched,
+        f"workspace_profile: {criterion!r} {'==' if matched else '!='} {workspace_profile!r}",
+    )
+
+
 def _match_deny_input_types(criterion: list[str] | None, prompt_type: str) -> tuple[bool, str]:
     if criterion is None:
         return True, "deny_input_types: not specified (always matches)"
@@ -309,6 +329,8 @@ def _eval_criteria_block(
     session_state: str = "",
     channel_message: bool = False,
     environment: str = "",
+    workspace_trusted: bool = False,
+    workspace_profile: str = "",
     short_circuit: bool = True,
 ) -> tuple[bool, list[str]]:
     """
@@ -334,6 +356,8 @@ def _eval_criteria_block(
                 session_state,
                 channel_message,
                 environment=environment,
+                workspace_trusted=workspace_trusted,
+                workspace_profile=workspace_profile,
                 short_circuit=short_circuit,
             )
             reasons.append(f"any_of[{i}]: {'✓ matched' if sub_matched else '✗ no match'}")
@@ -358,6 +382,8 @@ def _eval_criteria_block(
         _match_channel_message(m.channel_message, channel_message),
         _match_deny_input_types(m.deny_input_types, prompt_type),
         _match_environment(m.environment, environment),
+        _match_workspace_trusted(m.workspace_trusted, workspace_trusted),
+        _match_workspace_profile(m.workspace_profile, workspace_profile),
     ]
 
     all_pass = True
@@ -382,6 +408,8 @@ def _evaluate_rule_v1(
     session_state: str = "",
     channel_message: bool = False,
     environment: str = "",
+    workspace_trusted: bool = False,
+    workspace_profile: str = "",
     short_circuit: bool = True,
 ) -> RuleMatchResult:
     """
@@ -406,6 +434,8 @@ def _evaluate_rule_v1(
         session_state,
         channel_message,
         environment=environment,
+        workspace_trusted=workspace_trusted,
+        workspace_profile=workspace_profile,
         short_circuit=short_circuit,
     )
     reasons.extend(primary_reasons)
@@ -431,6 +461,8 @@ def _evaluate_rule_v1(
                 session_state,
                 channel_message,
                 environment=environment,
+                workspace_trusted=workspace_trusted,
+                workspace_profile=workspace_profile,
                 short_circuit=short_circuit,
             )
             if sub_matched:
@@ -499,6 +531,8 @@ def evaluate(
     file_scope: str = "",
     command_pattern: str = "",
     environment: str = "",
+    workspace_trusted: bool = False,
+    workspace_profile: str = "",
 ) -> PolicyDecision:
     """
     Evaluate the policy against a prompt event. First-match-wins.
@@ -523,6 +557,8 @@ def evaluate(
         file_scope:   File sensitivity: general, config, infrastructure, secrets.
         command_pattern: Command text for destructive pattern detection.
         environment:  Runtime environment: dev, staging, production.
+        workspace_trusted: Whether the workspace is currently trusted.
+        workspace_profile: Workspace posture profile name (e.g. "safe_refactor").
 
     Returns:
         :class:`PolicyDecision` with matched rule, action, explanation, and risk assessment.
@@ -548,6 +584,8 @@ def evaluate(
                 session_state=session_state,
                 channel_message=channel_message,
                 environment=environment,
+                workspace_trusted=workspace_trusted,
+                workspace_profile=workspace_profile,
             )
         else:
             result = _evaluate_rule(

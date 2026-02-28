@@ -48,8 +48,6 @@ class TestConsoleCommand:
         result = runner.invoke(cli, ["console", "--help"])
         assert "--dashboard-port" in result.output
 
-    def test_console_in_top_level_help(self, runner):
-        """The console command should appear in the top-level help."""
-        result = runner.invoke(cli, ["--help"])
-        assert result.exit_code == 0
-        assert "console" in result.output
+    def test_console_registered(self, runner):
+        """The console command should be registered (hidden from --help but callable)."""
+        assert "console" in cli.commands

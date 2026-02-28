@@ -68,6 +68,7 @@ class DaemonManager:
         self._intent_router: IntentRouter | None = None
         self._conversation_registry: Any = None  # ConversationRegistry
         self._autopilot_trace: Any = None  # DecisionTrace | None
+        self._transcript_writers: dict[str, Any] = {}  # session_id → TranscriptWriter
 
     async def start(self) -> None:
         """Start all subsystems and run until shutdown."""
@@ -156,44 +157,9 @@ class DaemonManager:
             logger.info("dry_run_channel_suppressed")
             return
 
-        channel_config = self._config.get("channels", {})
-        channels: list[Any] = []
-
-        telegram_cfg = channel_config.get("telegram", {})
-        if telegram_cfg:
-            from atlasbridge.channels.telegram.channel import TelegramChannel
-
-            channels.append(
-                TelegramChannel(
-                    bot_token=telegram_cfg["bot_token"],
-                    allowed_user_ids=telegram_cfg.get("allowed_user_ids", []),
-                )
-            )
-
-        slack_cfg = channel_config.get("slack", {})
-        if slack_cfg:
-            from atlasbridge.channels.slack.channel import SlackChannel
-
-            channels.append(
-                SlackChannel(
-                    bot_token=slack_cfg["bot_token"],
-                    app_token=slack_cfg["app_token"],
-                    allowed_user_ids=slack_cfg.get("allowed_user_ids", []),
-                )
-            )
-
-        if not channels:
-            logger.warning("no_channel_configured")
-            return
-
-        if len(channels) == 1:
-            self._channel = channels[0]
-        else:
-            from atlasbridge.channels.multi import MultiChannel
-
-            self._channel = MultiChannel(channels)
-
-        await self._channel.start()
+        # Notification channels (Telegram/Slack) have been removed.
+        # Prompts that would have been escalated are now logged only.
+        logger.info("channel_init_skipped_channels_removed")
 
     async def _init_session_manager(self) -> None:
         from atlasbridge.core.session.manager import SessionManager
@@ -316,9 +282,8 @@ class DaemonManager:
     async def _init_router(self) -> None:
         if self._session_manager is None:
             return
-        # In dry-run mode, channel is None but router still needed for event logging
-        if self._channel is None and not self._dry_run:
-            return
+        # Router is needed even without a channel — the dashboard Chat page
+        # serves as a standalone relay when no Telegram/Slack is configured.
         from atlasbridge.core.routing.router import PromptRouter
 
         self._router = PromptRouter(
@@ -477,6 +442,14 @@ class DaemonManager:
                 output_router="enabled",
             )
 
+        # Transcript writer — persists output for dashboard live transcript
+        transcript_writer = None
+        if self._db is not None:
+            from atlasbridge.core.store.transcript import TranscriptWriter
+
+            transcript_writer = TranscriptWriter(self._db, session_id)
+            self._transcript_writers[session_id] = transcript_writer
+
         async def _read_loop() -> None:
             try:
                 while True:
@@ -490,6 +463,9 @@ class DaemonManager:
                     # Feed output to forwarder for Chat Mode
                     if output_forwarder is not None:
                         output_forwarder.feed(chunk)
+                    # Feed output to transcript writer for dashboard
+                    if transcript_writer is not None:
+                        transcript_writer.feed(chunk)
             finally:
                 eof_reached.set()
 
@@ -521,6 +497,8 @@ class DaemonManager:
                 tg.create_task(_silence_watchdog(), name="silence_watchdog")
                 if output_forwarder is not None:
                     tg.create_task(output_forwarder.flush_loop(), name="output_forwarder")
+                if transcript_writer is not None:
+                    tg.create_task(transcript_writer.flush_loop(), name="transcript_writer")
         except* asyncio.CancelledError:
             pass
         finally:
@@ -528,6 +506,9 @@ class DaemonManager:
             self._session_manager.mark_ended(session_id)
             if self._db is not None:
                 self._db.update_session(session_id, status="completed")
+
+            # Clean up transcript writer
+            self._transcript_writers.pop(session_id, None)
 
             # Unbind conversation threads for this session
             if self._conversation_registry is not None:
@@ -832,6 +813,12 @@ class DaemonManager:
             # Adapter (PTY) mode: reply consumer + adapter session
             if self._channel and router:
                 tasks.append(asyncio.create_task(self._reply_consumer(), name="reply_consumer"))
+            elif not self._channel and router:
+                # Channelless mode — poll DB for dashboard-originated replies
+                tasks.append(asyncio.create_task(self._db_reply_poller(), name="db_reply_poller"))
+            # Operator directives — always active (dashboard free-text input)
+            directive_task = self._db_directive_poller()
+            tasks.append(asyncio.create_task(directive_task, name="db_directive_poller"))
             if self._config.get("tool") and self._config.get("command"):
                 tasks.append(
                     asyncio.create_task(self._run_adapter_session(), name="adapter_session")
@@ -855,6 +842,92 @@ class DaemonManager:
                 await router.handle_reply(reply)
             except Exception as exc:  # noqa: BLE001
                 logger.error("reply_handling_error", error=str(exc))
+
+    async def _db_reply_poller(self) -> None:
+        """Poll DB for dashboard-originated replies (channelless mode).
+
+        When no channel is configured, the dashboard Chat page is the relay.
+        Users reply via ``POST /api/chat/reply`` → ``atlasbridge sessions reply``
+        which atomically sets ``status = 'reply_received'`` in the DB.
+        This loop detects those rows and injects them into the PTY.
+        """
+        router = self._intent_router or self._router
+        assert router is not None
+        while self._running:
+            await asyncio.sleep(0.5)
+            if self._db is None:
+                continue
+            try:
+                rows = self._db.list_reply_received()
+                for row in rows:
+                    sid = row["session_id"]
+                    ok = await router.inject_dashboard_reply(
+                        prompt_id=row["id"],
+                        session_id=sid,
+                        value=row["response_normalized"],
+                    )
+                    if ok:
+                        tw = self._transcript_writers.get(sid)
+                        if tw is not None:
+                            tw.record_input(row["response_normalized"], row["id"])
+                        self._db.update_prompt_status(row["id"], "resolved")
+            except Exception as exc:  # noqa: BLE001
+                logger.error("db_reply_poller_error", error=str(exc))
+
+    async def _db_directive_poller(self) -> None:
+        """Poll DB for operator directives (free-text input from dashboard).
+
+        The dashboard Chat page sends messages via
+        ``POST /api/sessions/:id/message`` → ``atlasbridge sessions message``
+        which inserts a row into operator_directives with status='pending'.
+        This loop detects those rows and injects them into the PTY.
+        """
+        while self._running:
+            await asyncio.sleep(0.5)
+            if self._db is None:
+                continue
+            try:
+                rows = self._db.list_pending_directives()
+                for row in rows:
+                    sid = row["session_id"]
+                    content = row["content"]
+                    directive_id = row["id"]
+
+                    adapter = self._adapters.get(sid)
+                    if adapter is None:
+                        # No adapter — session not managed by this daemon.
+                        # Mark processed to avoid infinite retry loop.
+                        self._db.mark_directive_processed(directive_id)
+                        logger.warning(
+                            "directive_skipped_no_adapter",
+                            directive_id=directive_id,
+                            session_id=sid[:8],
+                        )
+                        continue
+
+                    try:
+                        await adapter.inject_reply(
+                            session_id=sid,
+                            value=content,
+                            prompt_type="free_text",
+                        )
+                        tw = self._transcript_writers.get(sid)
+                        if tw is not None:
+                            tw.record_input(content, role="operator")
+                        self._db.mark_directive_processed(directive_id)
+                        logger.info(
+                            "operator_directive_injected",
+                            session_id=sid[:8],
+                            directive_id=directive_id,
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        logger.error(
+                            "directive_inject_failed",
+                            directive_id=directive_id,
+                            error=str(exc),
+                        )
+            except Exception as exc:  # noqa: BLE001
+                logger.error("db_directive_poller_error", error=str(exc))
 
     async def _ttl_sweeper(self) -> None:
         """Periodically expire overdue prompts."""

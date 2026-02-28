@@ -176,11 +176,11 @@ class TestDenyEmitsAudit:
 
 
 class TestNoMutationRoutes:
-    """CORE dashboard must have no POST/PUT/DELETE routes that mutate data."""
+    """CORE dashboard POST routes must be bounded to known set."""
 
     @pytest.mark.safety
-    def test_no_write_routes_except_integrity_verify(self) -> None:
-        """Only /api/integrity/verify is POST. No PUT/DELETE routes exist."""
+    def test_no_write_routes_except_allowed(self) -> None:
+        """Only known POST routes exist. No PUT/DELETE routes exist."""
         pytest.importorskip("fastapi")
         from atlasbridge.dashboard.app import create_app
 
@@ -192,7 +192,11 @@ class TestNoMutationRoutes:
                     if method in ("POST", "PUT", "DELETE", "PATCH"):
                         mutation_routes.append((method, route.path))
 
-        # Only /api/integrity/verify is allowed as POST (read-only check)
-        allowed_mutations = {("POST", "/api/integrity/verify")}
+        # Known POST routes on core
+        allowed_mutations = {
+            ("POST", "/api/workspaces/scan"),
+            ("POST", "/api/workspaces/trust"),
+            ("POST", "/api/workspaces/posture"),
+        }
         unexpected = set(mutation_routes) - allowed_mutations
         assert not unexpected, f"Unexpected mutation routes: {unexpected}"

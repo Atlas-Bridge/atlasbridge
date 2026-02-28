@@ -21,6 +21,7 @@
             <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation">&#9776;</button>
             <div class="nav-links" id="nav-links">
                 <a href="/">Home</a>
+                <a href="/workspaces">Workspaces</a>
                 {% if edition == "enterprise" %}
                 <a href="/traces">Traces</a>
                 <a href="/integrity">Integrity</a>
@@ -37,7 +38,7 @@
         {% block content %}{% endblock %}
     </main>
     <footer>
-        <p>AtlasBridge Dashboard &mdash; localhost-only, read-only viewer</p>
+        <p>AtlasBridge Dashboard &mdash; localhost-only governance viewer</p>
     </footer>
     <script src="/static/dashboard.js"></script>
 </body>

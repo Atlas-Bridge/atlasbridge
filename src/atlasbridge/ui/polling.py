@@ -32,12 +32,8 @@ def poll_state() -> AppState:
 
         cfg_path = _config_file_path()
         if cfg_path.exists():
-            cfg = load_config(cfg_path)
+            load_config(cfg_path)
             config_status = ConfigStatus.LOADED
-            if cfg.telegram:
-                channels.append(ChannelStatus(name="telegram", configured=True))
-            if getattr(cfg, "slack", None):
-                channels.append(ChannelStatus(name="slack", configured=True))
         else:
             config_status = ConfigStatus.NOT_FOUND
     except Exception as exc:  # noqa: BLE001

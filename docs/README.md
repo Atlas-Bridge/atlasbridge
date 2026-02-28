@@ -10,8 +10,9 @@ This index helps you find the right document fast, whether you are a new user, a
 
 ### A) Users — I just installed AtlasBridge
 
-1. [Channel Token Setup](channel-token-setup.md) — get Telegram or Slack credentials
-2. **Per-agent quick start** — pick your AI tool:
+1. [**User Guide**](user-guide.md) — complete walkthrough from install to daily use, every dashboard page explained
+2. [Channel Token Setup](channel-token-setup.md) — get Telegram or Slack credentials
+3. **Per-agent quick start** — pick your AI tool:
    - [Claude Code](claude-code-getting-started.md) — `atlasbridge run claude`
    - [OpenAI Codex CLI](openai-getting-started.md) — `atlasbridge run openai`
    - [Gemini CLI](gemini-getting-started.md) — `atlasbridge run gemini`
@@ -49,6 +50,7 @@ This index helps you find the right document fast, whether you are a new user, a
 
 | Document | Audience | What you'll learn | When to read it | Status |
 |----------|----------|-------------------|-----------------|--------|
+| [**user-guide.md**](user-guide.md) | **User** | **Complete walkthrough: install, setup, dashboard pages, policies, sessions, evidence, troubleshooting** | **After installing AtlasBridge** | **Current** |
 | [architecture.md](architecture.md) | Contributor | System design: PTY supervisor, tri-signal detection, state machine, routing, adapters, channels, audit, invariants | Before making structural changes | Current |
 | [branding.md](branding.md) | Contributor | Brand system v1: color palette, typography, icon rules, CSS tokens, dark/light mode | When modifying UI surfaces | Current |
 | [claude-code-getting-started.md](claude-code-getting-started.md) | User | Claude Code setup, prompt patterns, policy examples, troubleshooting | When starting with Claude Code | Current |

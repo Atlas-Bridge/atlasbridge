@@ -11,6 +11,7 @@
 import { execSync } from "child_process";
 import fs from "fs";
 import { getAtlasBridgeDb } from "./db";
+import path from "path";
 import {
   getTracePath,
   getConfigPath,
@@ -623,6 +624,26 @@ export class AtlasBridgeRepo {
   }
 
   // -----------------------------------------------------------------------
+  // Autonomy mode (read from policy YAML)
+  // -----------------------------------------------------------------------
+
+  private readAutonomyMode(): "Off" | "Assist" | "Full" {
+    try {
+      const cfgDir = path.dirname(getConfigPath());
+      const policyPath = path.join(cfgDir, "policy.yaml");
+      const content = fs.readFileSync(policyPath, "utf8");
+      const match = content.match(/^autonomy_mode:\s*(\S+)/m);
+      if (match) {
+        const raw = match[1].toLowerCase();
+        if (raw === "off") return "Off";
+        if (raw === "full") return "Full";
+        if (raw === "assist") return "Assist";
+      }
+    } catch { /* policy file missing or unreadable */ }
+    return "Assist";
+  }
+
+  // -----------------------------------------------------------------------
   // Overview (computed from real data)
   // -----------------------------------------------------------------------
 
@@ -691,7 +712,7 @@ export class AtlasBridgeRepo {
       activeSessions: stats.active_sessions,
       lastEventTimestamp: lastEvent,
       escalationRate,
-      autonomyMode: "Assist",
+      autonomyMode: this.readAutonomyMode(),
       highRiskEvents,
       integrityStatus: integrity.overallStatus as "Verified" | "Warning" | "Failed",
       recentActivity,
@@ -746,6 +767,37 @@ export class AtlasBridgeRepo {
         policy_hot_reload: true,
       },
     };
+  }
+
+  // -----------------------------------------------------------------------
+  // Session Transcript
+  // -----------------------------------------------------------------------
+
+  listTranscriptChunks(
+    sessionId: string,
+    afterSeq = 0,
+    limit = 200,
+  ): { id: number; session_id: string; role: string; content: string; prompt_id: string | null; created_at: string; seq: number }[] {
+    const db = getAtlasBridgeDb();
+    if (!db) return [];
+    try {
+      const rows = db
+        .prepare(
+          "SELECT * FROM transcript_chunks WHERE session_id = ? AND seq > ? ORDER BY seq ASC LIMIT ?",
+        )
+        .all(sessionId, afterSeq, limit) as any[];
+      return rows.map((r: any) => ({
+        id: r.id,
+        session_id: r.session_id,
+        role: r.role,
+        content: sanitizeForDisplay(r.content || ""),
+        prompt_id: r.prompt_id || null,
+        created_at: r.created_at,
+        seq: r.seq,
+      }));
+    } catch {
+      return [];
+    }
   }
 
   // -----------------------------------------------------------------------

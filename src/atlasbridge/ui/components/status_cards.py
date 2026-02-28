@@ -91,9 +91,6 @@ class StatusCards(Widget):
         }.get(st.daemon_status, "—")
         yield _Card("Daemon", daemon_val, "card-daemon")
 
-        # Channel card
-        yield _Card("Channel", st.channel_summary or "none", "card-channel")
-
         # Sessions card
         sessions_val = f"{st.session_count} active" + (
             f"  ({st.pending_prompt_count} pending)" if st.pending_prompt_count else ""

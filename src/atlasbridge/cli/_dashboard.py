@@ -124,6 +124,29 @@ def _npx_available() -> bool:
     return shutil.which("npx") is not None
 
 
+def start_dashboard(port: int = 3737, no_browser: bool = False) -> None:
+    """Launch the Node.js dashboard — called from the root CLI default action."""
+    host = "127.0.0.1"
+    if not os.environ.get("ATLASBRIDGE_EDITION"):
+        os.environ["ATLASBRIDGE_EDITION"] = "core"
+    if not _node_available():
+        click.echo(
+            "Error: Node.js is required for the dashboard but was not found.\n"
+            "Install Node.js (v18+) from https://nodejs.org",
+            err=True,
+        )
+        raise SystemExit(1)
+    dashboard_dir = _find_dashboard_dir()
+    if dashboard_dir is None:
+        click.echo(
+            "Error: Dashboard could not be set up.\n"
+            "Ensure Node.js (v18+) and npm are installed: https://nodejs.org",
+            err=True,
+        )
+        raise SystemExit(1)
+    _start_node_dashboard(host, port, no_browser, dashboard_dir)
+
+
 def _start_node_dashboard(host: str, port: int, no_browser: bool, dashboard_dir: Path) -> None:
     """Start the Node.js TypeScript dashboard."""
     from atlasbridge.core.autopilot.trace import TRACE_FILENAME

@@ -78,6 +78,3 @@ AUDIT_MAX_ROWS = 10_000  # default: archive when row count exceeds this
 # ---------------------------------------------------------------------------
 # Network
 # ---------------------------------------------------------------------------
-
-DEFAULT_TELEGRAM_POLL_TIMEOUT = 30  # long-poll timeout (seconds)
-DEFAULT_TELEGRAM_MAX_RETRIES = 5

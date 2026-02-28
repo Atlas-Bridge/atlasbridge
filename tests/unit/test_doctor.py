@@ -5,22 +5,21 @@ Regression coverage for:
 - _check_config / _check_bot_token must not raise when config path is str
 - load_config accepts str path without AttributeError
 - _check_config returns "warn" (not "fail") when config file is absent
-- _check_bot_token returns "skip" when config file is absent
+- _check_bot_token returns "skip" (channels removed)
 - _fix_config creates skeleton and sets permissions when file is missing
-- _check_telegram_reachability pass/warn/skip
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
 MINIMAL_TOML = """\
-[telegram]
-bot_token = "123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi"
-allowed_users = [12345678]
+config_version = 1
+
+[prompts]
+timeout_seconds = 300
 """
 
 
@@ -37,7 +36,7 @@ class TestLoadConfigAcceptsStrPath:
         from atlasbridge.core.config import load_config
 
         result = load_config(str(cfg))  # <-- was crashing before the fix
-        assert result.telegram is not None
+        assert result.config_version == 1
 
     def test_load_config_with_path_object(self, tmp_path: Path) -> None:
         """Passing a Path object to load_config continues to work."""
@@ -46,7 +45,7 @@ class TestLoadConfigAcceptsStrPath:
         from atlasbridge.core.config import load_config
 
         result = load_config(cfg)
-        assert result.telegram is not None
+        assert result.config_version == 1
 
     def test_load_config_missing_file_raises_config_not_found(self, tmp_path: Path) -> None:
         """Missing file raises ConfigNotFoundError (not AttributeError)."""
@@ -119,18 +118,12 @@ class TestDoctorChecks:
         result = _check_bot_token()
         assert result["status"] == "skip"
 
-    def test_check_bot_token_pass_when_present(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """_check_bot_token returns status='pass' for a valid token."""
-        cfg = tmp_path / "config.toml"
-        cfg.write_text(MINIMAL_TOML)
-        monkeypatch.setenv("ATLASBRIDGE_CONFIG", str(cfg))
+    def test_check_bot_token_always_skip(self) -> None:
+        """_check_bot_token always returns skip since channels were removed."""
         from atlasbridge.cli._doctor import _check_bot_token
 
         result = _check_bot_token()
-        assert result["status"] == "pass"
-        assert "..." in result["detail"]  # masked token
+        assert result["status"] == "skip"
 
     def test_check_bot_token_never_raises(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -166,7 +159,7 @@ class TestFixConfig:
 
         assert cfg.exists()
         content = cfg.read_text()
-        assert "[telegram]" in content
+        assert "config_version" in content
 
     def test_fix_config_creates_parent_dirs(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -199,65 +192,6 @@ class TestFixConfig:
         _fix_config(Console(quiet=True))
 
         assert cfg.read_text() == original
-
-
-# ---------------------------------------------------------------------------
-# _check_telegram_reachability
-# ---------------------------------------------------------------------------
-
-
-class TestCheckTelegramReachability:
-    def test_check_telegram_reachability_pass(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Returns pass when verify_telegram_token succeeds."""
-        cfg = tmp_path / "config.toml"
-        cfg.write_text(MINIMAL_TOML)
-        monkeypatch.setenv("ATLASBRIDGE_CONFIG", str(cfg))
-
-        with patch(
-            "atlasbridge.channels.telegram.verify.verify_telegram_token",
-            return_value=(True, "Bot: @testbot"),
-        ):
-            from atlasbridge.cli._doctor import _check_telegram_reachability
-
-            result = _check_telegram_reachability()
-
-        assert result is not None
-        assert result["status"] == "pass"
-        assert "Bot: @testbot" in result["detail"]
-
-    def test_check_telegram_reachability_warn(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Returns warn when verify_telegram_token fails."""
-        cfg = tmp_path / "config.toml"
-        cfg.write_text(MINIMAL_TOML)
-        monkeypatch.setenv("ATLASBRIDGE_CONFIG", str(cfg))
-
-        with patch(
-            "atlasbridge.channels.telegram.verify.verify_telegram_token",
-            return_value=(False, "Unauthorized"),
-        ):
-            from atlasbridge.cli._doctor import _check_telegram_reachability
-
-            result = _check_telegram_reachability()
-
-        assert result is not None
-        assert result["status"] == "warn"
-        assert "Unauthorized" in result["detail"]
-
-    def test_check_telegram_reachability_skip_no_config(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Returns None (skip) when no Telegram is configured."""
-        missing = tmp_path / "config.toml"
-        monkeypatch.setenv("ATLASBRIDGE_CONFIG", str(missing))
-
-        from atlasbridge.cli._doctor import _check_telegram_reachability
-
-        result = _check_telegram_reachability()
-        assert result is None
 
 
 # ---------------------------------------------------------------------------

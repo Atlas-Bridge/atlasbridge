@@ -1,11 +1,8 @@
 """
 BaseChannel — abstract interface for notification channels.
 
-Concrete implementations:
-  TelegramChannel  — python-telegram-bot or httpx polling
-  SlackChannel     — Slack Bolt (v0.4.0)
-  WhatsAppChannel  — stub (future)
-  WebUIChannel     — stub (future)
+Concrete implementations have been removed (Telegram/Slack channels deprecated).
+This module is retained as the abstract interface.
 
 A channel is responsible for:
   1. Sending prompt events to the human (forward path)

@@ -78,64 +78,6 @@ def _maybe_migrate_legacy(new_dir: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-class TelegramConfig(BaseModel):
-    bot_token: SecretStr
-    allowed_users: list[int] = Field(min_length=1)
-
-    @field_validator("bot_token", mode="before")
-    @classmethod
-    def validate_token_format(cls, v: Any) -> Any:
-        import re
-
-        token = str(v.get_secret_value() if hasattr(v, "get_secret_value") else v)
-        if not re.fullmatch(r"\d{8,12}:[A-Za-z0-9_\-]{35,}", token):
-            raise ValueError(
-                "Invalid Telegram bot token format. "
-                "Expected: <digits>:<35+ chars>. Get one from @BotFather."
-            )
-        return v
-
-    @field_validator("allowed_users", mode="before")
-    @classmethod
-    def parse_allowed_users(cls, v: Any) -> Any:
-        """Accept both list and comma-separated string."""
-        if isinstance(v, str):
-            return [int(uid.strip()) for uid in v.split(",") if uid.strip()]
-        return v
-
-
-class SlackConfig(BaseModel):
-    bot_token: SecretStr  # xoxb-* Slack Bot User OAuth Token
-    app_token: SecretStr  # xapp-* App-Level Token for Socket Mode
-    allowed_users: list[str] = Field(min_length=1)  # Slack user IDs, e.g. "U1234567890"
-
-    @field_validator("bot_token", mode="before")
-    @classmethod
-    def validate_bot_token(cls, v: Any) -> Any:
-        import re
-
-        token = str(v.get_secret_value() if hasattr(v, "get_secret_value") else v)
-        if not re.fullmatch(r"xoxb-[A-Za-z0-9\-]+", token):
-            raise ValueError(
-                "Invalid Slack bot token format. "
-                "Expected: xoxb-<alphanumeric>. Get one from your Slack App settings."
-            )
-        return v
-
-    @field_validator("app_token", mode="before")
-    @classmethod
-    def validate_app_token(cls, v: Any) -> Any:
-        import re
-
-        token = str(v.get_secret_value() if hasattr(v, "get_secret_value") else v)
-        if not re.fullmatch(r"xapp-[A-Za-z0-9\-]+", token):
-            raise ValueError(
-                "Invalid Slack app token format. "
-                "Expected: xapp-<alphanumeric>. Enable Socket Mode in your Slack App settings."
-            )
-        return v
-
-
 class PromptsConfig(BaseModel):
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS
     reminder_seconds: int | None = None
@@ -285,8 +227,6 @@ class AtlasBridgeConfig(BaseModel):
     """Root AtlasBridge configuration model."""
 
     config_version: int = 1
-    telegram: TelegramConfig | None = None
-    slack: SlackConfig | None = None
     prompts: PromptsConfig = Field(default_factory=PromptsConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
@@ -403,22 +343,6 @@ def _apply_env_overrides(data: dict[str, Any]) -> None:
                 return v
         return ""
 
-    # Telegram
-    if token := _env("ATLASBRIDGE_TELEGRAM_BOT_TOKEN", "AEGIS_TELEGRAM_BOT_TOKEN"):
-        data.setdefault("telegram", {})["bot_token"] = token
-    if users := _env("ATLASBRIDGE_TELEGRAM_ALLOWED_USERS", "AEGIS_TELEGRAM_ALLOWED_USERS"):
-        data.setdefault("telegram", {})["allowed_users"] = users
-
-    # Slack
-    if slack_bot := _env("ATLASBRIDGE_SLACK_BOT_TOKEN", "AEGIS_SLACK_BOT_TOKEN"):
-        data.setdefault("slack", {})["bot_token"] = slack_bot
-    if slack_app := _env("ATLASBRIDGE_SLACK_APP_TOKEN", "AEGIS_SLACK_APP_TOKEN"):
-        data.setdefault("slack", {})["app_token"] = slack_app
-    if slack_users := _env("ATLASBRIDGE_SLACK_ALLOWED_USERS", "AEGIS_SLACK_ALLOWED_USERS"):
-        data.setdefault("slack", {})["allowed_users"] = [
-            u.strip() for u in slack_users.split(",") if u.strip()
-        ]
-
     # General
     if level := _env("ATLASBRIDGE_LOG_LEVEL", "AEGIS_LOG_LEVEL"):
         data.setdefault("logging", {})["level"] = level
@@ -484,11 +408,7 @@ def save_config(
 # Keyring helpers
 # ---------------------------------------------------------------------------
 
-_KEYRING_TOKEN_FIELDS: list[tuple[str, str]] = [
-    ("telegram", "bot_token"),
-    ("slack", "bot_token"),
-    ("slack", "app_token"),
-]
+_KEYRING_TOKEN_FIELDS: list[tuple[str, str]] = []
 
 # Nested paths for keyring resolution (section.subsection, key)
 _KEYRING_NESTED_FIELDS: list[tuple[str, str, str]] = [

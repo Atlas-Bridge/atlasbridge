@@ -55,6 +55,25 @@ def _make_test_client(
         "session_id TEXT, prompt_id TEXT, payload TEXT, timestamp TEXT, "
         "prev_hash TEXT, hash TEXT)"
     )
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS workspace_trust ("
+        "id TEXT PRIMARY KEY, path TEXT NOT NULL, path_hash TEXT NOT NULL UNIQUE, "
+        "trusted INTEGER NOT NULL DEFAULT 0, actor TEXT, channel TEXT, "
+        "session_id TEXT, granted_at TEXT, revoked_at TEXT, "
+        "created_at TEXT NOT NULL DEFAULT (datetime('now')), "
+        "trust_expires_at TEXT, updated_at TEXT, profile_name TEXT, "
+        "autonomy_default TEXT, model_tier TEXT, tool_allowlist_profile TEXT, "
+        "posture_notes TEXT)"
+    )
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS workspace_scan_artifacts ("
+        "id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, "
+        "ruleset_version TEXT NOT NULL, inputs_hash TEXT NOT NULL, "
+        "risk_tags TEXT NOT NULL DEFAULT '[]', file_count INTEGER NOT NULL DEFAULT 0, "
+        "suggested_profile TEXT, raw_results TEXT NOT NULL DEFAULT '{}', "
+        "created_at TEXT NOT NULL DEFAULT (datetime('now')), "
+        "UNIQUE(workspace_id, inputs_hash))"
+    )
     conn.commit()
     conn.close()
 
@@ -69,6 +88,7 @@ def _make_test_client(
 _PARAM_SUBSTITUTIONS: dict[str, str] = {
     "{session_id}": "nonexistent-session",
     "{index}": "0",
+    "{workspace_id}": "nonexistent-workspace",
 }
 
 
@@ -87,14 +107,25 @@ class TestCoreEditionE2E:
         monkeypatch.setenv("ATLASBRIDGE_AUTHORITY_MODE", "readonly")
         self.client = _make_test_client(tmp_path, "core", "readonly")
 
+    # Routes that return 404 due to business logic (record not found) when
+    # called with placeholder IDs — verified via route table, not HTTP status.
+    _BUSINESS_LOGIC_404 = {
+        "/api/workspaces/{workspace_id}",
+        "/api/workspaces/{workspace_id}/sessions",
+    }
+
     def test_all_core_routes_return_non_404(self) -> None:
         """Every core route must be reachable (non-404)."""
         for method, path in CORE_ROUTES:
             if path == "/openapi.json":
                 continue  # auto-generated, skip direct test
+            if path in self._BUSINESS_LOGIC_404:
+                continue
             url = _materialize_path(path)
             if method == "GET":
                 resp = self.client.get(url)
+            elif method == "POST":
+                resp = self.client.post(url, json={})
             else:
                 resp = self.client.request(method, url)
             assert resp.status_code != 404, (
@@ -126,12 +157,26 @@ class TestEnterpriseEditionE2E:
         monkeypatch.setenv("ATLASBRIDGE_AUTHORITY_MODE", "readonly")
         self.client = _make_test_client(tmp_path, "enterprise", "readonly")
 
+    # Routes that return 404 due to business logic (record not found) when
+    # called with placeholder IDs.
+    _BUSINESS_LOGIC_404 = {
+        "/api/workspaces/{workspace_id}",
+        "/api/workspaces/{workspace_id}/sessions",
+    }
+
     def test_all_core_routes_reachable_on_enterprise(self) -> None:
         for method, path in CORE_ROUTES:
             if path == "/openapi.json":
                 continue
+            if path in self._BUSINESS_LOGIC_404:
+                continue
             url = _materialize_path(path)
-            resp = self.client.get(url)
+            if method == "GET":
+                resp = self.client.get(url)
+            elif method == "POST":
+                resp = self.client.post(url, json={})
+            else:
+                resp = self.client.request(method, url)
             assert resp.status_code != 404, f"Core route {method} {path} returned 404 on Enterprise"
 
     def test_enterprise_routes_reachable_except_authority_gated(self) -> None:

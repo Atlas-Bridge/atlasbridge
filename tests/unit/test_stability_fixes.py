@@ -3,11 +3,8 @@ Regression tests for stability fixes (v0.8.4).
 
 Covers:
   A) Adapter discovery resilience
-  B) Telegram chat-not-found error handling
-  C) Telegram 409 conflict handling
   D) Stale/unknown prompt reply handling
   E) Doctor path handling
-  F) Setup existing config detection
   G) Run command on-screen instructions
 """
 
@@ -60,84 +57,6 @@ class TestAdapterDiscovery:
         from atlasbridge.adapters.base import AdapterRegistry
 
         assert "claude" in AdapterRegistry.list_all()
-
-
-# =====================================================================
-# B) Telegram chat-not-found handling
-# =====================================================================
-
-
-class TestTelegramChatNotFound:
-    """Telegram send_prompt logs actionable message on 'chat not found'."""
-
-    @pytest.mark.asyncio
-    async def test_api_logs_chat_not_found(self):
-        """_api method logs actionable error on 400 chat not found."""
-        from atlasbridge.channels.telegram.channel import TelegramChannel
-
-        channel = TelegramChannel(
-            bot_token="123456:FAKE",
-            allowed_user_ids=[99999],
-        )
-
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "ok": False,
-            "error_code": 400,
-            "description": "Bad Request: chat not found",
-        }
-
-        mock_client = MagicMock()
-        mock_client.post = AsyncMock(return_value=mock_response)
-        channel._client = mock_client
-
-        with patch("atlasbridge.channels.telegram.channel.logger") as mock_logger:
-            result = await channel._api("sendMessage", {"chat_id": 99999, "text": "test"})
-            assert result is None
-            mock_logger.error.assert_called_once()
-            call_args = mock_logger.error.call_args
-            assert call_args[0][0] == "telegram_chat_not_found"
-            assert call_args[1]["chat_id"] == 99999
-            assert "/start" in call_args[1]["hint"]
-
-
-# =====================================================================
-# C) Telegram 409 conflict handling
-# =====================================================================
-
-
-class TestTelegram409Conflict:
-    """409 Conflict stops polling and releases the lock."""
-
-    def test_conflict_error_class_exists(self):
-        from atlasbridge.channels.telegram.channel import TelegramConflictError
-
-        err = TelegramConflictError("conflict")
-        assert str(err) == "conflict"
-
-    @pytest.mark.asyncio
-    async def test_api_raises_conflict_on_409(self):
-        """_api raises TelegramConflictError on 409 with getUpdates."""
-        from atlasbridge.channels.telegram.channel import (
-            TelegramChannel,
-            TelegramConflictError,
-        )
-
-        channel = TelegramChannel(bot_token="123456:FAKE", allowed_user_ids=[99999])
-
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "ok": False,
-            "error_code": 409,
-            "description": "Conflict: terminated by other getUpdates request",
-        }
-
-        mock_client = MagicMock()
-        mock_client.post = AsyncMock(return_value=mock_response)
-        channel._client = mock_client
-
-        with pytest.raises(TelegramConflictError):
-            await channel._api("getUpdates", {"offset": 0, "timeout": 30})
 
 
 # =====================================================================
@@ -339,32 +258,6 @@ class TestDoctorPathHandling:
 
 
 # =====================================================================
-# F) Setup existing config detection
-# =====================================================================
-
-
-class TestSetupConfigDetection:
-    """Setup wizard detects existing config on upgrade."""
-
-    def test_setup_telegram_validates_token_format(self):
-        """_validate_telegram_token rejects invalid tokens."""
-        from atlasbridge.cli._setup import _validate_telegram_token
-
-        assert _validate_telegram_token("1234567890:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklm")
-        assert not _validate_telegram_token("")
-        assert not _validate_telegram_token("invalid-token")
-        assert not _validate_telegram_token("short:tok")
-
-    def test_setup_telegram_validates_user_ids(self):
-        """_validate_telegram_users parses comma-separated user IDs."""
-        from atlasbridge.cli._setup import _validate_telegram_users
-
-        assert _validate_telegram_users("123456789") == [123456789]
-        assert _validate_telegram_users("123,456,789") == [123, 456, 789]
-        assert _validate_telegram_users("not-a-number") is None
-
-
-# =====================================================================
 # G) Run command on-screen instructions
 # =====================================================================
 
@@ -377,43 +270,3 @@ class TestRunInstructions:
         from atlasbridge.cli._run import cmd_run
 
         assert callable(cmd_run)
-
-
-# =====================================================================
-# Poller lock
-# =====================================================================
-
-
-class TestPollerLock:
-    """Poller lock ensures singleton polling."""
-
-    def test_poller_lock_acquire_release(self, tmp_path):
-        """PollerLock can be acquired and released."""
-        from atlasbridge.core.poller_lock import PollerLock
-
-        lock = PollerLock("test_token", locks_dir=tmp_path)
-        assert lock.acquire()
-        assert lock.acquired
-        lock.release()
-        assert not lock.acquired
-
-    def test_poller_lock_prevents_double_acquire(self, tmp_path):
-        """Second PollerLock cannot acquire while first holds it."""
-        from atlasbridge.core.poller_lock import PollerLock
-
-        lock1 = PollerLock("test_token", locks_dir=tmp_path)
-        lock2 = PollerLock("test_token", locks_dir=tmp_path)
-
-        assert lock1.acquire()
-        assert not lock2.acquire()
-
-        lock1.release()
-        assert lock2.acquire()
-        lock2.release()
-
-    def test_check_stale_lock_no_file(self, tmp_path):
-        """check_stale_lock returns pass when no lock file exists."""
-        from atlasbridge.core.poller_lock import check_stale_lock
-
-        result = check_stale_lock("test_token", locks_dir=tmp_path)
-        assert result["status"] == "pass"

@@ -7,7 +7,7 @@ functions used by the CLI subcommands (single source of truth).
 
 from __future__ import annotations
 
-from atlasbridge.ui.state import AppState, ChannelStatus, ConfigStatus, DaemonStatus
+from atlasbridge.ui.state import AppState, ConfigStatus, DaemonStatus
 
 
 class ConfigService:
@@ -23,12 +23,8 @@ class ConfigService:
             if not cfg_path.exists():
                 state.config_status = ConfigStatus.NOT_FOUND
                 return state
-            config = load_config(str(cfg_path))
+            load_config(str(cfg_path))
             state.config_status = ConfigStatus.LOADED
-            if config.telegram:
-                state.channels.append(ChannelStatus("telegram", True))
-            if config.slack:
-                state.channels.append(ChannelStatus("slack", True))
         except Exception as exc:  # noqa: BLE001
             state.config_status = ConfigStatus.ERROR
             state.last_error = str(exc)

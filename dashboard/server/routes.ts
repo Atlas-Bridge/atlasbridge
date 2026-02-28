@@ -1,9 +1,11 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { randomUUID } from "node:crypto";
+import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { registerOperatorRoutes } from "./routes/operator";
+import { registerPolicyRoutes } from "./routes/policy";
 import { WebSocketServer, WebSocket } from "ws";
 import { repo } from "./atlasbridge-repo";
 import { storage } from "./storage";
@@ -26,7 +28,11 @@ import {
 import { handleTerminalConnection } from "./terminal";
 import { requireCsrf } from "./middleware/csrf";
 import { operatorRateLimiter } from "./middleware/rate-limit";
-import { insertOperatorAuditLog } from "./db";
+import {
+  insertOperatorAuditLog,
+  createMonitorSession, listMonitorSessions, getMonitorSession,
+  endMonitorSession, insertMonitorMessages, listMonitorMessages,
+} from "./db";
 import { getConfigPath } from "./config";
 import { parse as parseTOML, stringify as stringifyTOML } from "smol-toml";
 
@@ -324,7 +330,35 @@ export async function registerRoutes(
   // -----------------------------------------------------------------------
 
   app.get("/api/overview", (_req, res) => {
-    res.json(repo.getOverview());
+    const overview = repo.getOverview();
+
+    // Enrich with live activity data from monitor tables
+    try {
+      const activeMon = listMonitorSessions("active") as Array<{ id: string; vendor: string; created_at: string }>;
+      const allMon = listMonitorSessions() as Array<{ id: string; vendor: string; created_at: string }>;
+
+      (overview as any).activitySummary = {
+        activeMonitorSessions: activeMon.length,
+        totalMonitorSessions: allMon.length,
+        vendors: Array.from(new Set(allMon.map(s => s.vendor))),
+        latestSessionAt: allMon.length > 0 ? allMon[0].created_at : null,
+      };
+
+      // Inject monitor activity into recentActivity feed
+      for (const s of activeMon.slice(0, 5)) {
+        overview.recentActivity.unshift({
+          id: `mon-${s.id.slice(0, 8)}`,
+          timestamp: s.created_at,
+          type: "monitor.session",
+          message: `${s.vendor} conversation monitored`,
+          riskLevel: "low" as const,
+          sessionId: s.id.slice(0, 8),
+        });
+      }
+      overview.recentActivity = overview.recentActivity.slice(0, 20);
+    } catch { /* monitor tables may not exist yet */ }
+
+    res.json(overview);
   });
 
   app.get("/api/sessions", (_req, res) => {
@@ -338,6 +372,13 @@ export async function registerRoutes(
       return;
     }
     res.json(detail);
+  });
+
+  app.get("/api/sessions/:id/transcript", (req, res) => {
+    const afterSeq = Number(req.query.after_seq ?? 0);
+    const limit = Math.min(Number(req.query.limit ?? 200), 500);
+    const chunks = repo.listTranscriptChunks(req.params.id, afterSeq, limit);
+    res.json(chunks);
   });
 
   app.get("/api/prompts", (_req, res) => {
@@ -653,6 +694,26 @@ export async function registerRoutes(
     const deleted = await storage.deleteNotification(id);
     if (!deleted) { res.status(404).json({ error: "Notification not found" }); return; }
     res.status(204).end();
+  });
+
+  app.post("/api/notifications/:id/test", requireCsrf, operatorRateLimiter, async (req, res) => {
+    try {
+      const id = parseInt(String(req.params.id));
+      const allNotifs = await storage.getNotifications();
+      const notif = allNotifs.find(n => n.id === id);
+      if (!notif) { res.status(404).json({ error: "Notification not found" }); return; }
+      const { testNotification } = await import("./notifications");
+      const result = await testNotification(notif.channel, notif.destination);
+      await storage.updateNotification(id, {
+        lastDelivered: new Date().toISOString(),
+        lastDeliveryStatus: result.success ? "success" : "failed",
+        lastDeliveryError: result.error || null,
+      });
+      insertOperatorAuditLog({ method: "POST", path: `/api/notifications/${id}/test`, action: "notification.test", body: { channel: notif.channel }, result: result.success ? "ok" : "error", error: result.error });
+      res.json(result);
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message || "Test failed" });
+    }
   });
 
   app.post("/api/ip-allowlist", async (req, res) => {
@@ -1208,6 +1269,23 @@ export async function registerRoutes(
     res.json(listGeneratedBundles());
   });
 
+  app.get("/api/evidence/bundles/:id", (req, res) => {
+    const bundleId = req.params.id;
+    const all = listGeneratedBundles();
+    const meta = all.find((b) => b.id === bundleId);
+    if (!meta) {
+      res.status(404).json({ error: "Bundle not found" });
+      return;
+    }
+    // Regenerate the full bundle (deterministic from current data)
+    const full = generateFullBundle(meta.sessionId || undefined);
+    res.json({
+      ...meta,
+      evidence: full.evidence,
+      manifest: full.manifest,
+    });
+  });
+
   app.get("/api/evidence/packs", (_req, res) => {
     res.json(policyPacks);
   });
@@ -1275,15 +1353,18 @@ export async function registerRoutes(
         return;
       }
       try {
-        const { stdout } = await runAtlasBridge(["workspace", "trust", path]);
+        const args = ["workspace", "trust", path];
+        const ttl = typeof body.ttl === "string" ? body.ttl : "";
+        if (ttl) args.push("--ttl", ttl);
+        const { stdout } = await runAtlasBridge(args);
         insertOperatorAuditLog({
           method: "POST",
           path: "/api/workspaces/trust",
           action: `workspace-trust:${path}`,
-          body: { path },
+          body: { path, ttl: ttl || undefined },
           result: "ok",
         });
-        res.json({ ok: true, path, detail: stdout.trim() });
+        res.json({ ok: true, path, ttl: ttl || null, detail: stdout.trim() });
       } catch (err: any) {
         insertOperatorAuditLog({
           method: "POST",
@@ -1330,6 +1411,156 @@ export async function registerRoutes(
           error: err.message,
         });
         res.status(503).json({ error: "Failed to revoke workspace trust", detail: err.message });
+      }
+    },
+  );
+
+  // POST /api/workspaces/remove — permanently remove a workspace record
+  app.post(
+    "/api/workspaces/remove",
+    requireCsrf,
+    operatorRateLimiter,
+    async (req, res) => {
+      const body = req.body as Record<string, unknown>;
+      const wsPath = typeof body.path === "string" ? body.path : "";
+      if (!wsPath) {
+        res.status(400).json({ error: "path is required" });
+        return;
+      }
+      try {
+        const { getAtlasBridgeDbRW } = await import("./db");
+        const abDb = getAtlasBridgeDbRW();
+        if (!abDb) {
+          res.status(503).json({ error: "AtlasBridge database not available" });
+          return;
+        }
+        try {
+          const result = abDb.prepare("DELETE FROM workspace_trust WHERE path = ?").run(wsPath);
+          insertOperatorAuditLog({
+            method: "POST",
+            path: "/api/workspaces/remove",
+            action: `workspace-remove:${wsPath}`,
+            body: { path: wsPath },
+            result: "ok",
+          });
+          res.json({ ok: true, path: wsPath, deleted: result.changes > 0 });
+        } finally {
+          abDb.close();
+        }
+      } catch (err: any) {
+        insertOperatorAuditLog({
+          method: "POST",
+          path: "/api/workspaces/remove",
+          action: `workspace-remove:${wsPath}`,
+          body: { path: wsPath },
+          result: "error",
+          error: err.message,
+        });
+        res.status(503).json({ error: "Failed to remove workspace", detail: err.message });
+      }
+    },
+  );
+
+  // GET /api/workspaces/:path — workspace status (trust + posture)
+  app.get("/api/workspaces/status", async (req, res) => {
+    const { runAtlasBridge } = await import("./routes/operator");
+    const wsPath = typeof req.query.path === "string" ? req.query.path : "";
+    if (!wsPath) {
+      res.status(400).json({ error: "path query parameter is required" });
+      return;
+    }
+    try {
+      const { stdout } = await runAtlasBridge(["workspace", "status", wsPath, "--json"]);
+      const data = JSON.parse(stdout.trim() || "{}");
+      res.json(data);
+    } catch {
+      res.json({ path: wsPath, trusted: false, found: false });
+    }
+  });
+
+  // POST /api/workspaces/posture — set posture bindings for a workspace
+  app.post(
+    "/api/workspaces/posture",
+    requireCsrf,
+    operatorRateLimiter,
+    async (req, res) => {
+      const { runAtlasBridge } = await import("./routes/operator");
+      const body = req.body as Record<string, unknown>;
+      const wsPath = typeof body.path === "string" ? body.path : "";
+      if (!wsPath) {
+        res.status(400).json({ error: "path is required" });
+        return;
+      }
+      const args = ["workspace", "posture", wsPath];
+      if (typeof body.profile === "string" && body.profile) args.push("--profile", body.profile);
+      if (typeof body.autonomy === "string" && body.autonomy) args.push("--autonomy", body.autonomy);
+      if (typeof body.model_tier === "string" && body.model_tier) args.push("--model-tier", body.model_tier);
+      if (typeof body.tool_profile === "string" && body.tool_profile) args.push("--tool-profile", body.tool_profile);
+      if (typeof body.notes === "string" && body.notes) args.push("--notes", body.notes);
+
+      if (args.length <= 3) {
+        res.status(400).json({ error: "At least one posture field required (profile, autonomy, model_tier, tool_profile, notes)" });
+        return;
+      }
+
+      try {
+        const { stdout } = await runAtlasBridge(args);
+        insertOperatorAuditLog({
+          method: "POST",
+          path: "/api/workspaces/posture",
+          action: `workspace-posture:${wsPath}`,
+          body: { path: wsPath, ...body },
+          result: "ok",
+        });
+        res.json({ ok: true, path: wsPath, detail: stdout.trim() });
+      } catch (err: any) {
+        insertOperatorAuditLog({
+          method: "POST",
+          path: "/api/workspaces/posture",
+          action: `workspace-posture:${wsPath}`,
+          body: { path: wsPath, ...body },
+          result: "error",
+          error: err.message,
+        });
+        res.status(503).json({ error: "Failed to set workspace posture", detail: err.message });
+      }
+    },
+  );
+
+  // POST /api/workspaces/scan — run advisory risk scan on a workspace
+  app.post(
+    "/api/workspaces/scan",
+    requireCsrf,
+    operatorRateLimiter,
+    async (req, res) => {
+      const { runAtlasBridge } = await import("./routes/operator");
+      const body = req.body as Record<string, unknown>;
+      const wsPath = typeof body.path === "string" ? body.path : "";
+      if (!wsPath) {
+        res.status(400).json({ error: "path is required" });
+        return;
+      }
+      try {
+        const { stdout } = await runAtlasBridge(["workspace", "scan", wsPath, "--json"]);
+        const data = JSON.parse(stdout.trim() || "{}");
+        insertOperatorAuditLog({
+          method: "POST",
+          path: "/api/workspaces/scan",
+          action: `workspace-scan:${wsPath}`,
+          body: { path: wsPath },
+          result: "ok",
+        });
+        res.json(data);
+      } catch (err: any) {
+        insertOperatorAuditLog({
+          method: "POST",
+          path: "/api/workspaces/scan",
+          action: `workspace-scan:${wsPath}`,
+          body: { path: wsPath },
+          result: "error",
+          error: err.message,
+        });
+        res.status(503).json({ error: "Failed to scan workspace", detail: err.message });
       }
     },
   );
@@ -1448,38 +1679,11 @@ export async function registerRoutes(
 
   app.get("/api/channels", (_req, res) => {
     const cfg = readAtlasBridgeConfig();
-    const tg = cfg.telegram as Record<string, unknown> | undefined;
     const sl = cfg.slack as Record<string, unknown> | undefined;
     res.json({
-      telegram: tg ? { configured: true, users: tg.allowed_users } : null,
       slack: sl ? { configured: true, users: sl.allowed_users } : null,
     });
   });
-
-  app.post(
-    "/api/channels/telegram",
-    requireCsrf,
-    operatorRateLimiter,
-    (req, res) => {
-      const { token, users } = req.body as { token?: string; users?: string };
-      if (!token || !users) {
-        res.status(400).json({ error: "token and users are required" });
-        return;
-      }
-      try {
-        const cfg = readAtlasBridgeConfig();
-        const userIds = String(users).split(",").map(u => {
-          const n = parseInt(u.trim(), 10);
-          return isNaN(n) ? u.trim() : n;
-        });
-        cfg.telegram = { bot_token: token, allowed_users: userIds };
-        writeAtlasBridgeConfig(cfg);
-        res.json({ ok: true });
-      } catch (err: any) {
-        res.status(500).json({ error: "Failed to configure Telegram channel", detail: err.message });
-      }
-    },
-  );
 
   app.post(
     "/api/channels/slack",
@@ -1509,7 +1713,7 @@ export async function registerRoutes(
     operatorRateLimiter,
     (req, res) => {
       const name = String(req.params.name);
-      if (!["telegram", "slack"].includes(name)) {
+      if (name !== "slack") {
         res.status(400).json({ error: "Invalid channel name" });
         return;
       }
@@ -1766,6 +1970,57 @@ export async function registerRoutes(
   );
 
   // ---------------------------------------------------------------------------
+  // Operator directives — free-text input to running sessions
+  // ---------------------------------------------------------------------------
+
+  app.post(
+    "/api/sessions/:id/message",
+    requireCsrf,
+    operatorRateLimiter,
+    async (req, res) => {
+      const { runAtlasBridge } = await import("./routes/operator");
+      const sessionId = String(req.params.id);
+      const { text } = req.body as { text?: string };
+      if (!text?.trim()) {
+        res.status(400).json({ error: "text is required" });
+        return;
+      }
+      try {
+        const { stdout } = await runAtlasBridge([
+          "sessions",
+          "message",
+          sessionId,
+          text as string,
+        ]);
+        const parsed = JSON.parse(stdout.trim() || "{}");
+        if (parsed.ok === false) {
+          res.status(422).json({ error: parsed.error || "Message failed" });
+          return;
+        }
+        insertOperatorAuditLog({
+          method: "POST",
+          path: `/api/sessions/${sessionId}/message`,
+          action: `session-message:${sessionId}`,
+          body: { text: text.slice(0, 200) },
+          result: "ok",
+        });
+        res.json({ ok: true, directive_id: parsed.directive_id });
+      } catch (err: any) {
+        insertOperatorAuditLog({
+          method: "POST",
+          path: `/api/sessions/${sessionId}/message`,
+          action: `session-message:${sessionId}`,
+          body: { text: text?.slice(0, 200) },
+          result: "error",
+          error: err.message,
+        });
+        const detail = (err.stderr as string | undefined)?.trim() || err.message;
+        res.status(503).json({ error: "Failed to send message", detail });
+      }
+    },
+  );
+
+  // ---------------------------------------------------------------------------
   // Expert Agent endpoints
   // ---------------------------------------------------------------------------
 
@@ -2009,29 +2264,353 @@ export async function registerRoutes(
     });
   });
 
-  // Agent profiles (static for v1)
-  app.get("/api/agents", (_req, res) => {
-    res.json([
-      {
-        name: "atlasbridge_expert",
-        version: "1.0.0",
-        description: "AtlasBridge Expert Agent — governance operations specialist",
-        capabilities: [
-          "ab_list_sessions", "ab_get_session", "ab_list_prompts",
-          "ab_get_audit_events", "ab_get_traces", "ab_check_integrity",
-          "ab_get_config", "ab_get_policy", "ab_explain_decision", "ab_get_stats",
-          "ab_validate_policy", "ab_test_policy", "ab_set_mode", "ab_kill_switch",
-        ],
-        risk_tier: "moderate",
-        max_autonomy: "assist",
-      },
-    ]);
+  // Agent profiles — CRUD backed by dashboard DB
+  app.get("/api/agents", async (_req, res) => {
+    const dbAgents = await storage.getAgents();
+    // Map DB columns to AgentProfile shape expected by frontend
+    res.json(dbAgents.map(a => ({
+      id: a.id,
+      name: a.name,
+      version: a.version,
+      description: a.description,
+      capabilities: a.capabilities,
+      risk_tier: a.riskTier,
+      max_autonomy: a.maxAutonomy,
+      enabled: a.enabled,
+      created_at: a.createdAt,
+    })));
+  });
+
+  app.post("/api/agents", requireCsrf, operatorRateLimiter, async (req, res) => {
+    try {
+      const body = req.body;
+      const agent = await storage.createAgent({
+        externalId: `agent-${Date.now()}`,
+        name: body.name,
+        version: body.version || "1.0.0",
+        description: body.description || "",
+        capabilities: body.capabilities || [],
+        riskTier: body.risk_tier || "moderate",
+        maxAutonomy: body.max_autonomy || "assist",
+        enabled: body.enabled ?? true,
+      });
+      insertOperatorAuditLog({ method: "POST", path: "/api/agents", action: "agent.create", body: { name: agent.name }, result: "ok" });
+      res.status(201).json({ id: agent.id, name: agent.name, version: agent.version, description: agent.description, capabilities: agent.capabilities, risk_tier: agent.riskTier, max_autonomy: agent.maxAutonomy, enabled: agent.enabled, created_at: agent.createdAt });
+    } catch (e: any) {
+      res.status(400).json({ error: e.message || "Failed to create agent" });
+    }
+  });
+
+  app.patch("/api/agents/:id", requireCsrf, operatorRateLimiter, async (req, res) => {
+    try {
+      const id = parseInt(String(req.params.id));
+      const body = req.body;
+      const updates: Record<string, unknown> = {};
+      if (body.name !== undefined) updates.name = body.name;
+      if (body.version !== undefined) updates.version = body.version;
+      if (body.description !== undefined) updates.description = body.description;
+      if (body.capabilities !== undefined) updates.capabilities = body.capabilities;
+      if (body.risk_tier !== undefined) updates.riskTier = body.risk_tier;
+      if (body.max_autonomy !== undefined) updates.maxAutonomy = body.max_autonomy;
+      if (body.enabled !== undefined) updates.enabled = body.enabled;
+      const agent = await storage.updateAgent(id, updates);
+      if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+      insertOperatorAuditLog({ method: "PATCH", path: `/api/agents/${id}`, action: "agent.update", body: { name: agent.name }, result: "ok" });
+      res.json({ id: agent.id, name: agent.name, version: agent.version, description: agent.description, capabilities: agent.capabilities, risk_tier: agent.riskTier, max_autonomy: agent.maxAutonomy, enabled: agent.enabled, created_at: agent.createdAt });
+    } catch (e: any) {
+      res.status(400).json({ error: e.message || "Failed to update agent" });
+    }
+  });
+
+  app.delete("/api/agents/:id", requireCsrf, operatorRateLimiter, async (req, res) => {
+    const id = parseInt(String(req.params.id));
+    const deleted = await storage.deleteAgent(id);
+    if (!deleted) { res.status(404).json({ error: "Agent not found" }); return; }
+    insertOperatorAuditLog({ method: "DELETE", path: `/api/agents/${id}`, action: "agent.delete", body: { id }, result: "ok" });
+    res.status(204).end();
+  });
+
+  // Retention settings — editable
+  app.get("/api/settings/retention", async (_req, res) => {
+    let settings = await storage.getRetentionSettings();
+    if (!settings) {
+      settings = await storage.upsertRetentionSettings({
+        auditRetentionDays: 730,
+        traceRetentionDays: 365,
+        sessionRetentionDays: 180,
+      });
+    }
+    res.json(settings);
+  });
+
+  app.patch("/api/settings/retention", requireCsrf, operatorRateLimiter, async (req, res) => {
+    try {
+      const body = req.body;
+      const updates: Record<string, unknown> = {};
+      if (typeof body.auditRetentionDays === "number") updates.auditRetentionDays = body.auditRetentionDays;
+      if (typeof body.traceRetentionDays === "number") updates.traceRetentionDays = body.traceRetentionDays;
+      if (typeof body.sessionRetentionDays === "number") updates.sessionRetentionDays = body.sessionRetentionDays;
+      const settings = await storage.upsertRetentionSettings(updates);
+      insertOperatorAuditLog({ method: "PATCH", path: "/api/settings/retention", action: "retention.update", body: updates as Record<string, unknown>, result: "ok" });
+      res.json(settings);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message || "Failed to update retention settings" });
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Monitor API — browser extension, desktop, VS Code monitoring
+  // ---------------------------------------------------------------------------
+
+  app.post("/api/monitor/sessions", (req, res) => {
+    const { id, vendor, conversation_id, tab_url } = req.body ?? {};
+    if (!id || !vendor || !conversation_id) {
+      res.status(400).json({ error: "id, vendor, and conversation_id are required" });
+      return;
+    }
+    createMonitorSession({ id, vendor, conversationId: conversation_id, tabUrl: tab_url });
+    res.status(201).json({ id });
+  });
+
+  app.get("/api/monitor/sessions", (req, res) => {
+    const status = req.query.status as string | undefined;
+    res.json(listMonitorSessions(status));
+  });
+
+  app.get("/api/monitor/sessions/:id", (req, res) => {
+    const session = getMonitorSession(req.params.id);
+    if (!session) {
+      res.status(404).json({ error: "Monitor session not found" });
+      return;
+    }
+    res.json(session);
+  });
+
+  app.delete("/api/monitor/sessions/:id", (req, res) => {
+    endMonitorSession(req.params.id);
+    res.json({ ok: true });
+  });
+
+  app.post("/api/monitor/sessions/:id/messages", (req, res) => {
+    const sessionId = req.params.id;
+    const session = getMonitorSession(sessionId);
+    if (!session) {
+      res.status(404).json({ error: "Monitor session not found" });
+      return;
+    }
+    const messages = req.body?.messages;
+    if (!Array.isArray(messages) || messages.length === 0) {
+      res.status(400).json({ error: "messages array is required" });
+      return;
+    }
+    const rows = messages.map((m: { role: string; content: string; vendor: string; seq: number; captured_at: string }) => ({
+      sessionId,
+      role: m.role,
+      content: m.content,
+      vendor: m.vendor,
+      seq: m.seq,
+      capturedAt: m.captured_at,
+    }));
+    insertMonitorMessages(rows);
+    res.json({ ingested: rows.length });
+  });
+
+  app.get("/api/monitor/sessions/:id/messages", (req, res) => {
+    const afterSeq = Number(req.query.after_seq ?? 0);
+    const limit = Math.min(Number(req.query.limit ?? 200), 500);
+    res.json(listMonitorMessages(req.params.id, afterSeq, limit));
+  });
+
+  // ---------------------------------------------------------------------------
+  // Monitor daemon management — start/stop monitors from the dashboard
+  // ---------------------------------------------------------------------------
+
+  const monitorProcesses: Map<string, { proc: ChildProcess; startedAt: string; logs: string[] }> = new Map();
+
+  function pythonBin(): string {
+    // Try common locations for the Python binary with atlasbridge installed.
+    // The dashboard runs from dashboard/ so check parent directories too.
+    const cwd = process.cwd();
+    const parentDir = path.dirname(cwd);
+    const candidates = [
+      path.join(parentDir, ".venv", "bin", "python"),
+      path.join(parentDir, "venv", "bin", "python"),
+      path.join(cwd, ".venv", "bin", "python"),
+      path.join(cwd, "venv", "bin", "python"),
+    ];
+
+    // Also try to find atlasbridge's Python via `which`
+    try {
+      const { execSync } = require("child_process");
+      const abPath = execSync("which atlasbridge", { encoding: "utf-8", timeout: 3000 }).trim();
+      if (abPath) {
+        // Read the shebang to find the Python binary
+        const shebang = fs.readFileSync(abPath, "utf-8").split("\n")[0];
+        const match = shebang.match(/^#!\s*(.+python\S*)/);
+        if (match && fs.existsSync(match[1])) {
+          candidates.unshift(match[1]);
+        }
+      }
+    } catch { /* which not found or not installed — continue */ }
+
+    for (const c of candidates) {
+      if (fs.existsSync(c)) return c;
+    }
+
+    // Fallback to system Python
+    return "python3";
+  }
+
+  app.get("/api/monitor/daemons", (_req, res) => {
+    const result: Record<string, { running: boolean; startedAt?: string; logs: string[] }> = {};
+    for (const key of ["desktop", "vscode"]) {
+      const entry = monitorProcesses.get(key);
+      if (entry && entry.proc.exitCode === null) {
+        result[key] = { running: true, startedAt: entry.startedAt, logs: entry.logs.slice(-20) };
+      } else {
+        result[key] = { running: false, logs: entry?.logs.slice(-20) ?? [] };
+      }
+    }
+    res.json(result);
+  });
+
+  app.post("/api/monitor/daemons/:type/start", requireCsrf, (req, res) => {
+    const type = String(req.params.type);
+    if (type !== "desktop" && type !== "vscode") {
+      res.status(400).json({ error: "type must be 'desktop' or 'vscode'" });
+      return;
+    }
+
+    const existing = monitorProcesses.get(type);
+    if (existing && existing.proc.exitCode === null) {
+      res.json({ status: "already_running", startedAt: existing.startedAt });
+      return;
+    }
+
+    const py = pythonBin();
+
+    // Pre-flight: verify Python can import atlasbridge.monitors
+    try {
+      const { execSync } = require("child_process");
+      const checkModule = type === "desktop"
+        ? "from atlasbridge.monitors.desktop import _check_accessibility_imports; print(_check_accessibility_imports())"
+        : "from atlasbridge.monitors.vscode import find_claude_sessions; print('ok')";
+      execSync(`${py} -c "${checkModule}"`, { encoding: "utf-8", timeout: 5000, stdio: "pipe" });
+    } catch (err: any) {
+      const detail = (err.stderr as string | undefined)?.trim() ?? err.message;
+      res.status(422).json({
+        error: `Python cannot import atlasbridge monitor module. Is atlasbridge installed in ${py}?`,
+        detail,
+        hint: type === "desktop"
+          ? "Run: pip install 'atlasbridge[desktop-monitor]'"
+          : "Run: pip install 'atlasbridge[vscode-monitor]'",
+      });
+      return;
+    }
+
+    const dashboardUrl = `http://localhost:${req.socket.localPort ?? 5000}`;
+    const logs: string[] = [];
+    logs.push(`Using Python: ${py}`);
+
+    let proc: ChildProcess;
+    try {
+      proc = spawn(py, ["-m", "atlasbridge", "monitor", type, "--dashboard-url", dashboardUrl], {
+        stdio: ["ignore", "pipe", "pipe"],
+        detached: false,
+        env: { ...process.env },
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: `Failed to spawn monitor: ${err.message}`, logs });
+      return;
+    }
+
+    const capture = (data: Buffer) => {
+      const line = data.toString().trim();
+      if (line) {
+        logs.push(line);
+        if (logs.length > 100) logs.shift();
+      }
+    };
+    proc.stdout?.on("data", capture);
+    proc.stderr?.on("data", capture);
+
+    proc.on("error", (err) => {
+      logs.push(`Spawn error: ${err.message}`);
+    });
+
+    proc.on("exit", (code) => {
+      logs.push(`Process exited with code ${code}`);
+    });
+
+    monitorProcesses.set(type, { proc, startedAt: new Date().toISOString(), logs });
+
+    // Wait 1s to check if the process died immediately (e.g. Python not found, import error)
+    setTimeout(() => {
+      if (proc.exitCode !== null) {
+        res.status(500).json({
+          error: `Monitor process exited immediately (code ${proc.exitCode})`,
+          logs: logs.slice(-10),
+        });
+      } else {
+        res.json({ status: "started", pid: proc.pid });
+      }
+    }, 1000);
+  });
+
+  app.post("/api/monitor/daemons/:type/stop", requireCsrf, (req, res) => {
+    const type = String(req.params.type);
+    const entry = monitorProcesses.get(type);
+    if (!entry || entry.proc.exitCode !== null) {
+      res.json({ status: "not_running" });
+      return;
+    }
+    entry.proc.kill("SIGTERM");
+    entry.logs.push("Stopped by dashboard");
+    res.json({ status: "stopped" });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Danger zone — delete data / reset settings
+  // ---------------------------------------------------------------------------
+
+  app.post("/api/settings/purge-monitor-data", requireCsrf, async (_req, res) => {
+    try {
+      const { purgeMonitorData } = await import("./db");
+      const result = purgeMonitorData();
+      insertOperatorAuditLog({ method: "POST", path: "/api/settings/purge-monitor-data", action: "purge_monitor_data", body: result, result: "ok" });
+      res.json({ ok: true, ...result });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message || "Failed to purge monitor data" });
+    }
+  });
+
+  app.post("/api/settings/purge-all-data", requireCsrf, async (_req, res) => {
+    try {
+      const { purgeAllDashboardData } = await import("./db");
+      const result = purgeAllDashboardData();
+      insertOperatorAuditLog({ method: "POST", path: "/api/settings/purge-all-data", action: "purge_all_data", body: result, result: "ok" });
+      res.json({ ok: true, ...result });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message || "Failed to purge data" });
+    }
+  });
+
+  app.post("/api/settings/reset", requireCsrf, async (_req, res) => {
+    try {
+      const { resetDashboardSettings } = await import("./db");
+      const result = resetDashboardSettings();
+      insertOperatorAuditLog({ method: "POST", path: "/api/settings/reset", action: "reset_settings", body: result, result: "ok" });
+      res.json({ ok: true, ...result });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message || "Failed to reset settings" });
+    }
   });
 
   // ---------------------------------------------------------------------------
   // Operator write actions (kill switch, autonomy mode, audit log)
   // ---------------------------------------------------------------------------
   registerOperatorRoutes(app);
+  registerPolicyRoutes(app);
 
   return httpServer;
 }

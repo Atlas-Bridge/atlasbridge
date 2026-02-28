@@ -1,0 +1,392 @@
+{% extends "base.html" %}
+
+{% block title %}AtlasBridge Dashboard &mdash; Workspace Detail{% endblock %}
+
+{% block content %}
+
+{% if not workspace %}
+<h1>Workspace Not Found</h1>
+<p class="empty">This workspace does not exist or has not been recorded.</p>
+<p><a href="/workspaces">&larr; Back to workspaces</a></p>
+{% else %}
+
+<h1>Workspace: {{ workspace.path }}</h1>
+<p><a href="/workspaces">&larr; Back to workspaces</a></p>
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-value" id="trust-state-display">
+            {% if workspace.trust_state == 'trusted' %}
+                <span class="status-running">trusted</span>
+            {% elif workspace.trust_expired %}
+                <span class="status-canceled">expired</span>
+            {% else %}
+                <span class="status-crashed">untrusted</span>
+            {% endif %}
+        </div>
+        <div class="stat-label">Trust State</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ workspace.profile_name or '&mdash;' }}</div>
+        <div class="stat-label">Profile</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ workspace.autonomy_default or '&mdash;' }}</div>
+        <div class="stat-label">Autonomy</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ sessions|length }}</div>
+        <div class="stat-label">Sessions</div>
+    </div>
+</div>
+
+<!-- Actions bar -->
+<div class="action-bar">
+    {% if workspace.trust_state == 'trusted' %}
+    <button onclick="revokeTrust()" class="action-btn action-btn-danger" id="trust-toggle-btn">Revoke Trust</button>
+    {% else %}
+    <button onclick="reTrust()" class="action-btn action-btn-primary" id="trust-toggle-btn">Grant Trust</button>
+    {% endif %}
+    <button onclick="togglePostureEditor()" class="action-btn action-btn-secondary">Edit Posture</button>
+    <button onclick="runScan()" class="action-btn action-btn-secondary" id="scan-btn">Run Scan</button>
+</div>
+<div id="action-result" class="action-result" style="display:none"></div>
+
+<!-- Re-trust with TTL (shown when trust is revoked/expired) -->
+<div id="retrust-panel" class="action-panel" style="display:none">
+    <h3>Re-grant Trust</h3>
+    <div class="action-form">
+        <div class="form-row">
+            <label for="retrust-ttl">TTL</label>
+            <select id="retrust-ttl" class="filter-select">
+                <option value="">No expiry</option>
+                <option value="3600">1 hour</option>
+                <option value="28800">8 hours</option>
+                <option value="86400">1 day</option>
+                <option value="604800">7 days</option>
+                <option value="2592000">30 days</option>
+            </select>
+        </div>
+        <button onclick="confirmReTrust()" class="action-btn action-btn-primary">Confirm Grant</button>
+        <button onclick="hidePanel('retrust-panel')" class="action-btn action-btn-muted">Cancel</button>
+    </div>
+</div>
+
+<!-- Posture editor -->
+<div id="posture-panel" class="action-panel" style="display:none">
+    <h3>Edit Posture Bindings</h3>
+    <div class="action-form">
+        <div class="form-row">
+            <label for="posture-profile">Profile name</label>
+            <input type="text" id="posture-profile" class="form-input" placeholder="e.g. safe_refactor" value="{{ workspace.profile_name or '' }}" />
+        </div>
+        <div class="form-row">
+            <label for="posture-autonomy">Autonomy default</label>
+            <select id="posture-autonomy" class="filter-select">
+                <option value="" {% if not workspace.autonomy_default %}selected{% endif %}>-- none --</option>
+                <option value="OFF" {% if workspace.autonomy_default == 'OFF' %}selected{% endif %}>OFF</option>
+                <option value="ASSIST" {% if workspace.autonomy_default == 'ASSIST' %}selected{% endif %}>ASSIST</option>
+                <option value="FULL" {% if workspace.autonomy_default == 'FULL' %}selected{% endif %}>FULL</option>
+            </select>
+        </div>
+        <div class="form-row">
+            <label for="posture-tier">Model tier</label>
+            <input type="text" id="posture-tier" class="form-input" placeholder="e.g. standard, premium" value="{{ workspace.model_tier or '' }}" />
+        </div>
+        <div class="form-row">
+            <label for="posture-tools">Tool profile</label>
+            <input type="text" id="posture-tools" class="form-input" placeholder="e.g. read_only, full_access" value="{{ workspace.tool_allowlist_profile or '' }}" />
+        </div>
+        <div class="form-row">
+            <label for="posture-notes">Notes</label>
+            <input type="text" id="posture-notes" class="form-input" placeholder="Optional notes" value="{{ workspace.posture_notes or '' }}" />
+        </div>
+        <button onclick="savePosture()" class="action-btn action-btn-primary">Save Posture</button>
+        <button onclick="hidePanel('posture-panel')" class="action-btn action-btn-muted">Cancel</button>
+    </div>
+</div>
+
+<!-- Scan results -->
+<div id="scan-panel" class="action-panel" style="display:none">
+    <h3>Scan Results</h3>
+    <div id="scan-results"></div>
+</div>
+
+<h2>Trust Details</h2>
+<div class="table-responsive">
+<table class="detail-table">
+    <tr><th>ID</th><td>{{ workspace.id }}</td></tr>
+    <tr><th>Path</th><td>{{ workspace.path }}</td></tr>
+    <tr><th>Path Hash</th><td><code>{{ workspace.path_hash[:16] }}&hellip;</code></td></tr>
+    <tr><th>Trust State</th><td>{{ workspace.trust_state }}</td></tr>
+    {% if workspace.trust_expires_at %}
+    <tr><th>Expires</th><td title="{{ workspace.trust_expires_at }}">{{ workspace.trust_expires_at|timeago }}</td></tr>
+    {% endif %}
+    <tr><th>Actor</th><td>{{ workspace.actor or '&mdash;' }}</td></tr>
+    <tr><th>Channel</th><td>{{ workspace.channel or '&mdash;' }}</td></tr>
+    {% if workspace.granted_at %}
+    <tr><th>Granted</th><td title="{{ workspace.granted_at }}">{{ workspace.granted_at|timeago }}</td></tr>
+    {% endif %}
+    {% if workspace.revoked_at %}
+    <tr><th>Revoked</th><td title="{{ workspace.revoked_at }}">{{ workspace.revoked_at|timeago }}</td></tr>
+    {% endif %}
+</table>
+</div>
+
+{% if workspace.profile_name or workspace.autonomy_default or workspace.model_tier or workspace.tool_allowlist_profile %}
+<h2>Posture Bindings</h2>
+<div class="table-responsive">
+<table class="detail-table">
+    {% if workspace.profile_name %}
+    <tr><th>Profile</th><td>{{ workspace.profile_name }}</td></tr>
+    {% endif %}
+    {% if workspace.autonomy_default %}
+    <tr><th>Autonomy Default</th><td>{{ workspace.autonomy_default }}</td></tr>
+    {% endif %}
+    {% if workspace.model_tier %}
+    <tr><th>Model Tier</th><td>{{ workspace.model_tier }}</td></tr>
+    {% endif %}
+    {% if workspace.tool_allowlist_profile %}
+    <tr><th>Tool Profile</th><td>{{ workspace.tool_allowlist_profile }}</td></tr>
+    {% endif %}
+    {% if workspace.posture_notes %}
+    <tr><th>Notes</th><td>{{ workspace.posture_notes }}</td></tr>
+    {% endif %}
+</table>
+</div>
+{% endif %}
+
+<h2>Sessions in this Workspace</h2>
+
+{% if sessions %}
+<div class="table-responsive">
+<table>
+    <thead>
+        <tr>
+            <th>Session ID</th>
+            <th>Tool</th>
+            <th>Status</th>
+            <th>Started</th>
+            <th>Label</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for s in sessions %}
+        <tr>
+            <td><a href="/sessions/{{ s.id }}">{{ s.id[:12] }}&hellip;</a></td>
+            <td>{{ s.tool }}</td>
+            <td><span class="status-{{ s.status }}">{{ s.status }}</span></td>
+            <td title="{{ s.started_at }}">{{ s.started_at|timeago }}</td>
+            <td>{{ s.label or '&mdash;' }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+{% else %}
+<p class="empty">No sessions recorded for this workspace.</p>
+{% endif %}
+
+<div class="export-section">
+    <button onclick="exportWorkspace('{{ workspace.id }}')" class="filter-btn">Export JSON</button>
+</div>
+
+{% endif %}
+
+<script>
+var WORKSPACE_ID = '{{ workspace.id if workspace else "" }}';
+var WORKSPACE_PATH = '{{ workspace.path if workspace else "" }}';
+
+function showResult(el, type, message) {
+    el.style.display = 'block';
+    el.className = 'action-result action-result-' + type;
+    el.textContent = message;
+}
+
+function hidePanel(id) {
+    document.getElementById(id).style.display = 'none';
+}
+
+/* -- Trust toggle -- */
+async function revokeTrust() {
+    var resultEl = document.getElementById('action-result');
+    try {
+        var resp = await fetch('/api/workspaces/trust', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({path: WORKSPACE_PATH, trust: false})
+        });
+        var data = await resp.json();
+        if (resp.ok && data.ok) {
+            showResult(resultEl, 'success', 'Trust revoked for: ' + WORKSPACE_PATH);
+            setTimeout(function() { location.reload(); }, 1200);
+        } else {
+            showResult(resultEl, 'error', data.error || 'Unknown error');
+        }
+    } catch (e) {
+        showResult(resultEl, 'error', 'Request failed: ' + e.message);
+    }
+}
+
+function reTrust() {
+    document.getElementById('retrust-panel').style.display = 'block';
+}
+
+async function confirmReTrust() {
+    var resultEl = document.getElementById('action-result');
+    var ttlEl = document.getElementById('retrust-ttl');
+    var body = {path: WORKSPACE_PATH, trust: true};
+    var ttl = ttlEl.value;
+    if (ttl) { body.ttl_seconds = parseInt(ttl, 10); }
+
+    try {
+        var resp = await fetch('/api/workspaces/trust', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body)
+        });
+        var data = await resp.json();
+        if (resp.ok && data.ok) {
+            showResult(resultEl, 'success', 'Trust granted for: ' + WORKSPACE_PATH + (ttl ? ' (TTL: ' + ttlEl.options[ttlEl.selectedIndex].text + ')' : ''));
+            hidePanel('retrust-panel');
+            setTimeout(function() { location.reload(); }, 1200);
+        } else {
+            showResult(resultEl, 'error', data.error || 'Unknown error');
+        }
+    } catch (e) {
+        showResult(resultEl, 'error', 'Request failed: ' + e.message);
+    }
+}
+
+/* -- Posture editor -- */
+function togglePostureEditor() {
+    var panel = document.getElementById('posture-panel');
+    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
+
+async function savePosture() {
+    var resultEl = document.getElementById('action-result');
+    var body = {workspace_id: WORKSPACE_ID};
+    var fields = {
+        profile_name: document.getElementById('posture-profile').value.trim(),
+        autonomy_default: document.getElementById('posture-autonomy').value,
+        model_tier: document.getElementById('posture-tier').value.trim(),
+        tool_allowlist_profile: document.getElementById('posture-tools').value.trim(),
+        posture_notes: document.getElementById('posture-notes').value.trim()
+    };
+
+    var hasField = false;
+    for (var key in fields) {
+        if (fields[key]) {
+            body[key] = fields[key];
+            hasField = true;
+        }
+    }
+
+    if (!hasField) {
+        showResult(resultEl, 'error', 'Set at least one posture field.');
+        return;
+    }
+
+    try {
+        var resp = await fetch('/api/workspaces/posture', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body)
+        });
+        var data = await resp.json();
+        if (resp.ok && data.ok) {
+            showResult(resultEl, 'success', 'Posture updated: ' + data.updated.join(', '));
+            hidePanel('posture-panel');
+            setTimeout(function() { location.reload(); }, 1200);
+        } else {
+            showResult(resultEl, 'error', data.error || 'Unknown error');
+        }
+    } catch (e) {
+        showResult(resultEl, 'error', 'Request failed: ' + e.message);
+    }
+}
+
+/* -- Advisory scan -- */
+async function runScan() {
+    var resultEl = document.getElementById('action-result');
+    var scanPanel = document.getElementById('scan-panel');
+    var scanResults = document.getElementById('scan-results');
+    var scanBtn = document.getElementById('scan-btn');
+
+    scanBtn.disabled = true;
+    scanBtn.textContent = 'Scanning...';
+
+    try {
+        var resp = await fetch('/api/workspaces/scan', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({workspace_id: WORKSPACE_ID})
+        });
+        var data = await resp.json();
+        scanBtn.disabled = false;
+        scanBtn.textContent = 'Run Scan';
+
+        if (resp.ok) {
+            scanPanel.style.display = 'block';
+            var riskTags = data.risk_tags || [];
+            var suggested = data.suggested_profile || 'none';
+            var hash = data.inputs_hash || '';
+
+            var html = '<table class="detail-table">';
+            html += '<tr><th>Risk Tags</th><td>' + (riskTags.length ? riskTags.map(function(t) { return '<span class="risk-tag risk-tag-' + t + '">' + t + '</span>'; }).join(' ') : '<span class="status-completed">clean</span>') + '</td></tr>';
+            html += '<tr><th>Suggested Profile</th><td>' + suggested + '</td></tr>';
+            html += '<tr><th>Inputs Hash</th><td><code>' + hash.substring(0, 16) + '&hellip;</code></td></tr>';
+            html += '<tr><th>Scanner Version</th><td>' + (data.scanner_version || '&mdash;') + '</td></tr>';
+            html += '</table>';
+
+            if (riskTags.length && suggested && suggested !== 'default') {
+                html += '<p class="scan-suggestion">Suggested posture profile: <strong>' + suggested + '</strong>';
+                html += ' <button onclick="applyProfile(\'' + suggested + '\')" class="action-btn action-btn-primary action-btn-sm">Apply</button></p>';
+            }
+
+            scanResults.innerHTML = html;
+            showResult(resultEl, 'success', 'Scan completed — ' + riskTags.length + ' risk tag(s) found.');
+        } else {
+            showResult(resultEl, 'error', data.error || 'Scan failed');
+        }
+    } catch (e) {
+        scanBtn.disabled = false;
+        scanBtn.textContent = 'Run Scan';
+        showResult(resultEl, 'error', 'Request failed: ' + e.message);
+    }
+}
+
+async function applyProfile(profile) {
+    var resultEl = document.getElementById('action-result');
+    try {
+        var resp = await fetch('/api/workspaces/posture', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({workspace_id: WORKSPACE_ID, profile_name: profile})
+        });
+        var data = await resp.json();
+        if (resp.ok && data.ok) {
+            showResult(resultEl, 'success', 'Profile set to: ' + profile);
+            setTimeout(function() { location.reload(); }, 1200);
+        } else {
+            showResult(resultEl, 'error', data.error || 'Unknown error');
+        }
+    } catch (e) {
+        showResult(resultEl, 'error', 'Request failed: ' + e.message);
+    }
+}
+
+async function exportWorkspace(id) {
+    var resp = await fetch('/api/workspaces/' + id);
+    var data = await resp.json();
+    var blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'workspace-' + id + '.json';
+    a.click();
+    URL.revokeObjectURL(url);
+}
+</script>
+{% endblock %}

@@ -86,6 +86,29 @@ Human intervention is always available when policy requires it.
 
 ---
 
+## Dashboard
+
+AtlasBridge includes a web dashboard for managing everything from your browser.
+
+```bash
+atlasbridge dashboard start
+```
+
+The dashboard provides:
+
+- **Overview** — system status, activity feed, autonomy mode control
+- **Sessions** — start, pause, resume, and stop AI agent sessions
+- **Chat** — real-time conversation view with pending prompt replies
+- **Audit** — searchable decision history with JSON/CSV export
+- **Repositories** — connect and scan code repos for vulnerabilities
+- **Evidence** — governance score, evidence bundles, compliance export
+- **Integrity** — verify system components haven't been tampered with
+- **Settings** — policy management with one-click presets, rule toggles, and prompt testing
+
+See the **[User Guide](docs/user-guide.md)** for a complete walkthrough of every page.
+
+---
+
 ## Safety by Design
 
 AtlasBridge is built around strict invariants:
@@ -213,6 +236,14 @@ atlasbridge policy test policy.yaml --prompt "Continue? [y/n]" --type yes_no --e
 ```
 
 See [Policy Authoring Guide](docs/policy-authoring.md) for patterns and debugging.
+
+### 7. Start the dashboard
+
+```bash
+atlasbridge dashboard start
+```
+
+Open **http://localhost:41520** in your browser. The dashboard lets you manage everything visually — start sessions, manage policies, monitor decisions, and export evidence. See the [User Guide](docs/user-guide.md) for a full walkthrough of every page.
 
 ### Alternative setup paths
 
@@ -462,23 +493,19 @@ See [CHANGELOG.md](CHANGELOG.md) for full version history.
 
 ## Documentation
 
-See [docs/README.md](docs/README.md) for the full documentation index — organized by audience (users, policy authors, contributors) with a searchable documentation map.
+See [docs/README.md](docs/README.md) for the full documentation index.
 
 Key starting points:
 
 | Document | What it covers |
 |----------|---------------|
+| [**User Guide**](docs/user-guide.md) | **Complete walkthrough — install to daily use, every dashboard page explained** |
 | [channel-token-setup.md](docs/channel-token-setup.md) | Step-by-step Telegram and Slack token setup |
 | [policy-authoring.md](docs/policy-authoring.md) | Policy authoring guide — quick start, patterns, debugging |
 | [autonomy-modes.md](docs/autonomy-modes.md) | Off / Assist / Full mode specs |
-| [architecture.md](docs/architecture.md) | System design, data flow, invariants |
+| [dashboard.md](docs/dashboard.md) | Dashboard deployment — SSH tunnel, reverse proxy, remote access |
 | [troubleshooting.md](docs/troubleshooting.md) | Common issues and solutions |
-| [ethics-and-safety-guarantees.md](docs/ethics-and-safety-guarantees.md) | Safety invariants and CI enforcement |
-| [enterprise-architecture.md](docs/enterprise-architecture.md) | Extended edition architecture overview |
-| [enterprise-dashboard-product-spec.md](docs/enterprise-dashboard-product-spec.md) | Extended dashboard product spec (design only) |
-| [enterprise-dashboard-ui-map.md](docs/enterprise-dashboard-ui-map.md) | Extended dashboard UI wireframes (design only) |
-| [enterprise-data-model.md](docs/enterprise-data-model.md) | Extended data model (design only) |
-| [enterprise-dashboard-threat-model.md](docs/enterprise-dashboard-threat-model.md) | Extended dashboard threat model (design only) |
+| [architecture.md](docs/architecture.md) | System design, data flow, invariants |
 
 ---
 

@@ -13,12 +13,13 @@ from atlasbridge.core.config import AtlasBridgeConfig
 FROZEN_TOP_LEVEL_FIELDS = frozenset(
     {
         "config_version",
-        "telegram",
-        "slack",
         "prompts",
         "logging",
         "database",
         "adapters",
+        "streaming",
+        "chat",
+        "runtime",
     }
 )
 
@@ -65,14 +66,13 @@ def test_yes_no_safe_default_rejects_y():
 
 FROZEN_ENV_VARS = frozenset(
     {
-        "ATLASBRIDGE_TELEGRAM_BOT_TOKEN",
-        "ATLASBRIDGE_TELEGRAM_ALLOWED_USERS",
-        "ATLASBRIDGE_SLACK_BOT_TOKEN",
-        "ATLASBRIDGE_SLACK_APP_TOKEN",
-        "ATLASBRIDGE_SLACK_ALLOWED_USERS",
         "ATLASBRIDGE_LOG_LEVEL",
         "ATLASBRIDGE_DB_PATH",
         "ATLASBRIDGE_APPROVAL_TIMEOUT_SECONDS",
+        "ATLASBRIDGE_LLM_PROVIDER",
+        "ATLASBRIDGE_LLM_API_KEY",
+        "ATLASBRIDGE_LLM_MODEL",
+        "ATLASBRIDGE_ENVIRONMENT",
     }
 )
 

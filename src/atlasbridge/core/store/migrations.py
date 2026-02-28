@@ -19,6 +19,9 @@ Version history:
   4 → 5: sessions.command column (missing from DBs created before this column was added)
   5 → 6: Agent SoR tables (agent_turns, agent_plans, agent_decisions,
          agent_tool_runs, agent_outcomes)
+  6 → 7: Transcript chunks table (live session transcript for dashboard)
+  7 → 8: Workspace governance (posture bindings, TTL, scan artifacts)
+  8 → 9: Operator directives (free-text input from dashboard to running sessions)
 """
 
 from __future__ import annotations
@@ -32,7 +35,7 @@ import structlog
 logger = structlog.get_logger()
 
 # Bump this when adding a new migration.
-LATEST_SCHEMA_VERSION = 6
+LATEST_SCHEMA_VERSION = 9
 
 
 # ---------------------------------------------------------------------------
@@ -326,6 +329,85 @@ def _migrate_5_to_6(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migrate_6_to_7(conn: sqlite3.Connection) -> None:
+    """Version 6 → 7: add transcript_chunks table for live session transcript."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS transcript_chunks (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id  TEXT NOT NULL,
+            role        TEXT NOT NULL,
+            content     TEXT NOT NULL,
+            prompt_id   TEXT,
+            created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+            seq         INTEGER NOT NULL
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_transcript_session_seq
+            ON transcript_chunks(session_id, seq)
+    """)
+
+
+def _migrate_7_to_8(conn: sqlite3.Connection) -> None:
+    """Version 7 → 8: workspace governance — posture bindings, TTL, scan artifacts."""
+    # -- Add posture + TTL columns to workspace_trust --
+    _add_column_if_missing(conn, "workspace_trust", "trust_expires_at", "TEXT")
+    _add_column_if_missing(conn, "workspace_trust", "updated_at", "TEXT")
+    _add_column_if_missing(conn, "workspace_trust", "profile_name", "TEXT")
+    _add_column_if_missing(conn, "workspace_trust", "autonomy_default", "TEXT")
+    _add_column_if_missing(conn, "workspace_trust", "model_tier", "TEXT")
+    _add_column_if_missing(conn, "workspace_trust", "tool_allowlist_profile", "TEXT")
+    _add_column_if_missing(conn, "workspace_trust", "posture_notes", "TEXT")
+
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_workspace_trust_expires
+            ON workspace_trust(trust_expires_at)
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_workspace_trust_state
+            ON workspace_trust(trusted)
+    """)
+
+    # -- workspace_scan_artifacts: advisory classification results --
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS workspace_scan_artifacts (
+            id               TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+            workspace_id     TEXT NOT NULL,
+            ruleset_version  TEXT NOT NULL,
+            inputs_hash      TEXT NOT NULL,
+            risk_tags        TEXT NOT NULL DEFAULT '[]',
+            file_count       INTEGER NOT NULL DEFAULT 0,
+            suggested_profile TEXT,
+            raw_results      TEXT NOT NULL DEFAULT '{}',
+            created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE(workspace_id, inputs_hash)
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_scan_artifacts_workspace
+            ON workspace_scan_artifacts(workspace_id)
+    """)
+
+
+def _migrate_8_to_9(conn: sqlite3.Connection) -> None:
+    """Version 8 → 9: operator directives — free-text input from dashboard."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS operator_directives (
+            id          TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+            session_id  TEXT NOT NULL,
+            content     TEXT NOT NULL,
+            status      TEXT NOT NULL DEFAULT 'pending',
+            actor       TEXT NOT NULL DEFAULT 'dashboard',
+            created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+            processed_at TEXT
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_directives_pending
+            ON operator_directives(status, created_at)
+    """)
+
+
 _MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     0: _migrate_0_to_1,
     1: _migrate_1_to_2,
@@ -333,6 +415,9 @@ _MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     3: _migrate_3_to_4,
     4: _migrate_4_to_5,
     5: _migrate_5_to_6,
+    6: _migrate_6_to_7,
+    7: _migrate_7_to_8,
+    8: _migrate_8_to_9,
 }
 
 

@@ -13,6 +13,17 @@ import type {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
@@ -908,16 +919,36 @@ function RepoDetailView({
                 {scanMutation.isPending ? "Scanning..." : "Run Scan"}
               </Button>
               <div className="ml-auto">
-                <Button
-                  variant="outline"
-                  className="text-red-600 dark:text-red-400"
-                  onClick={() => disconnectMutation.mutate()}
-                  disabled={disconnectMutation.isPending}
-                  data-testid="button-disconnect"
-                >
-                  <Trash2 className="w-4 h-4 mr-1.5" />
-                  Disconnect
-                </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="text-red-600 dark:text-red-400"
+                      disabled={disconnectMutation.isPending}
+                      data-testid="button-disconnect"
+                    >
+                      <Trash2 className="w-4 h-4 mr-1.5" />
+                      Disconnect
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Disconnect repository?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This will remove the repository connection for <strong>{repo.owner}/{repo.repo}</strong>. Scan results and history will be lost.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => disconnectMutation.mutate()}
+                        className="bg-red-600 hover:bg-red-700"
+                      >
+                        Disconnect
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </div>
             </CardContent>
           </Card>
