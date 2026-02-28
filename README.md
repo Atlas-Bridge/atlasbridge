@@ -463,6 +463,7 @@ See [CHANGELOG.md](CHANGELOG.md) for full version history.
 | v1.6.2 | Released | Formal edition contract — router separation, CapabilitySpec enrichment, 41 new enforcement tests |
 | v1.6.3 | Released | Decision Evidence page — real sessions, 36 vitest tests, unified dashboard (one audience), governance-evidence.md |
 | v1.6.4 | Released | Operator write actions — kill switch, autonomy mode, CSRF, rate limiting, audit log, 15 vitest tests |
+| v1.9.0 | Released | Dashboard-first CLI, remove Telegram/Slack, operator directives, live polling, evidence bundles, monitor daemons |
 | v1.8.0 | Released | Auth integration, CVE lookups (OSV.dev + GitHub Advisory), cloud scanning (remote/container/IaC), evidence ZIP bundles |
 | v1.7.2 | Released | Real repository scanning — live API-based scanning across GitHub, GitLab, Bitbucket, Azure DevOps with actionable remediation |
 | v1.7.1 | Released | Public messaging cleanup — neutralise compliance frameworks, rename Enterprise to Extended, remove marketing language |

@@ -11,6 +11,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.9.0] — 2026-02-28
+
+### Added
+- **Dashboard-first CLI** — `atlasbridge` now launches the dashboard by default; all management subcommands hidden from `--help` but remain callable internally; `--port` and `--no-browser` flags on root command (#382)
+- **Operator directives** — send free-text messages to running agent sessions from the Chat page (DB migration v8→v9, daemon poller, optimistic UI) (#382)
+- **Live polling** — audit and traces pages auto-refresh every 10s (#382)
+- **Evidence bundle detail view** — click any bundle to see decisions, escalations, manifest, integrity report (#382)
+- **Policy preset selector** — choose any autonomy mode per policy pack instead of hard-coded defaults (#382)
+- **Workspace trust management** — posture profiles, TTL-based trust, governance scanning (#382)
+- **Monitor daemons** — desktop and VS Code AI app monitoring with dashboard controls (#382)
+- **Expert agent CLI** — `atlasbridge agent` command for governance-specialised agent mode (#382)
+
+### Removed
+- **Telegram and Slack channels** — all user interaction now through the dashboard UI (#382)
+
+### Changed
+- **Target audience** — CLI simplified for layman users; all management through the dashboard
+
+---
+
 ## [1.8.0] — 2026-02-27
 
 ### Added
