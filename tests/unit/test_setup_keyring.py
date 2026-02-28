@@ -43,11 +43,12 @@ class TestCheckPlaintextTokens:
             result = _check_plaintext_tokens()
         assert result is None
 
-    def test_warn_on_plaintext_telegram_token(self, tmp_path) -> None:
+    def test_pass_when_no_plaintext_tokens(self, tmp_path) -> None:
         cfg = tmp_path / "config.toml"
         cfg.write_text(
-            '[telegram]\nbot_token = "123456789:ABCDefghIJKLMNopQRSTuvwxyz1234567890"\n'
-            "allowed_users = [1]\n"
+            "config_version = 1\n\n"
+            "[prompts]\n"
+            "timeout_seconds = 300\n"
         )
         with (
             patch(
@@ -57,36 +58,13 @@ class TestCheckPlaintextTokens:
             patch("atlasbridge.cli._doctor._config_path", return_value=cfg),
         ):
             result = _check_plaintext_tokens()
-        assert result is not None
-        assert result["status"] == "warn"
-        assert "telegram.bot_token" in result["detail"]
-        assert "keyring" in result["detail"].lower()
-
-    def test_pass_when_all_tokens_in_keyring(self, tmp_path) -> None:
-        cfg = tmp_path / "config.toml"
-        cfg.write_text(
-            "[telegram]\n"
-            'bot_token = "keyring:atlasbridge:telegram_bot_token"\n'
-            "allowed_users = [1]\n"
-        )
-        with (
-            patch(
-                "atlasbridge.core.keyring_store.is_keyring_available",
-                return_value=True,
-            ),
-            patch("atlasbridge.cli._doctor._config_path", return_value=cfg),
-        ):
-            result = _check_plaintext_tokens()
-        assert result is not None
-        assert result["status"] == "pass"
-        assert "keyring" in result["detail"].lower()
+        # No token fields to check → pass or None
+        assert result is None or result["status"] == "pass"
 
     def test_warn_on_plaintext_chat_api_key(self, tmp_path) -> None:
         cfg = tmp_path / "config.toml"
         cfg.write_text(
-            "[telegram]\n"
-            'bot_token = "keyring:atlasbridge:telegram_bot_token"\n'
-            "allowed_users = [1]\n"
+            "config_version = 1\n\n"
             "[chat.provider]\n"
             'name = "anthropic"\n'
             'api_key = "sk-plaintext-key"\n'

@@ -283,6 +283,52 @@ class AuditWriter:
             },
         )
 
+    def workspace_trust_granted(
+        self,
+        session_id: str,
+        path: str,
+        actor: str,
+        ttl: str | None = None,
+    ) -> None:
+        self._write(
+            "workspace_trust_granted",
+            {"path": path, "actor": actor, "ttl": ttl},
+            session_id=session_id,
+        )
+
+    def workspace_trust_revoked(self, session_id: str, path: str, actor: str = "") -> None:
+        self._write(
+            "workspace_trust_revoked",
+            {"path": path, "actor": actor},
+            session_id=session_id,
+        )
+
+    def workspace_posture_updated(
+        self,
+        workspace_id: str,
+        fields: list[str],
+        actor: str = "",
+    ) -> None:
+        self._write(
+            "workspace_posture_updated",
+            {"workspace_id": workspace_id, "fields": fields, "actor": actor},
+        )
+
+    def workspace_scanned(
+        self,
+        workspace_id: str,
+        risk_tags: list[str],
+        inputs_hash: str,
+    ) -> None:
+        self._write(
+            "workspace_scanned",
+            {
+                "workspace_id": workspace_id,
+                "risk_tags": risk_tags,
+                "inputs_hash": inputs_hash,
+            },
+        )
+
     def channel_message_rejected(
         self,
         *,

@@ -36,12 +36,8 @@ FROZEN_OPTIONAL_METHODS = frozenset(
     }
 )
 
-# Known concrete channel implementations
-KNOWN_CHANNEL_CLASSES: list[tuple[str, str]] = [
-    ("atlasbridge.channels.telegram.channel", "TelegramChannel"),
-    ("atlasbridge.channels.slack.channel", "SlackChannel"),
-    ("atlasbridge.channels.multi", "MultiChannel"),
-]
+# Known concrete channel implementations (Telegram/Slack/Multi removed)
+KNOWN_CHANNEL_CLASSES: list[tuple[str, str]] = []
 
 
 def _get_abstract_methods(cls: type) -> set[str]:

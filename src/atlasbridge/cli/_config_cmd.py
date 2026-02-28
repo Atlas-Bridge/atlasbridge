@@ -111,22 +111,6 @@ def _config_to_dict(cfg, redact=True):
     data = {}
     data["config_version"] = cfg.config_version
 
-    if cfg.telegram:
-        token = cfg.telegram.bot_token.get_secret_value()
-        data["telegram"] = {
-            "bot_token": _mask(token) if redact else token,
-            "allowed_users": cfg.telegram.allowed_users,
-        }
-
-    if cfg.slack:
-        bot = cfg.slack.bot_token.get_secret_value()
-        app = cfg.slack.app_token.get_secret_value()
-        data["slack"] = {
-            "bot_token": _mask(bot) if redact else bot,
-            "app_token": _mask(app) if redact else app,
-            "allowed_users": cfg.slack.allowed_users,
-        }
-
     data["prompts"] = {
         "timeout_seconds": cfg.prompts.timeout_seconds,
         "stuck_timeout_seconds": cfg.prompts.stuck_timeout_seconds,

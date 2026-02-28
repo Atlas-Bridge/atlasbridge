@@ -1,7 +1,7 @@
-"""Safety guard: Core edition has no mutating routes. Enterprise mutation scope is bounded.
+"""Safety guard: Core and Enterprise mutation routes are bounded to known sets.
 
-Core must be strictly read-only (GET only).
-Enterprise may have exactly one POST route: /api/integrity/verify.
+Core may have workspace POST routes.
+Enterprise may additionally have /api/integrity/verify.
 No PUT, DELETE, or PATCH routes may exist on either edition.
 """
 
@@ -49,6 +49,25 @@ def _make_app(tmp_path, edition: str, name: str = "test.db"):
         "session_id TEXT, prompt_id TEXT, payload TEXT, timestamp TEXT, "
         "prev_hash TEXT, hash TEXT)"
     )
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS workspace_trust ("
+        "id TEXT PRIMARY KEY, path TEXT NOT NULL, path_hash TEXT NOT NULL UNIQUE, "
+        "trusted INTEGER NOT NULL DEFAULT 0, actor TEXT, channel TEXT, "
+        "session_id TEXT, granted_at TEXT, revoked_at TEXT, "
+        "created_at TEXT NOT NULL DEFAULT (datetime('now')), "
+        "trust_expires_at TEXT, updated_at TEXT, profile_name TEXT, "
+        "autonomy_default TEXT, model_tier TEXT, tool_allowlist_profile TEXT, "
+        "posture_notes TEXT)"
+    )
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS workspace_scan_artifacts ("
+        "id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, "
+        "ruleset_version TEXT NOT NULL, inputs_hash TEXT NOT NULL, "
+        "risk_tags TEXT NOT NULL DEFAULT '[]', file_count INTEGER NOT NULL DEFAULT 0, "
+        "suggested_profile TEXT, raw_results TEXT NOT NULL DEFAULT '{}', "
+        "created_at TEXT NOT NULL DEFAULT (datetime('now')), "
+        "UNIQUE(workspace_id, inputs_hash))"
+    )
     conn.commit()
     conn.close()
     trace_path = tmp_path / "decisions.jsonl"
@@ -56,8 +75,20 @@ def _make_app(tmp_path, edition: str, name: str = "test.db"):
     return create_app(db_path=db_path, trace_path=trace_path)
 
 
+# Known allowed POST routes per edition
+CORE_ALLOWED_POST = {
+    ("POST", "/api/workspaces/scan"),
+    ("POST", "/api/workspaces/trust"),
+    ("POST", "/api/workspaces/posture"),
+}
+
+ENTERPRISE_ALLOWED_POST = CORE_ALLOWED_POST | {
+    ("POST", "/api/integrity/verify"),
+}
+
+
 class TestCoreMutationDenial:
-    """Core edition must have zero mutating HTTP methods."""
+    """Core edition POST routes must be bounded to the known set."""
 
     @pytest.fixture(autouse=True)
     def core_app(self, tmp_path, monkeypatch):
@@ -67,7 +98,8 @@ class TestCoreMutationDenial:
     def test_core_has_no_post_routes(self) -> None:
         routes = _get_app_routes(self._app)
         post_routes = {(m, p) for (m, p) in routes if m == "POST"}
-        assert not post_routes, f"Core has unexpected POST routes: {post_routes}"
+        unexpected = post_routes - CORE_ALLOWED_POST
+        assert not unexpected, f"Core has unexpected POST routes: {unexpected}"
 
     def test_core_has_no_put_routes(self) -> None:
         routes = _get_app_routes(self._app)
@@ -93,8 +125,9 @@ class TestEnterpriseMutationScope:
     def test_enterprise_only_post_is_integrity_verify(self) -> None:
         routes = _get_app_routes(self._app)
         post_routes = {(m, p) for (m, p) in routes if m == "POST"}
-        assert post_routes == {("POST", "/api/integrity/verify")}, (
-            f"Enterprise POST routes changed: {post_routes}. "
+        unexpected = post_routes - ENTERPRISE_ALLOWED_POST
+        assert not unexpected, (
+            f"Enterprise POST routes changed: {unexpected}. "
             "Update this test if adding a POST route is intentional."
         )
 

@@ -394,10 +394,34 @@ export interface EvidenceBundleListItem {
   manifestHash?: string;
 }
 
-let generatedBundles: EvidenceBundleListItem[] = [];
+// Fallback in-memory store for test environments where db module is unavailable
+let _fallbackBundles: EvidenceBundleListItem[] = [];
+
+function getDbHelpers(): { queryEvidenceBundles: () => any[]; insertEvidenceBundle: (b: any) => void } | null {
+  try {
+    const db = require("./db");
+    if (db.queryEvidenceBundles && db.insertEvidenceBundle) return db;
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 export function listGeneratedBundles(): EvidenceBundleListItem[] {
-  return generatedBundles;
+  const db = getDbHelpers();
+  if (!db) return _fallbackBundles;
+  const rows = db.queryEvidenceBundles();
+  return rows.map((r: any) => ({
+    id: r.id,
+    generatedAt: r.generated_at,
+    sessionId: r.session_id ?? undefined,
+    format: r.format as "json" | "csv" | "bundle",
+    decisionCount: r.decision_count,
+    escalationCount: r.escalation_count,
+    integrityStatus: r.integrity_status,
+    governanceScore: r.governance_score,
+    manifestHash: r.manifest_hash ?? undefined,
+  }));
 }
 
 export function addGeneratedBundle(item: Omit<EvidenceBundleListItem, "id">): EvidenceBundleListItem {
@@ -405,6 +429,21 @@ export function addGeneratedBundle(item: Omit<EvidenceBundleListItem, "id">): Ev
     ...item,
     id: `evb-${Date.now()}`,
   };
-  generatedBundles = [entry, ...generatedBundles];
+  const db = getDbHelpers();
+  if (db) {
+    db.insertEvidenceBundle({
+      id: entry.id,
+      generatedAt: entry.generatedAt,
+      sessionId: entry.sessionId,
+      format: entry.format,
+      decisionCount: entry.decisionCount,
+      escalationCount: entry.escalationCount,
+      integrityStatus: entry.integrityStatus,
+      governanceScore: entry.governanceScore,
+      manifestHash: entry.manifestHash,
+    });
+  } else {
+    _fallbackBundles = [entry, ..._fallbackBundles];
+  }
   return entry;
 }

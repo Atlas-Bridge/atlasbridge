@@ -36,6 +36,7 @@ ALLOWED_INJECTION_MODULES = {
     "adapters/gemini_cli.py",
     "core/interaction/executor.py",
     "core/routing/router.py",
+    "core/daemon/manager.py",
     "os/tty/base.py",
     "os/tty/macos.py",
     "os/tty/linux.py",

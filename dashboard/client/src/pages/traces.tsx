@@ -14,6 +14,7 @@ const PAGE_SIZE = 15;
 export default function TracesPage() {
   const { data: traces, isLoading } = useQuery<TraceEntry[]>({
     queryKey: ["/api/traces"],
+    refetchInterval: 10_000,
   });
 
   const [riskFilter, setRiskFilter] = useState<string>("all");

@@ -770,6 +770,37 @@ export class AtlasBridgeRepo {
   }
 
   // -----------------------------------------------------------------------
+  // Session Transcript
+  // -----------------------------------------------------------------------
+
+  listTranscriptChunks(
+    sessionId: string,
+    afterSeq = 0,
+    limit = 200,
+  ): { id: number; session_id: string; role: string; content: string; prompt_id: string | null; created_at: string; seq: number }[] {
+    const db = getAtlasBridgeDb();
+    if (!db) return [];
+    try {
+      const rows = db
+        .prepare(
+          "SELECT * FROM transcript_chunks WHERE session_id = ? AND seq > ? ORDER BY seq ASC LIMIT ?",
+        )
+        .all(sessionId, afterSeq, limit) as any[];
+      return rows.map((r: any) => ({
+        id: r.id,
+        session_id: r.session_id,
+        role: r.role,
+        content: sanitizeForDisplay(r.content || ""),
+        prompt_id: r.prompt_id || null,
+        created_at: r.created_at,
+        seq: r.seq,
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  // -----------------------------------------------------------------------
   // Expert Agent SoR
   // -----------------------------------------------------------------------
 

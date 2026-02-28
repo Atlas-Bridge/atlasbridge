@@ -119,23 +119,10 @@ def cmd_run(
         console.print(f"[red]Config error:[/red] {exc}")
         sys.exit(1)
 
-    # Build a human-readable channel summary
-    channel_parts = []
-    if config.telegram:
-        channel_parts.append(f"Telegram ({len(config.telegram.allowed_users)} user(s))")
-    if config.slack:
-        channel_parts.append(f"Slack ({len(config.slack.allowed_users)} user(s))")
-    channel_str = " + ".join(channel_parts) or "no channel configured"
-
     if dry_run:
         console.print("[bold yellow][DRY RUN][/bold yellow] No injection will occur.")
         console.print()
     console.print(f"[bold]AtlasBridge[/bold] supervising: [cyan]{' '.join(command)}[/cyan]")
-    console.print(f"Prompts will arrive via: {channel_str}")
-    console.print()
-    console.print("[dim]How it works:[/dim]")
-    console.print("  When the CLI asks a question, AtlasBridge sends it to your channel.")
-    console.print("  Reply there (tap a button or type a response) to answer the prompt.")
     console.print()
     console.print("[dim]Useful commands:[/dim]")
     console.print("  [cyan]atlasbridge sessions[/cyan]  — list active sessions")
@@ -261,20 +248,6 @@ def _config_to_dict(
     from pathlib import Path
 
     db_path = config.db_path
-    channels: dict[str, object] = {}
-
-    if config.telegram is not None:
-        channels["telegram"] = {
-            "bot_token": config.telegram.bot_token.get_secret_value(),
-            "allowed_user_ids": config.telegram.allowed_users,
-        }
-
-    if config.slack is not None:
-        channels["slack"] = {
-            "bot_token": config.slack.bot_token.get_secret_value(),
-            "app_token": config.slack.app_token.get_secret_value(),
-            "allowed_user_ids": config.slack.allowed_users,
-        }
 
     result: dict = {
         "data_dir": str(db_path.parent),
@@ -282,7 +255,7 @@ def _config_to_dict(
         "command": command,
         "label": label,
         "cwd": cwd or str(Path.cwd()),
-        "channels": channels,
+        "channels": {},
         "autonomy_mode": autonomy_mode,
         "prompts": {
             "timeout_seconds": config.prompts.timeout_seconds,

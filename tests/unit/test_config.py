@@ -22,16 +22,10 @@ def _write_config(tmp_path: Path, content: str) -> Path:
 
 
 MINIMAL_TOML = """
-[telegram]
-bot_token = "123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi"
-allowed_users = [12345678]
-"""
+config_version = 1
 
-SLACK_ONLY_TOML = """
-[slack]
-bot_token = "xoxb-111-222-AAABBBCCC"
-app_token = "xapp-1-A111-222-BBBCCC"
-allowed_users = ["U1234567890"]
+[prompts]
+timeout_seconds = 300
 """
 
 
@@ -44,7 +38,8 @@ class TestLoadConfig:
     def test_minimal_valid(self, tmp_path: Path) -> None:
         p = _write_config(tmp_path, MINIMAL_TOML)
         cfg = load_config(p)
-        assert cfg.telegram.allowed_users == [12345678]
+        assert cfg.config_version == 1
+        assert cfg.prompts.timeout_seconds == 300
 
     def test_missing_file_raises(self, tmp_path: Path) -> None:
         with pytest.raises(ConfigNotFoundError):
@@ -55,42 +50,40 @@ class TestLoadConfig:
         with pytest.raises(ConfigError):
             load_config(p)
 
-    def test_invalid_token_format_raises(self, tmp_path: Path) -> None:
-        bad = """
-[telegram]
-bot_token = "notavalidtoken"
-allowed_users = [12345678]
-"""
-        p = _write_config(tmp_path, bad)
-        with pytest.raises(ConfigError):
-            load_config(p)
-
     def test_auto_approve_rejected(self, tmp_path: Path) -> None:
-        bad = MINIMAL_TOML + '\n[prompts]\nyes_no_safe_default = "y"\n'
+        bad = """
+config_version = 1
+
+[prompts]
+timeout_seconds = 300
+yes_no_safe_default = "y"
+"""
         p = _write_config(tmp_path, bad)
         with pytest.raises(ConfigError, match="[Aa]uto-approv"):
             load_config(p)
 
     def test_timeout_bounds(self, tmp_path: Path) -> None:
-        bad = MINIMAL_TOML + "\n[prompts]\ntimeout_seconds = 10\n"
+        bad = """
+config_version = 1
+
+[prompts]
+timeout_seconds = 10
+"""
         p = _write_config(tmp_path, bad)
         with pytest.raises(ConfigError):
             load_config(p)
 
-    def test_env_override_token(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv(
-            "AEGIS_TELEGRAM_BOT_TOKEN",
-            "987654321:ZYXWVUTSRQPONMLKJIHGFEDCBAzyxwvutsrqpo",
-        )
+    def test_env_override_log_level(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("ATLASBRIDGE_LOG_LEVEL", "DEBUG")
         p = _write_config(tmp_path, MINIMAL_TOML)
         cfg = load_config(p)
-        assert cfg.telegram.bot_token.get_secret_value().startswith("987654321:")
+        assert cfg.logging.level == "DEBUG"
 
-    def test_env_override_users(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("AEGIS_TELEGRAM_ALLOWED_USERS", "111,222,333")
+    def test_env_override_db_path(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("ATLASBRIDGE_DB_PATH", str(tmp_path / "custom.db"))
         p = _write_config(tmp_path, MINIMAL_TOML)
         cfg = load_config(p)
-        assert cfg.telegram.allowed_users == [111, 222, 333]
+        assert cfg.database.path == str(tmp_path / "custom.db")
 
 
 # ---------------------------------------------------------------------------
@@ -101,20 +94,18 @@ allowed_users = [12345678]
 class TestSaveConfig:
     def test_saves_and_loads(self, tmp_path: Path) -> None:
         data = {
-            "telegram": {
-                "bot_token": "123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi",
-                "allowed_users": [42],
+            "prompts": {
+                "timeout_seconds": 300,
             }
         }
         path = save_config(data, tmp_path / "config.toml")
         cfg = load_config(path)
-        assert cfg.telegram.allowed_users == [42]
+        assert cfg.prompts.timeout_seconds == 300
 
     def test_secure_permissions(self, tmp_path: Path) -> None:
         data = {
-            "telegram": {
-                "bot_token": "123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi",
-                "allowed_users": [1],
+            "prompts": {
+                "timeout_seconds": 300,
             }
         }
         path = save_config(data, tmp_path / "config.toml")
@@ -141,54 +132,19 @@ class TestPaths:
 
 
 # ---------------------------------------------------------------------------
-# Slack config
+# No-channel config
 # ---------------------------------------------------------------------------
 
 
-class TestSlackConfig:
-    def test_slack_only_valid(self, tmp_path: Path) -> None:
-        p = _write_config(tmp_path, SLACK_ONLY_TOML)
-        cfg = load_config(p)
-        assert cfg.slack is not None
-        assert cfg.telegram is None
-        assert cfg.slack.allowed_users == ["U1234567890"]
-
-    def test_slack_invalid_bot_token(self, tmp_path: Path) -> None:
-        bad = """
-[slack]
-bot_token = "notaslacktoken"
-app_token = "xapp-1-A111-222-BBBCCC"
-allowed_users = ["U1234567890"]
-"""
-        p = _write_config(tmp_path, bad)
-        with pytest.raises(ConfigError):
-            load_config(p)
-
-    def test_slack_invalid_app_token(self, tmp_path: Path) -> None:
-        bad = """
-[slack]
-bot_token = "xoxb-111-222-AAABBBCCC"
-app_token = "notanapptoken"
-allowed_users = ["U1234567890"]
-"""
-        p = _write_config(tmp_path, bad)
-        with pytest.raises(ConfigError):
-            load_config(p)
-
-    def test_no_channel_valid(self, tmp_path: Path) -> None:
-        """Channels are now optional — no channel config is valid."""
+class TestNoChannelConfig:
+    def test_empty_config_valid(self, tmp_path: Path) -> None:
+        """Config with no channel section is valid."""
         empty = """
+config_version = 1
+
 [prompts]
 timeout_seconds = 300
 """
         p = _write_config(tmp_path, empty)
         cfg = load_config(p)
-        assert cfg.telegram is None
-        assert cfg.slack is None
-
-    def test_multi_channel_valid(self, tmp_path: Path) -> None:
-        both = MINIMAL_TOML + SLACK_ONLY_TOML
-        p = _write_config(tmp_path, both)
-        cfg = load_config(p)
-        assert cfg.telegram is not None
-        assert cfg.slack is not None
+        assert cfg.config_version == 1

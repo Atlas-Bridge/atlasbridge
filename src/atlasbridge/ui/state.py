@@ -57,7 +57,7 @@ class AppState:
 # Setup wizard state machine
 # ---------------------------------------------------------------------------
 
-WIZARD_STEPS = ["channel", "credentials", "user_ids", "confirm"]
+WIZARD_STEPS = ["confirm"]
 WIZARD_TOTAL = len(WIZARD_STEPS)
 
 
@@ -70,9 +70,9 @@ class WizardState:
     """
 
     step: int = 0
-    channel: str = "telegram"
+    channel: str = ""
     token: str = ""
-    app_token: str = ""  # Slack only
+    app_token: str = ""
     users: str = ""
     saved: bool = False
     error: str = ""
@@ -144,59 +144,11 @@ class WizardState:
 
     def validate_current_step(self) -> str:
         """Return an error string if the current step is invalid, else ''."""
-        if self.step_name == "credentials":
-            return self._validate_credentials()
-        if self.step_name == "user_ids":
-            return self._validate_users()
-        return ""
-
-    def _validate_credentials(self) -> str:
-        import re
-
-        if not self.token.strip():
-            return "Token is required."
-        if self.channel == "telegram":
-            if not re.fullmatch(r"\d{8,12}:[A-Za-z0-9_\-]{35,}", self.token.strip()):
-                return "Invalid Telegram token. Expected: <8-12 digits>:<35+ chars>"
-        elif self.channel == "slack":
-            if not re.fullmatch(r"xoxb-[A-Za-z0-9\-]+", self.token.strip()):
-                return "Invalid Slack bot token. Expected: xoxb-..."
-            if not re.fullmatch(r"xapp-[A-Za-z0-9\-]+", self.app_token.strip()):
-                return "Invalid Slack app token. Expected: xapp-..."
-        return ""
-
-    def _validate_users(self) -> str:
-        if not self.users.strip():
-            return "At least one user ID is required."
-        if self.channel == "telegram":
-            try:
-                ids = [int(u.strip()) for u in self.users.split(",") if u.strip()]
-                if not ids:
-                    return "Enter numeric Telegram user IDs (comma-separated)."
-            except ValueError:
-                return "Telegram user IDs must be numeric."
-        elif self.channel == "slack":
-            import re
-
-            parts = [u.strip() for u in self.users.replace(",", " ").split() if u.strip()]
-            if not parts or not all(re.fullmatch(r"U[A-Z0-9]{8,}", p) for p in parts):
-                return "Slack user IDs must be like U1234567890."
         return ""
 
     def build_config_data(self) -> dict:
         """Build the dict to pass to save_config()."""
-        if self.channel == "telegram":
-            users = [int(u.strip()) for u in self.users.split(",") if u.strip()]
-            return {"telegram": {"bot_token": self.token.strip(), "allowed_users": users}}
-        else:
-            parts = [u.strip() for u in self.users.replace(",", " ").split() if u.strip()]
-            return {
-                "slack": {
-                    "bot_token": self.token.strip(),
-                    "app_token": self.app_token.strip(),
-                    "allowed_users": parts,
-                }
-            }
+        return {}
 
 
 # ---------------------------------------------------------------------------
@@ -208,7 +160,7 @@ _WORKFLOW_EXAMPLE = (
     "  1. Start daemon      atlasbridge start\n"
     "  2. Run your tool      atlasbridge run claude\n"
     "  3. Agent pauses       AtlasBridge sends prompt to your phone\n"
-    "  4. Reply via Telegram/Slack\n"
+    "  4. Reply via dashboard\n"
     "  5. CLI resumes automatically"
 )
 
@@ -218,8 +170,7 @@ def guidance_message(state: AppState, daemon: DaemonStatus) -> str:
     if not state.is_configured:
         return (
             "Next step: Press [S] to run the setup wizard.\n\n"
-            "You'll choose a channel (Telegram or Slack), enter your\n"
-            "credentials, and allowlist your user ID. Takes ~2 minutes.\n\n"
+            "Configure AtlasBridge to supervise your AI CLI tools.\n\n"
             f"{_WORKFLOW_EXAMPLE}"
         )
 

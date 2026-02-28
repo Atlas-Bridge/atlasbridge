@@ -260,6 +260,8 @@ export const notifications = sqliteTable("notifications", {
   events: text("events", { mode: "json" }).notNull().default("[]").$type<string[]>(),
   minSeverity: text("min_severity").notNull().default("info"),
   lastDelivered: text("last_delivered"),
+  lastDeliveryStatus: text("last_delivery_status"),  // "success" | "failed"
+  lastDeliveryError: text("last_delivery_error"),
 });
 
 export const insertNotificationSchema = createInsertSchema(notifications).omit({ id: true });
@@ -366,7 +368,7 @@ export type MfaStatus = "enabled" | "disabled" | "enforced";
 export type ApiKeyStatus = "active" | "revoked" | "expired";
 export type SsoProvider = "saml" | "oidc" | "ldap" | "none";
 export type AuditCategory = "access_control" | "data_integrity" | "change_management" | "incident_response" | "risk_assessment" | "monitoring";
-export type NotificationChannel = "slack" | "email" | "webhook" | "pagerduty" | "opsgenie";
+export type NotificationChannel = "slack" | "email" | "webhook" | "pagerduty" | "opsgenie" | "teams";
 
 export interface OrgProfile {
   id: string;
@@ -473,6 +475,16 @@ export interface QualityScanResult {
 // Expert Agent types
 // ---------------------------------------------------------------------------
 
+export interface TranscriptChunk {
+  id: number;
+  session_id: string;
+  role: "agent" | "user" | "operator";
+  content: string;
+  prompt_id: string | null;
+  created_at: string;
+  seq: number;
+}
+
 export interface AgentTurn {
   id: string;
   session_id: string;
@@ -558,6 +570,31 @@ export interface AgentProfile {
   capabilities: string[];
   risk_tier: string;
   max_autonomy: string;
+}
+
+// ---------------------------------------------------------------------------
+// Monitor types (browser extension, desktop, VS Code)
+// ---------------------------------------------------------------------------
+
+export interface MonitorSession {
+  id: string;
+  vendor: string;
+  conversation_id: string;
+  tab_url: string;
+  status: "active" | "ended";
+  created_at: string;
+  ended_at: string | null;
+}
+
+export interface MonitorMessage {
+  id: number;
+  session_id: string;
+  role: "user" | "assistant";
+  content: string;
+  vendor: string;
+  seq: number;
+  captured_at: string;
+  created_at: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -757,3 +794,41 @@ export const infraScans = sqliteTable("infra_scans", {
 export const insertInfraScanSchema = createInsertSchema(infraScans).omit({ id: true, scannedAt: true });
 export type InsertInfraScan = z.infer<typeof insertInfraScanSchema>;
 export type InfraScan = typeof infraScans.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// Agent profiles table
+// ---------------------------------------------------------------------------
+
+export const agents = sqliteTable("agents", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  externalId: text("external_id").notNull().unique(),
+  name: text("name").notNull(),
+  version: text("version").notNull().default("1.0.0"),
+  description: text("description").notNull().default(""),
+  capabilities: text("capabilities", { mode: "json" }).notNull().default("[]").$type<string[]>(),
+  riskTier: text("risk_tier").notNull().default("moderate"),
+  maxAutonomy: text("max_autonomy").notNull().default("assist"),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+  createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
+  updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
+});
+
+export const insertAgentSchema = createInsertSchema(agents).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertAgent = z.infer<typeof insertAgentSchema>;
+export type Agent = typeof agents.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// Retention settings table
+// ---------------------------------------------------------------------------
+
+export const retentionSettings = sqliteTable("retention_settings", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  auditRetentionDays: integer("audit_retention_days").notNull().default(730),
+  traceRetentionDays: integer("trace_retention_days").notNull().default(365),
+  sessionRetentionDays: integer("session_retention_days").notNull().default(180),
+  updatedAt: text("updated_at").notNull().default(sql`(datetime('now'))`),
+});
+
+export const insertRetentionSettingsSchema = createInsertSchema(retentionSettings).omit({ id: true, updatedAt: true });
+export type InsertRetentionSettings = z.infer<typeof insertRetentionSettingsSchema>;
+export type RetentionSettings = typeof retentionSettings.$inferSelect;

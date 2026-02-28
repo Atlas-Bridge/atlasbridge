@@ -263,6 +263,69 @@ class Database:
         ).fetchall()
 
     # ------------------------------------------------------------------
+    # Transcript
+    # ------------------------------------------------------------------
+
+    def save_transcript_chunk(
+        self,
+        session_id: str,
+        role: str,
+        content: str,
+        seq: int,
+        prompt_id: str = "",
+    ) -> None:
+        self._db.execute(
+            "INSERT INTO transcript_chunks (session_id, role, content, prompt_id, seq) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (session_id, role, content, prompt_id or None, seq),
+        )
+        self._db.commit()
+
+    def list_transcript_chunks(
+        self, session_id: str, after_seq: int = 0, limit: int = 200
+    ) -> list[sqlite3.Row]:
+        return self._db.execute(
+            "SELECT * FROM transcript_chunks WHERE session_id = ? AND seq > ? "
+            "ORDER BY seq ASC LIMIT ?",
+            (session_id, after_seq, limit),
+        ).fetchall()
+
+    # ------------------------------------------------------------------
+    # Operator directives
+    # ------------------------------------------------------------------
+
+    def insert_operator_directive(
+        self, session_id: str, content: str, actor: str = "dashboard"
+    ) -> str:
+        """Insert a pending operator directive and return its id."""
+        import uuid
+
+        directive_id = uuid.uuid4().hex
+        self._db.execute(
+            "INSERT INTO operator_directives (id, session_id, content, status, actor) "
+            "VALUES (?, ?, ?, 'pending', ?)",
+            (directive_id, session_id, content, actor),
+        )
+        self._db.commit()
+        return directive_id
+
+    def list_pending_directives(self) -> list[sqlite3.Row]:
+        """Return operator directives awaiting processing."""
+        return self._db.execute(
+            "SELECT * FROM operator_directives WHERE status = 'pending' "
+            "ORDER BY created_at ASC"
+        ).fetchall()
+
+    def mark_directive_processed(self, directive_id: str) -> None:
+        """Mark an operator directive as processed."""
+        self._db.execute(
+            "UPDATE operator_directives SET status = 'processed', "
+            "processed_at = datetime('now') WHERE id = ?",
+            (directive_id,),
+        )
+        self._db.commit()
+
+    # ------------------------------------------------------------------
     # Delivery tracking
     # ------------------------------------------------------------------
 

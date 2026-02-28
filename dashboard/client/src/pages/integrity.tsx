@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useRef } from "react";
 import type { IntegrityData } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,13 +27,15 @@ export default function IntegrityPage() {
   const [cooldown, setCooldown] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const handleReverify = () => {
     if (cooldown > 0) return;
     setCooldown(REVERIFY_COOLDOWN);
+    queryClient.invalidateQueries({ queryKey: ["/api/integrity"] });
     toast({
       title: "Re-verification triggered",
-      description: "Integrity check is running locally...",
+      description: "Integrity check is running — results will update shortly.",
     });
     intervalRef.current = setInterval(() => {
       setCooldown(prev => {

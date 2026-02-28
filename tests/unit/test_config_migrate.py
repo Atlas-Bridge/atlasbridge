@@ -15,26 +15,23 @@ from atlasbridge.core.config_migrate import (
 )
 from atlasbridge.core.exceptions import ConfigError
 
-VALID_TOKEN = "123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi"
 
 MINIMAL_TOML_V0 = """
-[telegram]
-bot_token = "123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi"
-allowed_users = [12345678]
+[prompts]
+timeout_seconds = 300
 """
 
 MINIMAL_TOML_V1 = """
 config_version = 1
 
-[telegram]
-bot_token = "123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi"
-allowed_users = [12345678]
+[prompts]
+timeout_seconds = 300
 """
 
 
 class TestDetectVersion:
     def test_missing_version_defaults_to_zero(self):
-        assert detect_version({"telegram": {}}) == 0
+        assert detect_version({"prompts": {}}) == 0
 
     def test_explicit_version_returned(self):
         assert detect_version({"config_version": 1}) == 1
@@ -48,13 +45,12 @@ class TestDetectVersion:
 
 class TestUpgradeConfig:
     def test_v0_to_v1_adds_version(self):
-        data = {"telegram": {"bot_token": VALID_TOKEN, "allowed_users": [1]}}
+        data = {"prompts": {"timeout_seconds": 300}}
         result = upgrade_config(data, from_version=0, to_version=1)
         assert result["config_version"] == 1
-        assert result["telegram"]["bot_token"] == VALID_TOKEN
 
     def test_same_version_noop(self):
-        data = {"config_version": 1, "telegram": {"bot_token": VALID_TOKEN}}
+        data = {"config_version": 1, "prompts": {"timeout_seconds": 300}}
         result = upgrade_config(data, from_version=1, to_version=1)
         assert result is data  # same object, no copy
 
@@ -67,7 +63,7 @@ class TestUpgradeConfig:
             upgrade_config({}, from_version=99, to_version=100)
 
     def test_idempotent(self):
-        data = {"telegram": {"bot_token": VALID_TOKEN, "allowed_users": [1]}}
+        data = {"prompts": {"timeout_seconds": 300}}
         first = upgrade_config(data, 0, 1)
         second = upgrade_config(first, 1, 1)
         assert first["config_version"] == 1
@@ -82,7 +78,6 @@ class TestAutoMigration:
 
         cfg = load_config(p)
         assert cfg.config_version == 1
-        assert cfg.telegram.allowed_users == [12345678]
 
         # Verify persistence
         with open(p, "rb") as f:
@@ -104,9 +99,8 @@ class TestAutoMigration:
     def test_save_config_stamps_version(self, tmp_path: Path):
         """save_config always stamps config_version."""
         data = {
-            "telegram": {
-                "bot_token": VALID_TOKEN,
-                "allowed_users": [42],
+            "prompts": {
+                "timeout_seconds": 300,
             }
         }
         path = save_config(data, tmp_path / "config.toml")

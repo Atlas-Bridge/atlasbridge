@@ -496,6 +496,46 @@ def sessions_reply(session_id: str, prompt_id: str, value: str) -> None:
 
 
 # ------------------------------------------------------------------
+# sessions message
+# ------------------------------------------------------------------
+
+
+@sessions_group.command("message")
+@click.argument("session_id")
+@click.argument("text")
+def sessions_message(session_id: str, text: str) -> None:
+    """Send a free-text message to a running session's agent."""
+    db = _open_db()
+    if db is None:
+        print(json.dumps({"ok": False, "error": "Database not found"}))
+        sys.exit(1)
+
+    try:
+        full_session_id = _resolve_session_id(db, session_id)
+        if full_session_id is None:
+            print(json.dumps({"ok": False, "error": f"Session not found: {session_id}"}))
+            sys.exit(1)
+
+        row = db.get_session(full_session_id)
+        if row is None or row["status"] not in ("running", "starting", "awaiting_reply"):
+            print(
+                json.dumps(
+                    {"ok": False, "error": "Session is not running"}
+                )
+            )
+            sys.exit(1)
+
+        directive_id = db.insert_operator_directive(full_session_id, text)
+        print(
+            json.dumps(
+                {"ok": True, "directive_id": directive_id, "session_id": full_session_id}
+            )
+        )
+    finally:
+        db.close()
+
+
+# ------------------------------------------------------------------
 # sessions stop
 # ------------------------------------------------------------------
 

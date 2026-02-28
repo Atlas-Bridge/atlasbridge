@@ -83,50 +83,7 @@ def _check_config() -> dict:
 
 
 def _check_bot_token() -> dict:
-    try:
-        from atlasbridge.core.config import load_config
-
-        cfg_path = _config_path()
-        if not cfg_path.exists():
-            return {"name": "Bot token", "status": "skip", "detail": "no config file"}
-        cfg = load_config(cfg_path)
-        token_obj = cfg.telegram.bot_token if cfg.telegram else None
-        if token_obj is None:
-            return {
-                "name": "Bot token",
-                "status": "warn",
-                "detail": "not configured — run: atlasbridge setup",
-            }
-        token = token_obj.get_secret_value()
-        masked = token[:8] + "..." + token[-4:]
-        return {"name": "Bot token", "status": "pass", "detail": masked}
-    except Exception as exc:  # noqa: BLE001
-        return {"name": "Bot token", "status": "fail", "detail": str(exc)}
-
-
-def _check_telegram_reachability() -> dict | None:
-    """Verify the configured Telegram bot token can reach the API."""
-    try:
-        from atlasbridge.core.config import load_config
-
-        cfg_path = _config_path()
-        if not cfg_path.exists():
-            return None
-        cfg = load_config(cfg_path)
-        if not cfg.telegram:
-            return None
-        token = cfg.telegram.bot_token.get_secret_value()
-
-        from atlasbridge.channels.telegram.verify import verify_telegram_token
-
-        ok, detail = verify_telegram_token(token)
-        return {
-            "name": "Telegram reachability",
-            "status": "pass" if ok else "warn",
-            "detail": detail,
-        }
-    except Exception:  # noqa: BLE001
-        return None
+    return {"name": "Bot token", "status": "skip", "detail": "channels removed"}
 
 
 def _check_systemd() -> dict | None:
@@ -173,22 +130,7 @@ def _check_ui_assets() -> dict:
 
 
 def _check_poller_lock() -> dict | None:
-    """Check for stale Telegram poller lock files."""
-    try:
-        from atlasbridge.core.config import load_config
-
-        cfg_path = _config_path()
-        if not cfg_path.exists():
-            return None
-        cfg = load_config(cfg_path)
-        if not cfg.telegram:
-            return None
-        token = cfg.telegram.bot_token.get_secret_value()
-        from atlasbridge.core.poller_lock import check_stale_lock
-
-        return check_stale_lock(token)
-    except Exception:  # noqa: BLE001
-        return None
+    return None  # channels removed
 
 
 def _check_systemd_service() -> dict | None:
@@ -225,35 +167,6 @@ def _fix_config(console: Console) -> None:
 
     config_data: dict = {}
 
-    # Try Telegram env vars
-    tg_token = _env("ATLASBRIDGE_TELEGRAM_BOT_TOKEN", "AEGIS_TELEGRAM_BOT_TOKEN")
-    tg_users = _env("ATLASBRIDGE_TELEGRAM_ALLOWED_USERS", "AEGIS_TELEGRAM_ALLOWED_USERS")
-    if tg_token and tg_users:
-        try:
-            users_list = [int(u.strip()) for u in tg_users.split(",") if u.strip()]
-            if users_list and re.fullmatch(r"\d{8,12}:[A-Za-z0-9_\-]{35,}", tg_token.strip()):
-                config_data["telegram"] = {
-                    "bot_token": tg_token.strip(),
-                    "allowed_users": users_list,
-                }
-        except ValueError:
-            pass
-
-    # Try Slack env vars
-    slack_bot = _env("ATLASBRIDGE_SLACK_BOT_TOKEN", "AEGIS_SLACK_BOT_TOKEN")
-    slack_app = _env("ATLASBRIDGE_SLACK_APP_TOKEN", "AEGIS_SLACK_APP_TOKEN")
-    slack_users = _env("ATLASBRIDGE_SLACK_ALLOWED_USERS", "AEGIS_SLACK_ALLOWED_USERS")
-    if slack_bot and slack_app and slack_users:
-        parsed = [u.strip() for u in slack_users.split(",") if u.strip()]
-        bot_ok = re.fullmatch(r"xoxb-[A-Za-z0-9\-]+", slack_bot)
-        app_ok = re.fullmatch(r"xapp-[A-Za-z0-9\-]+", slack_app)
-        if parsed and bot_ok and app_ok:
-            config_data["slack"] = {
-                "bot_token": slack_bot,
-                "app_token": slack_app,
-                "allowed_users": parsed,
-            }
-
     if config_data:
         from atlasbridge.core.config import save_config
 
@@ -269,13 +182,8 @@ def _fix_config(console: Console) -> None:
             cfg_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
             cfg_path.write_text(
                 "# AtlasBridge configuration\n"
-                "# Option 1: Edit this file, then run: atlasbridge setup\n"
-                "# Option 2: Set env vars, then run: atlasbridge setup --from-env\n"
-                "#   ATLASBRIDGE_TELEGRAM_BOT_TOKEN, ATLASBRIDGE_TELEGRAM_ALLOWED_USERS\n\n"
-                "config_version = 1\n\n"
-                "[telegram]\n"
-                '# bot_token = "<YOUR_BOT_TOKEN>"\n'
-                "# allowed_users = [<YOUR_TELEGRAM_USER_ID>]\n",
+                "# Run: atlasbridge setup\n\n"
+                "config_version = 1\n",
                 encoding="utf-8",
             )
             cfg_path.chmod(0o600)
@@ -664,7 +572,7 @@ def _check_plaintext_tokens() -> dict | None:
         return None
 
     plaintext_fields: list[str] = []
-    for section, key in [("telegram", "bot_token"), ("slack", "bot_token"), ("slack", "app_token")]:
+    for section, key in []:
         val = data.get(section, {}).get(key, "")
         if val and not is_keyring_placeholder(val):
             plaintext_fields.append(f"{section}.{key}")
@@ -703,7 +611,6 @@ def cmd_doctor(fix: bool, as_json: bool, console: Console) -> None:
         _check_ptyprocess(),
         _check_config(),
         _check_bot_token(),
-        _check_telegram_reachability(),
         _check_database(),
         _check_adapters(),
         _check_llm_provider(),
@@ -750,6 +657,6 @@ def cmd_doctor(fix: bool, as_json: bool, console: Console) -> None:
 
     if not all_pass:
         console.print("\nNext steps:")
-        console.print("  1. [cyan]atlasbridge setup[/cyan] — configure Telegram or Slack")
+        console.print("  1. [cyan]atlasbridge setup[/cyan] — configure AtlasBridge")
         console.print("  2. [cyan]atlasbridge doctor --fix[/cyan] — auto-repair config issues")
         console.print("  3. [cyan]atlasbridge run claude[/cyan] — start supervising")

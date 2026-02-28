@@ -25,10 +25,6 @@ class ConfigService:
                 return state
             config = load_config(str(cfg_path))
             state.config_status = ConfigStatus.LOADED
-            if config.telegram:
-                state.channels.append(ChannelStatus("telegram", True))
-            if config.slack:
-                state.channels.append(ChannelStatus("slack", True))
         except Exception as exc:  # noqa: BLE001
             state.config_status = ConfigStatus.ERROR
             state.last_error = str(exc)

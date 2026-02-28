@@ -533,6 +533,161 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 
 /* ----------------------------------------------------------------
+   Action panels — interactive workspace controls
+   ---------------------------------------------------------------- */
+.action-panel {
+    background: var(--ab-panel);
+    border: 1px solid var(--ab-border);
+    border-radius: 6px;
+    padding: 1.25rem;
+    margin-bottom: 1.5rem;
+}
+
+.action-panel h3 {
+    margin: 0 0 1rem 0;
+    font-size: 0.95rem;
+    color: var(--ab-text);
+}
+
+.action-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0.75rem;
+}
+
+.form-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+.form-row label {
+    font-size: 0.8rem;
+    color: var(--ab-text-muted);
+    font-weight: 500;
+}
+
+.form-input {
+    padding: 0.45rem 0.6rem;
+    background: var(--ab-bg);
+    color: var(--ab-text);
+    border: 1px solid var(--ab-border);
+    border-radius: 4px;
+    font-family: var(--ab-font);
+    font-size: 0.85rem;
+    min-width: 200px;
+}
+
+.form-input:focus {
+    outline: none;
+    border-color: var(--ab-accent);
+}
+
+/* Action buttons */
+.action-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.action-btn {
+    padding: 0.45rem 1rem;
+    border: 1px solid var(--ab-border);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 500;
+    font-family: var(--ab-font);
+}
+
+.action-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.action-btn-primary {
+    background: var(--ab-accent);
+    color: #fff;
+    border-color: var(--ab-accent);
+}
+
+.action-btn-primary:hover:not(:disabled) {
+    filter: brightness(1.15);
+}
+
+.action-btn-secondary {
+    background: var(--ab-panel-hover);
+    color: var(--ab-accent);
+}
+
+.action-btn-secondary:hover:not(:disabled) {
+    background: var(--ab-border);
+}
+
+.action-btn-danger {
+    background: rgba(164, 22, 26, 0.15);
+    color: var(--ab-danger);
+    border-color: var(--ab-danger);
+}
+
+.action-btn-danger:hover:not(:disabled) {
+    background: rgba(164, 22, 26, 0.25);
+}
+
+.action-btn-muted {
+    background: transparent;
+    color: var(--ab-text-muted);
+}
+
+.action-btn-sm {
+    padding: 0.25rem 0.6rem;
+    font-size: 0.8rem;
+}
+
+/* Feedback messages */
+.action-result {
+    padding: 0.6rem 0.75rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    margin-bottom: 1rem;
+}
+
+.action-result-success {
+    background: rgba(30, 126, 52, 0.1);
+    border: 1px solid var(--ab-success);
+    color: var(--ab-success);
+}
+
+.action-result-error {
+    background: rgba(164, 22, 26, 0.1);
+    border: 1px solid var(--ab-danger);
+    color: var(--ab-danger);
+}
+
+/* Risk tags from scan */
+.risk-tag {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 3px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    margin-right: 0.25rem;
+}
+
+.risk-tag-iac { background: rgba(199, 125, 0, 0.15); color: var(--ab-warning); }
+.risk-tag-secrets_present { background: rgba(164, 22, 26, 0.15); color: var(--ab-danger); }
+.risk-tag-deployment { background: rgba(31, 138, 140, 0.15); color: var(--ab-accent); }
+.risk-tag-unknown { background: rgba(168, 179, 189, 0.15); color: var(--ab-text-muted); }
+
+.scan-suggestion {
+    margin-top: 0.75rem;
+    font-size: 0.85rem;
+    color: var(--ab-text-muted);
+}
+
+/* ----------------------------------------------------------------
    Footer
    ---------------------------------------------------------------- */
 footer {
@@ -595,8 +750,18 @@ footer {
         width: 100%;
     }
 
+    /* Action forms stack vertically */
+    .action-form {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .form-input { min-width: 0; width: 100%; }
+
+    .action-bar { flex-direction: column; }
+
     /* Touch targets */
-    button, .nav-btn, .filter-btn {
+    button, .nav-btn, .filter-btn, .action-btn {
         min-height: 44px;
         padding: 0.5rem 1rem;
     }

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import {
   LayoutDashboard, MonitorDot, MessageSquare, GitBranch,
   ShieldCheck, FileText, Settings, Sun, Moon, Menu, X, Plug, Terminal, FileCheck,
-  ArrowUpCircle, Bot, Sparkles
+  ArrowUpCircle, Bot, Sparkles, Lock
 } from "lucide-react";
 import { useState } from "react";
 import type { VersionInfo } from "@shared/schema";
@@ -162,6 +162,20 @@ function TopNav() {
   );
 }
 
+function PrivacyFooter() {
+  return (
+    <footer className="border-t bg-muted/30 py-3 px-4 sm:px-6 lg:px-8">
+      <div className="flex items-center justify-center gap-2 text-[11px] text-muted-foreground">
+        <Lock className="w-3 h-3" />
+        <span>
+          All data stays on your machine. Project maintainers and contributors have zero access to your data.
+          Nothing is transmitted externally.
+        </span>
+      </div>
+    </footer>
+  );
+}
+
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex flex-col min-h-screen bg-background">
@@ -173,6 +187,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           {children}
         </div>
       </main>
+      <PrivacyFooter />
     </div>
   );
 }

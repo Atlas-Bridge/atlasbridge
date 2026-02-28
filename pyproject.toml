@@ -65,6 +65,14 @@ dashboard = [
     "uvicorn[standard]>=0.24",
     "jinja2>=3.1",
 ]
+desktop-monitor = [
+    "pyobjc-framework-ApplicationServices>=10.0",
+    "pyobjc-framework-Cocoa>=10.0",
+]
+vscode-monitor = [
+    "websockets>=12.0",
+    "psutil>=5.9",
+]
 dev = [
     # Testing
     "pytest>=8.2",

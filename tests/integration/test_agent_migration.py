@@ -153,11 +153,13 @@ class TestIndexes:
 
 
 class TestSchemaVersion:
-    def test_schema_version_is_6(self, db: Database) -> None:
+    def test_schema_version_is_current(self, db: Database) -> None:
+        from atlasbridge.core.store.migrations import LATEST_SCHEMA_VERSION
+
         conn = db._conn
         assert conn is not None
         version = conn.execute("PRAGMA user_version").fetchone()[0]
-        assert version == 6
+        assert version == LATEST_SCHEMA_VERSION
 
 
 class TestMigrationIdempotency:
