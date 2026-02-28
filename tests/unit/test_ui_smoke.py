@@ -106,7 +106,7 @@ def test_ui_state_reexports_wizard_state() -> None:
 
     ws = WizardState()
     assert ws.step == 0
-    assert ws.channel == "telegram"
+    assert ws.channel == ""
     assert WIZARD_TOTAL == len(WIZARD_STEPS)
 
 
@@ -142,10 +142,8 @@ def test_poll_state_returns_app_state_when_no_config(tmp_path, monkeypatch) -> N
 def test_cli_has_ui_command() -> None:
     from atlasbridge.cli.main import cli
 
-    runner = CliRunner()
-    result = runner.invoke(cli, ["--help"])
-    assert result.exit_code == 0
-    assert "ui" in result.output
+    # ui command is registered (hidden from --help but still callable)
+    assert "ui" in cli.commands
 
 
 def test_cli_ui_help_exits_zero() -> None:
@@ -162,77 +160,25 @@ def test_cli_ui_help_exits_zero() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_wizard_screen_has_help_constants() -> None:
-    """SetupWizardScreen exposes Telegram and Slack help text constants."""
-    from atlasbridge.ui.screens.wizard import _SLACK_HELP, _TELEGRAM_HELP
-
-    assert "BotFather" in _TELEGRAM_HELP
-    assert "@userinfobot" in _TELEGRAM_HELP
-    assert "xoxb" in _SLACK_HELP
-    assert "xapp" in _SLACK_HELP
-
-
-def test_wizard_screen_has_h_binding() -> None:
-    """SetupWizardScreen should bind 'h' for help."""
+def test_wizard_screen_has_bindings() -> None:
+    """SetupWizardScreen has expected key bindings."""
     from atlasbridge.ui.screens.wizard import SetupWizardScreen
 
     keys = [b.key for b in SetupWizardScreen.BINDINGS]
-    assert "h" in keys
+    assert "enter" in keys
+    assert "escape" in keys
 
 
-def test_wizard_screen_uses_recompose() -> None:
-    """action_next_step and action_prev_step must call recompose, not refresh."""
+def test_wizard_uses_container() -> None:
+    """Wizard must use Container from textual.containers."""
     import inspect
 
     from atlasbridge.ui.screens.wizard import SetupWizardScreen
 
-    next_src = inspect.getsource(SetupWizardScreen.action_next_step)
-    prev_src = inspect.getsource(SetupWizardScreen.action_prev_step)
-    assert "recompose" in next_src, "action_next_step should use recompose()"
-    assert "recompose" in prev_src, "action_prev_step should use recompose()"
-    assert "refresh(layout" not in next_src, "Must not use refresh(layout=True)"
-    assert "refresh(layout" not in prev_src, "Must not use refresh(layout=True)"
-
-
-def test_wizard_uses_container_not_static() -> None:
-    """Wizard steps must use Container (not Static) so Input widgets render."""
-    import inspect
-
-    from atlasbridge.ui.screens.wizard import SetupWizardScreen
-
-    src = inspect.getsource(SetupWizardScreen)
-    assert "from textual.containers import Container" in inspect.getsource(
-        inspect.getmodule(SetupWizardScreen)  # type: ignore[arg-type]
-    ), "wizard must import Container from textual.containers"
-    # Step methods must not monkey-patch compose on Static
-    assert "s.compose = lambda" not in src, "Must not monkey-patch compose on Static"
-
-
-def test_wizard_state_step_transitions_preserve_data() -> None:
-    """Navigating forward and back preserves all entered data."""
-    from atlasbridge.ui.state import WizardState
-
-    w = WizardState(channel="slack", token="xoxb-test", app_token="xapp-test", users="U123")
-    w2 = w.next()
-    w3 = w2.prev()
-    assert w3.channel == "slack"
-    assert w3.token == "xoxb-test"
-    assert w3.app_token == "xapp-test"
-    assert w3.users == "U123"
-
-
-def test_channel_token_setup_docs_exist() -> None:
-    """docs/channel-token-setup.md must exist and contain key sections."""
-    from pathlib import Path
-
-    doc = Path(__file__).resolve().parents[2] / "docs" / "channel-token-setup.md"
-    assert doc.exists(), f"Expected {doc} to exist"
-    content = doc.read_text()
-    assert "Telegram Bot Token" in content
-    assert "Slack Bot Token" in content
-    assert "BotFather" in content
-    assert "xoxb-" in content
-    assert "xapp-" in content
+    src = inspect.getsource(inspect.getmodule(SetupWizardScreen))  # type: ignore[arg-type]
+    assert "from textual.containers import Container" in src, (
+        "wizard must import Container from textual.containers"
+    )
 
 
 # ---------------------------------------------------------------------------

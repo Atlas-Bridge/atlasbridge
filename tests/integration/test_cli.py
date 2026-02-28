@@ -13,9 +13,6 @@ from click.testing import CliRunner
 
 from atlasbridge.cli.main import cli
 
-VALID_TOKEN = "123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi"
-
-
 @pytest.fixture
 def runner() -> CliRunner:
     return CliRunner()
@@ -27,10 +24,7 @@ def config_path(tmp_path: Path) -> Path:
     import tomli_w
 
     data = {
-        "telegram": {
-            "bot_token": VALID_TOKEN,
-            "allowed_users": [12345678],
-        },
+        "config_version": 1,
         "database": {
             "path": str(tmp_path / "test.db"),
         },
@@ -48,32 +42,24 @@ def config_path(tmp_path: Path) -> Path:
 
 class TestSetupCommand:
     def test_setup_writes_config(self, runner: CliRunner, tmp_path: Path) -> None:
+        cfg = tmp_path / "config.toml"
         result = runner.invoke(
             cli,
-            ["setup", "--no-keyring", "--token", VALID_TOKEN, "--users", "12345678"],
+            ["setup", "--no-keyring", "--from-env"],
             catch_exceptions=False,
-            env={"HOME": str(tmp_path)},
+            env={"ATLASBRIDGE_CONFIG": str(cfg)},
         )
         assert result.exit_code == 0
-        assert "saved" in result.output.lower() or "complete" in result.output.lower()
+        assert cfg.exists()
 
-    def test_setup_bad_token_exits_nonzero(self, runner: CliRunner, tmp_path: Path) -> None:
-        result = runner.invoke(
-            cli,
-            ["setup", "--token", "badtoken", "--users", "12345678"],
-            env={"HOME": str(tmp_path)},
-        )
-        assert result.exit_code != 0
-
-    def test_setup_no_token_non_interactive_exits_nonzero(
-        self, runner: CliRunner, tmp_path: Path
-    ) -> None:
+    def test_setup_non_interactive(self, runner: CliRunner, tmp_path: Path) -> None:
+        cfg = tmp_path / "config.toml"
         result = runner.invoke(
             cli,
             ["setup", "--non-interactive"],
-            env={"HOME": str(tmp_path)},
+            env={"ATLASBRIDGE_CONFIG": str(cfg)},
         )
-        assert result.exit_code != 0
+        assert result.exit_code == 0
 
 
 # ---------------------------------------------------------------------------
@@ -193,10 +179,9 @@ class TestAdapterList:
 
 
 class TestAdapterListCommand:
-    def test_help_includes_adapter(self, runner: CliRunner) -> None:
-        result = runner.invoke(cli, ["--help"], catch_exceptions=False)
-        assert result.exit_code == 0
-        assert "adapter" in result.output
+    def test_adapter_registered(self, runner: CliRunner) -> None:
+        # adapter command is registered (hidden from --help but still callable)
+        assert "adapter" in cli.commands
 
     def test_adapter_list_exits_zero(self, runner: CliRunner) -> None:
         result = runner.invoke(cli, ["adapter", "list"], catch_exceptions=False)
@@ -225,6 +210,37 @@ class TestAdapterListCommand:
 
         data = json.loads(result.output)
         assert any(a["name"] == "claude" for a in data)
+
+
+# ---------------------------------------------------------------------------
+# sessions message command
+# ---------------------------------------------------------------------------
+
+
+class TestSessionsMessageCommand:
+    def test_message_no_db(self, runner: CliRunner, tmp_path: Path) -> None:
+        """sessions message fails gracefully when no DB exists."""
+        result = runner.invoke(
+            cli,
+            ["sessions", "message", "nonexistent", "hello"],
+            env={"ATLASBRIDGE_CONFIG": str(tmp_path / "nope.toml")},
+        )
+        assert result.exit_code != 0
+
+    def test_message_session_not_found(
+        self, runner: CliRunner, config_path: Path
+    ) -> None:
+        """sessions message fails when session doesn't exist."""
+        result = runner.invoke(
+            cli,
+            ["sessions", "message", "nonexistent-session", "hello"],
+            env={"ATLASBRIDGE_CONFIG": str(config_path)},
+        )
+        assert result.exit_code != 0
+        import json
+
+        data = json.loads(result.output)
+        assert data["ok"] is False
 
 
 # ---------------------------------------------------------------------------
