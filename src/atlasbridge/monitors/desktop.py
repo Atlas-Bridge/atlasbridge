@@ -50,8 +50,12 @@ def _check_accessibility_imports() -> bool:
         return False
 
 
-def check_accessibility_permission() -> bool:
-    """Check if the current process has Accessibility permission (macOS only)."""
+def check_accessibility_permission(prompt: bool = True) -> bool:
+    """Check if the current process has Accessibility permission (macOS only).
+
+    When prompt=True (default), triggers the native macOS permission dialog
+    on first call and opens System Settings as a fallback.
+    """
     if platform.system() != "Darwin":
         logger.warning("Desktop monitor is only supported on macOS")
         return False
@@ -63,16 +67,47 @@ def check_accessibility_permission() -> bool:
         )
         return False
 
-    from ApplicationServices import AXIsProcessTrusted
+    trusted = False
 
-    trusted = AXIsProcessTrusted()
+    if prompt:
+        # Use AXIsProcessTrustedWithOptions to trigger the system permission dialog
+        try:
+            from ApplicationServices import (
+                AXIsProcessTrustedWithOptions,
+                kAXTrustedCheckOptionPrompt,
+            )
+
+            options = {kAXTrustedCheckOptionPrompt: True}
+            trusted = bool(AXIsProcessTrustedWithOptions(options))
+        except (ImportError, AttributeError):
+            # Fallback if AXIsProcessTrustedWithOptions is unavailable
+            from ApplicationServices import AXIsProcessTrusted
+
+            trusted = bool(AXIsProcessTrusted())
+    else:
+        from ApplicationServices import AXIsProcessTrusted
+
+        trusted = bool(AXIsProcessTrusted())
+
     if not trusted:
         logger.warning(
             "Accessibility permission not granted. "
-            "Open System Settings > Privacy & Security > Accessibility "
-            "and add your terminal app."
+            "Opening System Settings — add your terminal app to the Accessibility list."
         )
-    return bool(trusted)
+        if prompt:
+            # Open System Settings directly to Accessibility pane
+            import subprocess
+
+            subprocess.Popen(
+                [
+                    "open",
+                    "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+
+    return trusted
 
 
 def find_target_apps() -> dict[str, int]:
@@ -139,7 +174,7 @@ class DesktopMonitor:
 
     def __init__(
         self,
-        dashboard_url: str = "http://localhost:5000",
+        dashboard_url: str = "http://localhost:3737",
         poll_interval: float = 3.0,
     ) -> None:
         self._dashboard_url = dashboard_url.rstrip("/")
@@ -239,7 +274,7 @@ def _iso_now() -> str:
 
 
 async def run_desktop_monitor(
-    dashboard_url: str = "http://localhost:5000",
+    dashboard_url: str = "http://localhost:3737",
     poll_interval: float = 3.0,
 ) -> None:
     """Entry point for desktop monitoring."""

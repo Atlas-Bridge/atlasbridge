@@ -59,6 +59,10 @@ function GeneralTab({ data }: { data: SettingsData }) {
 
   return (
     <div className="space-y-4">
+      <div className="flex items-start gap-2 p-3 rounded-md border bg-muted/30 border-border">
+        <Server className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+        <p className="text-xs text-muted-foreground">Read-only system information. Use "Copy Diagnostics" to share a safe summary when troubleshooting.</p>
+      </div>
       <div className="flex justify-end">
         <Button variant="secondary" size="sm" onClick={copyDiagnostics} data-testid="button-copy-diagnostics">
           <Copy className="w-3.5 h-3.5 mr-1.5" /> Copy Diagnostics
@@ -133,6 +137,10 @@ function SecurityTab({ org }: { org: OrgSettingsData }) {
 
   return (
     <div className="space-y-4">
+      <div className="flex items-start gap-2 p-3 rounded-md border bg-muted/30 border-border">
+        <ShieldCheck className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+        <p className="text-xs text-muted-foreground">Security policies control session limits, timeouts, and risk thresholds. The defaults are suitable for most users.</p>
+      </div>
       {categories.map(category => (
         <Card key={category}>
           <CardHeader className="pb-3"><CardTitle className="text-sm font-medium">{category}</CardTitle></CardHeader>
@@ -225,6 +233,10 @@ function RetentionTab() {
 
   return (
     <div className="space-y-4">
+      <div className="flex items-start gap-2 p-3 rounded-md border bg-muted/30 border-border">
+        <FileCheck className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+        <p className="text-xs text-muted-foreground">Controls how long historical data is kept. The defaults (2 years audit, 1 year traces, 6 months sessions) are fine for most users.</p>
+      </div>
       <Card>
         <CardHeader className="pb-3"><CardTitle className="text-sm font-medium flex items-center gap-2"><FileCheck className="w-4 h-4 text-primary" />Retention Configuration</CardTitle></CardHeader>
         <CardContent className="space-y-4">
@@ -263,13 +275,13 @@ const NOTIF_EVENTS = ["trust.granted", "trust.revoked", "scan.complete", "sessio
 function NotificationsTab({ org }: { org: OrgSettingsData }) {
   const { toast } = useToast();
   const [showCreate, setShowCreate] = useState(false);
-  const [newNotif, setNewNotif] = useState({ channel: "slack", name: "", destination: "", minSeverity: "info", events: [] as string[] });
+  const [newNotif, setNewNotif] = useState({ channel: "email", name: "", destination: "", minSeverity: "info", events: [] as string[] });
   const [editNotif, setEditNotif] = useState<typeof org.notifications[0] | null>(null);
   const [editFields, setEditFields] = useState({ name: "", destination: "", minSeverity: "info", events: [] as string[] });
 
   const createMutation = useMutation({
     mutationFn: (data: any) => apiRequest("POST", "/api/notifications", data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ORG_QUERY_KEY }); setShowCreate(false); setNewNotif({ channel: "slack", name: "", destination: "", minSeverity: "info", events: [] }); toast({ title: "Channel created" }); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ORG_QUERY_KEY }); setShowCreate(false); setNewNotif({ channel: "email", name: "", destination: "", minSeverity: "info", events: [] }); toast({ title: "Channel created" }); },
   });
 
   const updateMutation = useMutation({
@@ -294,12 +306,12 @@ function NotificationsTab({ org }: { org: OrgSettingsData }) {
   });
 
   const channelBadge = (ch: string) => {
-    const cls: Record<string, string> = { slack: "bg-purple-500/10 text-purple-700 dark:text-purple-300", email: "bg-blue-500/10 text-blue-700 dark:text-blue-300", pagerduty: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300", webhook: "bg-orange-500/10 text-orange-700 dark:text-orange-300", opsgenie: "bg-cyan-500/10 text-cyan-700 dark:text-cyan-300", teams: "bg-indigo-500/10 text-indigo-700 dark:text-indigo-300" };
+    const cls: Record<string, string> = { email: "bg-blue-500/10 text-blue-700 dark:text-blue-300", webhook: "bg-orange-500/10 text-orange-700 dark:text-orange-300", pagerduty: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300", opsgenie: "bg-cyan-500/10 text-cyan-700 dark:text-cyan-300" };
     return <Badge variant="secondary" className={`text-[10px] ${cls[ch] || ""}`}>{ch}</Badge>;
   };
 
   const destPlaceholder = (ch: string) => {
-    const m: Record<string, string> = { slack: "https://hooks.slack.com/services/...", teams: "https://outlook.office.com/webhook/...", email: "team@company.com", webhook: "https://...", pagerduty: "routing-key", opsgenie: "genie-key" };
+    const m: Record<string, string> = { email: "team@company.com", webhook: "https://...", pagerduty: "routing-key", opsgenie: "genie-key" };
     return m[ch] || "https://...";
   };
 
@@ -307,6 +319,10 @@ function NotificationsTab({ org }: { org: OrgSettingsData }) {
 
   return (
     <div className="space-y-4">
+      <div className="flex items-start gap-2 p-3 rounded-md border bg-muted/30 border-border">
+        <Bell className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+        <p className="text-xs text-muted-foreground">Optional: get push notifications via email or webhooks when AtlasBridge needs your attention. The dashboard shows all alerts regardless.</p>
+      </div>
       <Card>
         <CardHeader className="pb-3 flex flex-row items-center justify-between">
           <CardTitle className="text-sm font-medium flex items-center gap-2"><Bell className="w-4 h-4 text-primary" />Notification Channels ({org.notifications.length})</CardTitle>
@@ -319,7 +335,7 @@ function NotificationsTab({ org }: { org: OrgSettingsData }) {
                   <Label>Channel Type</Label>
                   <Select value={newNotif.channel} onValueChange={v => setNewNotif(p => ({ ...p, channel: v }))}>
                     <SelectTrigger data-testid="select-notif-channel"><SelectValue /></SelectTrigger>
-                    <SelectContent><SelectItem value="slack">Slack</SelectItem><SelectItem value="teams">Microsoft Teams</SelectItem><SelectItem value="email">Email</SelectItem><SelectItem value="webhook">Webhook</SelectItem><SelectItem value="pagerduty">PagerDuty</SelectItem><SelectItem value="opsgenie">OpsGenie</SelectItem></SelectContent>
+                    <SelectContent><SelectItem value="email">Email</SelectItem><SelectItem value="webhook">Webhook</SelectItem><SelectItem value="pagerduty">PagerDuty</SelectItem><SelectItem value="opsgenie">OpsGenie</SelectItem></SelectContent>
                   </Select>
                 </div>
                 <div><Label>Name</Label><Input value={newNotif.name} onChange={e => setNewNotif(p => ({ ...p, name: e.target.value }))} data-testid="input-notif-name" /></div>
@@ -670,6 +686,10 @@ function ProvidersTab() {
 
   return (
     <div className="space-y-4">
+      <div className="flex items-start gap-2 p-3 rounded-md border bg-muted/30 border-border">
+        <Key className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+        <p className="text-xs text-muted-foreground">Store API keys for AI services you use. Keys are saved in your OS keychain and never leave your machine. Only add keys for services you actually need.</p>
+      </div>
       {isLoading ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{SUPPORTED_PROVIDERS.map(p => <Skeleton key={p} className="h-40 w-full" />)}</div>
       ) : (
@@ -704,6 +724,15 @@ interface WorkspaceRecord {
 }
 
 const WORKSPACES_QUERY_KEY = ["/api/workspaces"];
+
+function WorkspacesHelpBanner() {
+  return (
+    <div className="flex items-start gap-2 p-3 rounded-md border bg-muted/30 border-border">
+      <FolderCheck className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+      <p className="text-xs text-muted-foreground">Trusted workspaces skip the approval prompt when starting a session. Your project directories appear here automatically after your first session.</p>
+    </div>
+  );
+}
 
 function WorkspacesTab() {
   const { toast } = useToast();
@@ -740,6 +769,7 @@ function WorkspacesTab() {
 
   return (
     <div className="space-y-4">
+      <WorkspacesHelpBanner />
       <div className="flex justify-end">
         <Button size="sm" variant="outline" onClick={() => setShowAdd(!showAdd)}><Plus className="w-4 h-4 mr-1.5" />Grant Trust</Button>
       </div>
@@ -851,6 +881,10 @@ function AgentsTab() {
 
   return (
     <div className="space-y-4">
+      <div className="flex items-start gap-2 p-3 rounded-md border bg-muted/30 border-border">
+        <Sparkles className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+        <p className="text-xs text-muted-foreground">Advanced: register AI agent profiles with risk tiers and autonomy caps. Most users can skip this — it's for multi-agent setups where different tools need different trust levels.</p>
+      </div>
       <div className="flex justify-end">
         <Dialog open={showCreate} onOpenChange={setShowCreate}>
           <DialogTrigger asChild><Button size="sm"><Plus className="w-3.5 h-3.5 mr-1" />Register Agent</Button></DialogTrigger>
@@ -953,6 +987,126 @@ function AgentsTab() {
   );
 }
 
+function DashboardApprovalsTab() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data: hookStatus, isLoading } = useQuery<{ enabled: boolean; scriptExists: boolean }>({
+    queryKey: ["/api/hooks/status"],
+  });
+
+  const toggleMutation = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      const res = await fetch("/api/hooks/toggle", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      });
+      if (!res.ok) throw new Error("Failed to toggle hooks");
+      return res.json();
+    },
+    onSuccess: (_, enabled) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/hooks/status"] });
+      toast({ title: enabled ? "Dashboard approvals enabled" : "Dashboard approvals disabled" });
+    },
+    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const enabled = hookStatus?.enabled ?? false;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-start gap-2 p-3 rounded-md border bg-muted/30 border-border">
+        <ShieldCheck className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+        <p className="text-xs text-muted-foreground">
+          When enabled, Claude Code tool calls (Bash, Edit, Write) are forwarded to this dashboard for your approval.
+          You can approve or deny from the Prompts page instead of the VS Code terminal.
+        </p>
+      </div>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <Power className="w-4 h-4 text-primary" />
+            Dashboard Approvals
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {isLoading ? (
+            <Skeleton className="h-10 w-full" />
+          ) : (
+            <>
+              <div className="flex items-center justify-between gap-4 p-3 rounded-lg border bg-muted/30">
+                <div className="space-y-0.5">
+                  <p className="text-sm font-medium flex items-center gap-2">
+                    Forward tool approvals to dashboard
+                    {enabled ? (
+                      <Badge className="text-[10px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">Active</Badge>
+                    ) : (
+                      <Badge variant="secondary" className="text-[10px]">Off</Badge>
+                    )}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {enabled
+                      ? "Bash, Edit, Write and NotebookEdit calls will appear in the Prompts page for approval."
+                      : "Claude Code will use its normal permission prompts in VS Code."}
+                  </p>
+                </div>
+                <Switch
+                  checked={enabled}
+                  onCheckedChange={(checked) => toggleMutation.mutate(checked)}
+                  disabled={toggleMutation.isPending}
+                />
+              </div>
+
+              <div className="space-y-3 pt-2">
+                <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">How it works</h4>
+                <ol className="space-y-2 text-xs text-muted-foreground list-decimal list-inside">
+                  <li>Claude Code runs a tool that needs approval (e.g. <code className="bg-muted px-1 rounded">Bash</code>, <code className="bg-muted px-1 rounded">Edit</code>)</li>
+                  <li>The request appears as a card in the <strong>Prompts</strong> page with full details</li>
+                  <li>You click <strong>Allow</strong> or <strong>Deny</strong> from the dashboard</li>
+                  <li>The decision is relayed back to Claude Code in real-time</li>
+                </ol>
+              </div>
+
+              <div className="space-y-2 pt-2">
+                <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Requirements</h4>
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2 text-xs">
+                    <CheckCircle className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    <span>Dashboard running on <code className="bg-muted px-1 rounded">localhost:3737</code></span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs">
+                    <CheckCircle className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    <span>Claude Code session active in VS Code</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs">
+                    {hookStatus?.scriptExists ? (
+                      <CheckCircle className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    ) : (
+                      <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                    )}
+                    <span>Hook script installed {hookStatus?.scriptExists ? "" : "(will be created on enable)"}</span>
+                  </div>
+                </div>
+              </div>
+
+              {enabled && (
+                <div className="p-3 rounded-lg border border-amber-500/20 bg-amber-500/5">
+                  <p className="text-xs text-amber-700 dark:text-amber-300">
+                    <strong>Note:</strong> New Claude Code sessions will pick up this setting. Existing sessions may need to be restarted.
+                    If the dashboard is not running when a tool fires, Claude Code falls back to its normal prompt.
+                  </p>
+                </div>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 function DangerZoneTab() {
   const { toast } = useToast();
   const purgeMonitorMutation = useMutation({
@@ -968,7 +1122,11 @@ function DangerZoneTab() {
     mutationFn: () => apiRequest("POST", "/api/settings/purge-all-data", {}),
     onSuccess: async (res) => {
       const data = await res.json();
-      toast({ title: "All data purged", description: `Cleared ${data.tables.length} tables` });
+      const opCount = data.operationalTables?.length || 0;
+      const desc = opCount > 0
+        ? `Cleared ${data.tables.length + opCount} tables including sessions, prompts, and transcripts`
+        : `Cleared ${data.tables.length} tables`;
+      toast({ title: "All data purged", description: desc });
       queryClient.invalidateQueries();
     },
     onError: () => toast({ title: "Failed to purge data", variant: "destructive" }),
@@ -1472,6 +1630,15 @@ function PolicyTab() {
 export default function SettingsPage() {
   const { data: settings, isLoading: settingsLoading } = useQuery<SettingsData>({ queryKey: ["/api/settings"] });
   const { data: orgData, isLoading: orgLoading } = useQuery<OrgSettingsData>({ queryKey: ORG_QUERY_KEY });
+  const [showAdvanced, setShowAdvanced] = useState(() =>
+    localStorage.getItem("atlasbridge_show_advanced_settings") === "true",
+  );
+
+  const toggleAdvanced = () => {
+    const next = !showAdvanced;
+    setShowAdvanced(next);
+    localStorage.setItem("atlasbridge_show_advanced_settings", String(next));
+  };
 
   if (settingsLoading || orgLoading) {
     return (
@@ -1486,31 +1653,54 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <div><h1 className="text-xl font-semibold tracking-tight">Settings</h1><p className="text-sm text-muted-foreground mt-1">Organization configuration and management</p></div>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">Settings</h1>
+          <p className="text-sm text-muted-foreground mt-1">Configure how AtlasBridge works</p>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={toggleAdvanced}
+          className="text-xs text-muted-foreground"
+          data-testid="toggle-advanced-settings"
+        >
+          <ChevronDown className={`w-3.5 h-3.5 mr-1.5 transition-transform ${showAdvanced ? "rotate-180" : ""}`} />
+          {showAdvanced ? "Hide advanced" : "Show advanced"}
+        </Button>
+      </div>
 
       <Tabs defaultValue="general" className="space-y-4">
         <div className="overflow-x-auto">
           <TabsList className="inline-flex w-auto" data-testid="settings-tabs">
+            {/* Essential tabs — always visible */}
             <TabsTrigger value="general" data-testid="tab-general"><Server className="w-3.5 h-3.5 mr-1.5" />General</TabsTrigger>
-            <TabsTrigger value="security" data-testid="tab-security"><ShieldCheck className="w-3.5 h-3.5 mr-1.5" />Security</TabsTrigger>
-            <TabsTrigger value="retention" data-testid="tab-retention"><FileCheck className="w-3.5 h-3.5 mr-1.5" />Retention</TabsTrigger>
-            <TabsTrigger value="notifications" data-testid="tab-notifications"><Bell className="w-3.5 h-3.5 mr-1.5" />Alerts</TabsTrigger>
-            <TabsTrigger value="authentication" data-testid="tab-authentication"><Fingerprint className="w-3.5 h-3.5 mr-1.5" />Authentication</TabsTrigger>
+            <TabsTrigger value="policy" data-testid="tab-policy"><Shield className="w-3.5 h-3.5 mr-1.5" />Policy</TabsTrigger>
             <TabsTrigger value="providers" data-testid="tab-providers"><Key className="w-3.5 h-3.5 mr-1.5" />Providers</TabsTrigger>
             <TabsTrigger value="workspaces" data-testid="tab-workspaces"><FolderCheck className="w-3.5 h-3.5 mr-1.5" />Workspaces</TabsTrigger>
-            <TabsTrigger value="policy" data-testid="tab-policy"><Shield className="w-3.5 h-3.5 mr-1.5" />Policy</TabsTrigger>
-            <TabsTrigger value="agents" data-testid="tab-agents"><Sparkles className="w-3.5 h-3.5 mr-1.5" />Agents</TabsTrigger>
+            <TabsTrigger value="approvals" data-testid="tab-approvals"><ShieldCheck className="w-3.5 h-3.5 mr-1.5" />Approvals</TabsTrigger>
+            {/* Advanced tabs — toggled */}
+            {showAdvanced && (
+              <>
+                <TabsTrigger value="security" data-testid="tab-security"><ShieldCheck className="w-3.5 h-3.5 mr-1.5" />Security</TabsTrigger>
+                <TabsTrigger value="retention" data-testid="tab-retention"><FileCheck className="w-3.5 h-3.5 mr-1.5" />Retention</TabsTrigger>
+                <TabsTrigger value="notifications" data-testid="tab-notifications"><Bell className="w-3.5 h-3.5 mr-1.5" />Alerts</TabsTrigger>
+                <TabsTrigger value="authentication" data-testid="tab-authentication"><Fingerprint className="w-3.5 h-3.5 mr-1.5" />Authentication</TabsTrigger>
+                <TabsTrigger value="agents" data-testid="tab-agents"><Sparkles className="w-3.5 h-3.5 mr-1.5" />Agents</TabsTrigger>
+              </>
+            )}
             <TabsTrigger value="danger" data-testid="tab-danger" className="text-destructive data-[state=active]:text-destructive"><Trash2 className="w-3.5 h-3.5 mr-1.5" />Danger Zone</TabsTrigger>
           </TabsList>
         </div>
         <TabsContent value="general"><GeneralTab data={settings} /></TabsContent>
+        <TabsContent value="policy"><PolicyTab /></TabsContent>
+        <TabsContent value="providers"><ProvidersTab /></TabsContent>
+        <TabsContent value="workspaces"><WorkspacesTab /></TabsContent>
+        <TabsContent value="approvals"><DashboardApprovalsTab /></TabsContent>
         <TabsContent value="security"><SecurityTab org={orgData} /></TabsContent>
         <TabsContent value="retention"><RetentionTab /></TabsContent>
         <TabsContent value="notifications"><NotificationsTab org={orgData} /></TabsContent>
         <TabsContent value="authentication"><AuthenticationTab /></TabsContent>
-        <TabsContent value="providers"><ProvidersTab /></TabsContent>
-        <TabsContent value="workspaces"><WorkspacesTab /></TabsContent>
-        <TabsContent value="policy"><PolicyTab /></TabsContent>
         <TabsContent value="agents"><AgentsTab /></TabsContent>
         <TabsContent value="danger"><DangerZoneTab /></TabsContent>
       </Tabs>

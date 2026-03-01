@@ -1,7 +1,7 @@
 /**
  * Notification delivery module — sends alerts to configured channels.
  *
- * Supported channels: slack, teams, webhook, email (SMTP via nodemailer if installed),
+ * Supported channels: email (SMTP via nodemailer if installed), webhook,
  * pagerduty, opsgenie.
  */
 
@@ -23,67 +23,6 @@ interface DeliveryResult {
 // ---------------------------------------------------------------------------
 // Channel-specific senders
 // ---------------------------------------------------------------------------
-
-async function sendSlack(destination: string, payload: NotificationPayload): Promise<DeliveryResult> {
-  try {
-    const body = {
-      text: `*${payload.title}*\n${payload.message}`,
-      blocks: [
-        { type: "header", text: { type: "plain_text", text: payload.title } },
-        { type: "section", text: { type: "mrkdwn", text: payload.message } },
-        ...(payload.severity ? [{
-          type: "context",
-          elements: [{ type: "mrkdwn", text: `Severity: *${payload.severity}*` }],
-        }] : []),
-      ],
-    };
-    const res = await fetch(destination, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!res.ok) return { success: false, error: `Slack responded ${res.status}: ${await res.text()}` };
-    return { success: true };
-  } catch (e: any) {
-    return { success: false, error: e.message || "Slack delivery failed" };
-  }
-}
-
-async function sendTeams(destination: string, payload: NotificationPayload): Promise<DeliveryResult> {
-  try {
-    // Microsoft Teams Incoming Webhook (Adaptive Card format)
-    const body = {
-      type: "message",
-      attachments: [{
-        contentType: "application/vnd.microsoft.card.adaptive",
-        content: {
-          type: "AdaptiveCard",
-          $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
-          version: "1.4",
-          body: [
-            { type: "TextBlock", text: payload.title, weight: "Bolder", size: "Medium" },
-            { type: "TextBlock", text: payload.message, wrap: true },
-            ...(payload.severity ? [{
-              type: "FactSet",
-              facts: [{ title: "Severity", value: payload.severity }],
-            }] : []),
-          ],
-        },
-      }],
-    };
-    const res = await fetch(destination, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!res.ok) return { success: false, error: `Teams responded ${res.status}: ${await res.text()}` };
-    return { success: true };
-  } catch (e: any) {
-    return { success: false, error: e.message || "Teams delivery failed" };
-  }
-}
 
 async function sendWebhook(destination: string, payload: NotificationPayload): Promise<DeliveryResult> {
   try {
@@ -168,10 +107,8 @@ async function sendOpsGenie(destination: string, payload: NotificationPayload): 
 // ---------------------------------------------------------------------------
 
 const SENDERS: Record<string, (dest: string, payload: NotificationPayload) => Promise<DeliveryResult>> = {
-  slack: sendSlack,
-  teams: sendTeams,
-  webhook: sendWebhook,
   email: sendEmail,
+  webhook: sendWebhook,
   pagerduty: sendPagerDuty,
   opsgenie: sendOpsGenie,
 };

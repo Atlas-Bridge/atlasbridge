@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import {
   LayoutDashboard, MonitorDot, MessageSquare, GitBranch,
   ShieldCheck, FileText, Settings, Sun, Moon, Menu, X, Plug, Terminal, FileCheck,
-  ArrowUpCircle, Bot, Sparkles, Lock
+  ArrowUpCircle, Bot, Sparkles, Lock, ScrollText, BookOpen, Activity
 } from "lucide-react";
 import { useState } from "react";
 import type { VersionInfo } from "@shared/schema";
@@ -15,14 +15,17 @@ const navItems = [
   { path: "/", label: "Overview", icon: LayoutDashboard },
   { path: "/sessions", label: "Sessions", icon: MonitorDot },
   { path: "/prompts", label: "Prompts", icon: MessageSquare },
+  { path: "/agent", label: "Agent", icon: Sparkles },
+  { path: "/terminal", label: "Terminal", icon: Terminal },
   { path: "/traces", label: "Traces", icon: GitBranch },
   { path: "/integrity", label: "Integrity", icon: ShieldCheck },
   { path: "/audit", label: "Audit", icon: FileText },
-  { path: "/repositories", label: "Repositories", icon: Plug },
   { path: "/evidence", label: "Evidence", icon: FileCheck },
-  { path: "/terminal", label: "Terminal", icon: Terminal },
+  { path: "/monitor", label: "Monitor", icon: Activity },
+  { path: "/repositories", label: "Repositories", icon: Plug },
+  { path: "/policy", label: "Policy", icon: ScrollText },
   { path: "/chat", label: "Chat", icon: Bot },
-  { path: "/agent", label: "Agent", icon: Sparkles },
+  { path: "/docs", label: "Docs", icon: BookOpen },
   { path: "/settings", label: "Settings", icon: Settings },
 ];
 

@@ -191,6 +191,12 @@ dashboardSqlite.exec(`
 try { dashboardSqlite.exec(`ALTER TABLE repo_connections ADD COLUMN auth_provider_id INTEGER`); } catch { /* column already exists */ }
 try { dashboardSqlite.exec(`ALTER TABLE notifications ADD COLUMN last_delivery_status TEXT`); } catch { /* column already exists */ }
 try { dashboardSqlite.exec(`ALTER TABLE notifications ADD COLUMN last_delivery_error TEXT`); } catch { /* column already exists */ }
+try { dashboardSqlite.exec(`ALTER TABLE monitor_messages ADD COLUMN permission_mode TEXT`); } catch { /* column already exists */ }
+try { dashboardSqlite.exec(`ALTER TABLE monitor_messages ADD COLUMN tool_name TEXT`); } catch { /* column already exists */ }
+try { dashboardSqlite.exec(`ALTER TABLE monitor_messages ADD COLUMN tool_use_id TEXT`); } catch { /* column already exists */ }
+try { dashboardSqlite.exec(`ALTER TABLE monitor_sessions ADD COLUMN workspace_key TEXT`); } catch { /* column already exists */ }
+// Backfill workspace_key for old sessions (strip :uuid suffix from conversation_id)
+dashboardSqlite.exec(`UPDATE monitor_sessions SET workspace_key = conversation_id WHERE workspace_key IS NULL AND conversation_id LIKE 'claude-code-%'`);
 
 dashboardSqlite.exec(`
   CREATE TABLE IF NOT EXISTS evidence_bundles (
@@ -229,6 +235,24 @@ dashboardSqlite.exec(`
   );
 `);
 
+dashboardSqlite.exec(`
+  CREATE TABLE IF NOT EXISTS hook_approvals (
+    id TEXT PRIMARY KEY,
+    tool_name TEXT NOT NULL,
+    tool_input TEXT NOT NULL DEFAULT '{}',
+    tool_use_id TEXT,
+    cwd TEXT,
+    workspace TEXT,
+    session_id TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    decided_at TEXT
+  );
+`);
+// Migration: add columns to hook_approvals if missing
+try { dashboardSqlite.exec(`ALTER TABLE hook_approvals ADD COLUMN tool_use_id TEXT`); } catch { /* already exists */ }
+try { dashboardSqlite.exec(`ALTER TABLE hook_approvals ADD COLUMN cwd TEXT`); } catch { /* already exists */ }
+
 export const db = drizzle(dashboardSqlite, { schema });
 
 export function insertOperatorAuditLog(entry: {
@@ -261,6 +285,44 @@ export function queryOperatorAuditLog(limit = 100): unknown[] {
 }
 
 // ---------------------------------------------------------------------------
+// Hook approvals — PreToolUse hook → dashboard approval flow
+// ---------------------------------------------------------------------------
+
+export function createHookApproval(approval: {
+  id: string;
+  toolName: string;
+  toolInput: string;
+  toolUseId?: string;
+  cwd?: string;
+  workspace?: string;
+  sessionId?: string;
+}): void {
+  dashboardSqlite
+    .prepare(
+      `INSERT OR IGNORE INTO hook_approvals (id, tool_name, tool_input, tool_use_id, cwd, workspace, session_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      approval.id, approval.toolName, approval.toolInput,
+      approval.toolUseId ?? null, approval.cwd ?? null,
+      approval.workspace ?? null, approval.sessionId ?? null,
+    );
+}
+
+export function listPendingHookApprovals(): unknown[] {
+  return dashboardSqlite
+    .prepare(`SELECT * FROM hook_approvals WHERE status = 'pending' ORDER BY created_at DESC LIMIT 50`)
+    .all();
+}
+
+export function decideHookApproval(id: string, decision: "allowed" | "denied"): boolean {
+  const result = dashboardSqlite
+    .prepare(`UPDATE hook_approvals SET status = ?, decided_at = datetime('now') WHERE id = ? AND status = 'pending'`)
+    .run(decision, id);
+  return result.changes > 0;
+}
+
+// ---------------------------------------------------------------------------
 // Monitor CRUD — browser extension, desktop, VS Code monitoring sessions
 // ---------------------------------------------------------------------------
 
@@ -269,13 +331,14 @@ export function createMonitorSession(session: {
   vendor: string;
   conversationId: string;
   tabUrl?: string;
+  workspaceKey?: string;
 }): void {
   dashboardSqlite
     .prepare(
-      `INSERT OR IGNORE INTO monitor_sessions (id, vendor, conversation_id, tab_url)
-       VALUES (?, ?, ?, ?)`,
+      `INSERT OR IGNORE INTO monitor_sessions (id, vendor, conversation_id, tab_url, workspace_key)
+       VALUES (?, ?, ?, ?, ?)`,
     )
-    .run(session.id, session.vendor, session.conversationId, session.tabUrl ?? "");
+    .run(session.id, session.vendor, session.conversationId, session.tabUrl ?? "", session.workspaceKey ?? null);
 }
 
 export function listMonitorSessions(status?: string): unknown[] {
@@ -309,16 +372,19 @@ export function insertMonitorMessages(
     vendor: string;
     seq: number;
     capturedAt: string;
+    permissionMode?: string | null;
+    toolName?: string | null;
+    toolUseId?: string | null;
   }[],
 ): void {
   const stmt = dashboardSqlite.prepare(
-    `INSERT INTO monitor_messages (session_id, role, content, vendor, seq, captured_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO monitor_messages (session_id, role, content, vendor, seq, captured_at, permission_mode, tool_name, tool_use_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   const insertMany = dashboardSqlite.transaction(
     (rows: typeof messages) => {
       for (const row of rows) {
-        stmt.run(row.sessionId, row.role, row.content, row.vendor, row.seq, row.capturedAt);
+        stmt.run(row.sessionId, row.role, row.content, row.vendor, row.seq, row.capturedAt, row.permissionMode ?? null, row.toolName ?? null, row.toolUseId ?? null);
       }
     },
   );
@@ -330,11 +396,78 @@ export function listMonitorMessages(
   afterSeq = 0,
   limit = 200,
 ): unknown[] {
+  // Subquery grabs the NEWEST `limit` rows, then outer query re-sorts ascending
   return dashboardSqlite
     .prepare(
-      `SELECT * FROM monitor_messages WHERE session_id = ? AND seq > ? ORDER BY seq ASC LIMIT ?`,
+      `SELECT * FROM (
+         SELECT * FROM monitor_messages WHERE session_id = ? AND seq > ?
+         ORDER BY captured_at DESC, seq DESC LIMIT ?
+       ) sub ORDER BY captured_at ASC, seq ASC`,
     )
     .all(sessionId, afterSeq, limit);
+}
+
+export function listAllMonitorMessages(
+  limit = 200,
+  offset = 0,
+  role?: string,
+): unknown[] {
+  if (role) {
+    return dashboardSqlite
+      .prepare(
+        `SELECT m.*, s.vendor as session_vendor, s.conversation_id, s.tab_url
+         FROM monitor_messages m
+         JOIN monitor_sessions s ON m.session_id = s.id
+         WHERE m.role = ?
+         ORDER BY m.captured_at DESC
+         LIMIT ? OFFSET ?`,
+      )
+      .all(role, limit, offset);
+  }
+  return dashboardSqlite
+    .prepare(
+      `SELECT m.*, s.vendor as session_vendor, s.conversation_id, s.tab_url
+       FROM monitor_messages m
+       JOIN monitor_sessions s ON m.session_id = s.id
+       ORDER BY m.captured_at DESC
+       LIMIT ? OFFSET ?`,
+    )
+    .all(limit, offset);
+}
+
+export function listMonitorSessionsWithCounts(): unknown[] {
+  return dashboardSqlite
+    .prepare(
+      `SELECT s.*,
+              COUNT(m.id) as message_count,
+              MAX(m.captured_at) as last_message_at,
+              SUM(CASE WHEN m.permission_mode IN ('approved', 'rejected') THEN 1 ELSE 0 END) as approval_count,
+              SUM(CASE WHEN m.permission_mode = 'pending' AND m.tool_use_id IS NOT NULL
+                        AND NOT EXISTS (
+                          SELECT 1 FROM monitor_messages r
+                          WHERE r.tool_use_id = m.tool_use_id
+                            AND r.permission_mode IN ('approved', 'rejected')
+                        )
+                   THEN 1 ELSE 0 END) as pending_count
+       FROM monitor_sessions s
+       LEFT JOIN monitor_messages m ON s.id = m.session_id
+       GROUP BY s.id
+       ORDER BY COALESCE(MAX(m.captured_at), s.created_at) DESC`,
+    )
+    .all();
+}
+
+export function countAllMonitorMessages(role?: string): number {
+  if (role) {
+    const row = dashboardSqlite
+      .prepare(`SELECT COUNT(*) as count FROM monitor_messages WHERE role = ?`)
+      .get(role) as { count: number } | undefined;
+    return row?.count ?? 0;
+  }
+  const row = dashboardSqlite
+    .prepare(`SELECT COUNT(*) as count FROM monitor_messages`)
+    .get() as { count: number } | undefined;
+  return row?.count ?? 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -400,16 +533,60 @@ export function purgeMonitorData(): { sessions: number; messages: number } {
   return { sessions: sesCount.c, messages: msgCount.c };
 }
 
-export function purgeAllDashboardData(): { tables: string[] } {
+export function purgeAllDashboardData(): { tables: string[]; operationalTables: string[] } {
+  // 1. Purge dashboard DB tables
   const tables = [
     "monitor_messages", "monitor_sessions",
     "operator_audit_log",
     "quality_scans", "local_scans", "container_scans", "infra_scans",
+    "evidence_bundles", "agents",
   ];
   for (const t of tables) {
     dashboardSqlite.exec(`DELETE FROM ${t}`);
   }
-  return { tables };
+
+  // 2. Purge AtlasBridge operational DB (sessions, prompts, transcripts, etc.)
+  const operationalTables: string[] = [];
+  const abDb = getAtlasBridgeDbRW();
+  if (abDb) {
+    try {
+      const opTables = [
+        "sessions", "prompts", "replies", "audit_events",
+        "prompt_deliveries", "processed_messages",
+        "transcript_chunks",
+        "agent_turns", "agent_plans", "agent_decisions",
+        "agent_tool_runs", "agent_outcomes",
+        "operator_directives",
+      ];
+      for (const t of opTables) {
+        try {
+          abDb.exec(`DELETE FROM ${t}`);
+          operationalTables.push(t);
+        } catch {
+          // Table may not exist in older DB schemas — skip
+        }
+      }
+      // Force WAL checkpoint so readers see the deletions immediately
+      try {
+        abDb.exec(`PRAGMA wal_checkpoint(TRUNCATE)`);
+      } catch {
+        // WAL checkpoint is best-effort
+      }
+    } finally {
+      abDb.close();
+    }
+    // Reset cached read-only connection so it picks up the changes
+    if (_abDb) {
+      try { _abDb.close(); } catch { /* ignore */ }
+      _abDb = null;
+    }
+  } else {
+    console.error(
+      `purgeAllDashboardData: could not open AtlasBridge operational DB at ${getAtlasBridgeDbPath()} — sessions/prompts not purged`
+    );
+  }
+
+  return { tables, operationalTables };
 }
 
 export function resetDashboardSettings(): { tables: string[] } {
