@@ -14,5 +14,5 @@ Package layout (src/atlasbridge/):
   cli/        — Click CLI entry point
 """
 
-__version__ = "1.9.0"
+__version__ = "1.10.0"
 __all__ = ["__version__"]

@@ -11,6 +11,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.10.0] — 2026-03-01
+
+### Added
+- **Hook-based tool approval relay** — Claude Code PreToolUse hooks forward tool calls to the dashboard for interactive Allow / Always Allow / Deny decisions (#383)
+- **AskUserQuestion rendering** — detects AskUserQuestion tool calls and renders actual questions with selectable options; answers relayed back to Claude Code via `updatedInput` (#383)
+- **Expandable message rows** — click any message to reveal full content, metadata grid (tool ID, vendor, seq, timestamps, size), and copy button (#383)
+- **Content truncation** — long messages clamped to 4 lines by default with click-to-expand (#383)
+- **Real-time WebSocket events** — `/ws/events` broadcasts `hook:pending` and `hook:decided` for instant approval notifications (#383)
+- **Settings > Approvals tab** — toggle to enable/disable hook approvals for layman users (#383)
+- **Always Allow** — persists permission rules to Claude Code `settings.json` so matching tools auto-approve in future (#383)
+
+### Fixed
+- **Message ordering** — subquery returns newest 500 messages instead of oldest 500 (#383)
+- **Hook script shell expansion** — use `--data-binary @tmpfile` to avoid JSON breakage with special characters (#383)
+
+### Changed
+- **Monitor** — `tool_use_id` tracking, tool result resolution detection, pending/running/approved/rejected visual states (#383)
+
+---
+
 ## [1.9.0] — 2026-02-28
 
 ### Added
