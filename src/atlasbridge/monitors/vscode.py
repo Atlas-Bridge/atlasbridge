@@ -116,9 +116,10 @@ def find_claude_processes() -> list[dict[str, Any]]:
 
             # Only match the actual Claude Code binary — not random
             # processes that happen to have "claude" in their path
+            _keywords = ["claude-code", "claude_code", "@anthropic"]
             is_claude_binary = name.lower() == "claude" or (
                 "claude" in name.lower()
-                and any(kw in cmd_str.lower() for kw in ["claude-code", "claude_code", "@anthropic"])
+                and any(kw in cmd_str.lower() for kw in _keywords)
             )
             if not is_claude_binary:
                 continue
@@ -409,7 +410,7 @@ class VSCodeMonitor:
             if file_size <= ms.jsonl_offset:
                 return
 
-            with open(ms.jsonl_path, "r", encoding="utf-8") as f:
+            with open(ms.jsonl_path, encoding="utf-8") as f:
                 f.seek(ms.jsonl_offset)
                 new_data = f.read()
                 ms.jsonl_offset = f.tell()
