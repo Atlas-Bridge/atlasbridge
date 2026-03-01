@@ -118,8 +118,7 @@ def find_claude_processes() -> list[dict[str, Any]]:
             # processes that happen to have "claude" in their path
             _keywords = ["claude-code", "claude_code", "@anthropic"]
             is_claude_binary = name.lower() == "claude" or (
-                "claude" in name.lower()
-                and any(kw in cmd_str.lower() for kw in _keywords)
+                "claude" in name.lower() and any(kw in cmd_str.lower() for kw in _keywords)
             )
             if not is_claude_binary:
                 continue
@@ -139,8 +138,7 @@ def find_claude_processes() -> list[dict[str, Any]]:
                     "name": name,
                     "cmdline": cmd_str,
                     "parent": parent_name,
-                    "is_vscode": "code" in parent_name.lower()
-                    or "electron" in parent_name.lower(),
+                    "is_vscode": "code" in parent_name.lower() or "electron" in parent_name.lower(),
                 }
             )
         except (psutil.NoSuchProcess, psutil.AccessDenied):
@@ -368,7 +366,11 @@ class VSCodeMonitor:
         self._client = httpx.AsyncClient(timeout=10.0)
 
     async def _register_session(
-        self, key: str, vendor: str, conversation_id: str, tab_url: str,
+        self,
+        key: str,
+        vendor: str,
+        conversation_id: str,
+        tab_url: str,
         jsonl_path: Path | None = None,
         workspace_key: str | None = None,
     ) -> MonitoredSession:
@@ -446,13 +448,19 @@ class VSCodeMonitor:
                 if role == "assistant":
                     if tool_name:
                         # Assistant requested a tool — always capture as pending
-                        summary = content.strip() if content and content.strip() else (
-                            _extract_tool_use_summary(content_raw) or tool_name
+                        summary = (
+                            content.strip()
+                            if content and content.strip()
+                            else (_extract_tool_use_summary(content_raw) or tool_name)
                         )
                         tool_use_id = _extract_tool_use_id(content_raw)
                         ms.seq += 1
                         await self._send_message(
-                            ms.session_id, role, summary, ms.seq, timestamp,
+                            ms.session_id,
+                            role,
+                            summary,
+                            ms.seq,
+                            timestamp,
                             permission_mode="pending",
                             tool_name=tool_name,
                             tool_use_id=tool_use_id,
@@ -460,7 +468,11 @@ class VSCodeMonitor:
                     elif content and content.strip():
                         ms.seq += 1
                         await self._send_message(
-                            ms.session_id, role, content, ms.seq, timestamp,
+                            ms.session_id,
+                            role,
+                            content,
+                            ms.seq,
+                            timestamp,
                             permission_mode=permission_mode,
                         )
                 elif role == "user":
@@ -471,14 +483,22 @@ class VSCodeMonitor:
                         pm = "rejected" if is_rejection else (permission_mode or "approved")
                         ms.seq += 1
                         await self._send_message(
-                            ms.session_id, role, result_summary or "Completed", ms.seq, timestamp,
+                            ms.session_id,
+                            role,
+                            result_summary or "Completed",
+                            ms.seq,
+                            timestamp,
                             permission_mode=pm,
                             tool_use_id=tool_result_id,
                         )
                     elif content and content.strip():
                         ms.seq += 1
                         await self._send_message(
-                            ms.session_id, role, content, ms.seq, timestamp,
+                            ms.session_id,
+                            role,
+                            content,
+                            ms.seq,
+                            timestamp,
                             permission_mode=permission_mode,
                         )
 
@@ -486,7 +506,11 @@ class VSCodeMonitor:
             logger.debug("JSONL tail error for %s: %s", ms.jsonl_path, exc)
 
     async def _send_message(
-        self, session_id: str, role: str, content: str, seq: int,
+        self,
+        session_id: str,
+        role: str,
+        content: str,
+        seq: int,
         captured_at: str | None = None,
         permission_mode: str | None = None,
         tool_name: str | None = None,
@@ -539,11 +563,12 @@ class VSCodeMonitor:
 
                         if key not in self._sessions:
                             conversation_id = f"claude-code-{workspace}:{jsonl_uuid}"
-                            logger.info(
-                                "Found transcript for %s: %s", workspace, jsonl_path.name
-                            )
+                            logger.info("Found transcript for %s: %s", workspace, jsonl_path.name)
                             await self._register_session(
-                                key, "vscode-claude", conversation_id, tab_url,
+                                key,
+                                "vscode-claude",
+                                conversation_id,
+                                tab_url,
                                 jsonl_path=jsonl_path,
                                 workspace_key=workspace_key,
                             )
@@ -554,7 +579,10 @@ class VSCodeMonitor:
                         if key not in self._sessions:
                             conversation_id = f"claude-code-{workspace}"
                             await self._register_session(
-                                key, "vscode-claude", conversation_id, tab_url,
+                                key,
+                                "vscode-claude",
+                                conversation_id,
+                                tab_url,
                                 workspace_key=workspace_key,
                             )
 
