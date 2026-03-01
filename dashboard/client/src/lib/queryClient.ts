@@ -18,7 +18,10 @@ export async function apiRequest(
   data?: unknown | undefined,
 ): Promise<Response> {
   const headers: Record<string, string> = {};
-  if (data) headers["Content-Type"] = "application/json";
+  // Always send Content-Type for mutation requests (server enforces it)
+  if (method !== "GET" && method !== "HEAD") {
+    headers["Content-Type"] = "application/json";
+  }
   if (method !== "GET" && method !== "HEAD") {
     const token = getCsrfToken();
     if (token) headers["x-csrf-token"] = token;

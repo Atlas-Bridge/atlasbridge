@@ -23,13 +23,16 @@ function getDisabledRulesPath(): string {
 function getPresetsDir(): string {
   // Walk up from CWD to find config/policies/
   let dir = process.cwd();
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 6; i++) {
     const candidate = path.join(dir, "config", "policies");
     if (fs.existsSync(candidate)) return candidate;
     const parent = path.dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
+  // Also try relative to this file (works when running from dist/)
+  const fromFile = path.resolve(__dirname, "..", "..", "config", "policies");
+  if (fs.existsSync(fromFile)) return fromFile;
   return path.join(process.cwd(), "config", "policies");
 }
 
@@ -104,7 +107,7 @@ export function registerPolicyRoutes(app: Express): void {
         return;
       }
 
-      const { parsed } = result;
+      const { raw, parsed } = result;
       const disabled = readDisabledRules();
 
       // Merge active rules with disabled rules to show full picture
@@ -125,6 +128,7 @@ export function registerPolicyRoutes(app: Express): void {
         rules: [...activeRules, ...disabledEntries],
         defaults: parsed.defaults ?? {},
         active: true,
+        raw,
       });
     } catch (err: any) {
       res.status(500).json({ error: "Failed to read policy", detail: err.message });
@@ -147,15 +151,30 @@ export function registerPolicyRoutes(app: Express): void {
         try {
           const raw = fs.readFileSync(path.join(presetsDir, file), "utf-8");
           const parsed = yaml.load(raw) as ParsedPolicy;
+          // Build a description from the rules
+          const rules = parsed.rules ?? [];
+          const actionCounts: Record<string, number> = {};
+          for (const r of rules) {
+            const t = (r.action as Record<string, unknown>)?.type as string ?? "unknown";
+            actionCounts[t] = (actionCounts[t] || 0) + 1;
+          }
+          const descParts: string[] = [];
+          if (actionCounts.auto_reply) descParts.push(`${actionCounts.auto_reply} auto-reply`);
+          if (actionCounts.require_human) descParts.push(`${actionCounts.require_human} require-human`);
+          if (actionCounts.deny) descParts.push(`${actionCounts.deny} deny`);
+          if (actionCounts.notify_only) descParts.push(`${actionCounts.notify_only} notify-only`);
+          const description = descParts.length > 0 ? descParts.join(", ") : "No rules";
+
           return {
-            file,
+            filename: file,
             name: parsed.name ?? file.replace(/\.ya?ml$/, ""),
-            autonomy_mode: parsed.autonomy_mode ?? "off",
-            policy_version: parsed.policy_version ?? "0",
-            rule_count: (parsed.rules ?? []).length,
+            mode: parsed.autonomy_mode ?? "off",
+            ruleCount: rules.length,
+            description,
+            content: raw,
           };
         } catch {
-          return { file, name: file, autonomy_mode: "unknown", policy_version: "0", rule_count: 0 };
+          return { filename: file, name: file, mode: "unknown", ruleCount: 0, description: "", content: "" };
         }
       });
 
@@ -174,7 +193,10 @@ export function registerPolicyRoutes(app: Express): void {
     operatorRateLimiter,
     async (req, res) => {
       const body = req.body as Record<string, unknown>;
-      const preset = typeof body.preset === "string" ? body.preset : "";
+      // Accept both "preset" (filename) and "name" (from frontend)
+      const preset = typeof body.preset === "string" ? body.preset
+        : typeof body.name === "string" ? body.name
+        : "";
 
       // Path traversal guard
       if (!preset || preset.includes("..") || preset.includes("/") || preset.includes("\\")) {
@@ -404,7 +426,8 @@ export function registerPolicyRoutes(app: Express): void {
     async (req, res) => {
       const body = req.body as Record<string, unknown>;
       const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
-      const promptType = typeof body.type === "string" ? body.type : "yes_no";
+      const promptType = typeof body.promptType === "string" ? body.promptType
+        : typeof body.type === "string" ? body.type : "yes_no";
       const confidence = typeof body.confidence === "string" ? body.confidence : "high";
 
       if (!prompt) {
@@ -461,7 +484,7 @@ export function registerPolicyRoutes(app: Express): void {
               : "This prompt would be auto-replied.";
             break;
           case "require_human":
-            summary = "This prompt would be sent to your phone/Slack for you to answer.";
+            summary = "This prompt would be sent to the dashboard for you to answer.";
             break;
           case "deny":
             summary = "This prompt would be blocked. No response sent.";

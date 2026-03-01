@@ -1,11 +1,12 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { randomUUID } from "node:crypto";
-import { spawn, type ChildProcess } from "node:child_process";
+import { execSync, spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { registerOperatorRoutes } from "./routes/operator";
 import { registerPolicyRoutes } from "./routes/policy";
+import { registerSetupRoutes } from "./routes/setup";
 import { WebSocketServer, WebSocket } from "ws";
 import { repo } from "./atlasbridge-repo";
 import { storage } from "./storage";
@@ -32,6 +33,9 @@ import {
   insertOperatorAuditLog,
   createMonitorSession, listMonitorSessions, getMonitorSession,
   endMonitorSession, insertMonitorMessages, listMonitorMessages,
+  listAllMonitorMessages, countAllMonitorMessages,
+  listMonitorSessionsWithCounts,
+  createHookApproval, listPendingHookApprovals, decideHookApproval,
 } from "./db";
 import { getConfigPath } from "./config";
 import { parse as parseTOML, stringify as stringifyTOML } from "smol-toml";
@@ -301,6 +305,15 @@ export async function registerRoutes(
     }
     handleTerminalConnection(ws);
   });
+
+  // General-purpose WebSocket for real-time events (hook approvals, messages)
+  const eventsWss = new WebSocketServer({ server: httpServer, path: "/ws/events" });
+  function broadcastEvent(event: { type: string; data?: unknown }) {
+    const msg = JSON.stringify(event);
+    eventsWss.clients.forEach((client) => {
+      if (client.readyState === WebSocket.OPEN) client.send(msg);
+    });
+  }
 
   // -----------------------------------------------------------------------
   // Version check endpoint
@@ -1678,34 +1691,8 @@ export async function registerRoutes(
   // ---------------------------------------------------------------------------
 
   app.get("/api/channels", (_req, res) => {
-    const cfg = readAtlasBridgeConfig();
-    const sl = cfg.slack as Record<string, unknown> | undefined;
-    res.json({
-      slack: sl ? { configured: true, users: sl.allowed_users } : null,
-    });
+    res.json({});
   });
-
-  app.post(
-    "/api/channels/slack",
-    requireCsrf,
-    operatorRateLimiter,
-    (req, res) => {
-      const { token, appToken, users } = req.body as { token?: string; appToken?: string; users?: string };
-      if (!token || !appToken || !users) {
-        res.status(400).json({ error: "token, appToken, and users are required" });
-        return;
-      }
-      try {
-        const cfg = readAtlasBridgeConfig();
-        const userIds = String(users).split(",").map(u => u.trim()).filter(Boolean);
-        cfg.slack = { bot_token: token, app_token: appToken, allowed_users: userIds };
-        writeAtlasBridgeConfig(cfg);
-        res.json({ ok: true });
-      } catch (err: any) {
-        res.status(500).json({ error: "Failed to configure Slack channel", detail: err.message });
-      }
-    },
-  );
 
   app.delete(
     "/api/channels/:name",
@@ -1713,10 +1700,6 @@ export async function registerRoutes(
     operatorRateLimiter,
     (req, res) => {
       const name = String(req.params.name);
-      if (name !== "slack") {
-        res.status(400).json({ error: "Invalid channel name" });
-        return;
-      }
       try {
         const cfg = readAtlasBridgeConfig();
         delete cfg[name];
@@ -2363,12 +2346,12 @@ export async function registerRoutes(
   // ---------------------------------------------------------------------------
 
   app.post("/api/monitor/sessions", (req, res) => {
-    const { id, vendor, conversation_id, tab_url } = req.body ?? {};
+    const { id, vendor, conversation_id, tab_url, workspace_key } = req.body ?? {};
     if (!id || !vendor || !conversation_id) {
       res.status(400).json({ error: "id, vendor, and conversation_id are required" });
       return;
     }
-    createMonitorSession({ id, vendor, conversationId: conversation_id, tabUrl: tab_url });
+    createMonitorSession({ id, vendor, conversationId: conversation_id, tabUrl: tab_url, workspaceKey: workspace_key });
     res.status(201).json({ id });
   });
 
@@ -2403,13 +2386,16 @@ export async function registerRoutes(
       res.status(400).json({ error: "messages array is required" });
       return;
     }
-    const rows = messages.map((m: { role: string; content: string; vendor: string; seq: number; captured_at: string }) => ({
+    const rows = messages.map((m: { role: string; content: string; vendor: string; seq: number; captured_at: string; permission_mode?: string; tool_name?: string; tool_use_id?: string }) => ({
       sessionId,
       role: m.role,
       content: m.content,
       vendor: m.vendor,
       seq: m.seq,
       capturedAt: m.captured_at,
+      permissionMode: m.permission_mode ?? null,
+      toolName: m.tool_name ?? null,
+      toolUseId: m.tool_use_id ?? null,
     }));
     insertMonitorMessages(rows);
     res.json({ ingested: rows.length });
@@ -2421,77 +2407,302 @@ export async function registerRoutes(
     res.json(listMonitorMessages(req.params.id, afterSeq, limit));
   });
 
+  // Sessions with message counts (for conversation list panel)
+  app.get("/api/monitor/sessions-with-counts", (_req, res) => {
+    res.json(listMonitorSessionsWithCounts());
+  });
+
+  // All messages across all sessions (for Prompts > Conversations tab)
+  app.get("/api/monitor/messages", (req, res) => {
+    const limit = Math.min(Number(req.query.limit ?? 50), 200);
+    const offset = Number(req.query.offset ?? 0);
+    const role = req.query.role as string | undefined;
+    const messages = listAllMonitorMessages(limit, offset, role);
+    const total = countAllMonitorMessages(role);
+    res.json({ messages, total });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Hook-based tool approval — PreToolUse hook → dashboard → approve/deny
+  // ---------------------------------------------------------------------------
+
+  // In-memory map of pending hook responses (approval ID → held Express response)
+  const pendingHookResponses = new Map<string, { res: import("express").Response; timer: ReturnType<typeof setTimeout> }>();
+
+  // Default timeout for held connections (seconds)
+  const HOOK_TIMEOUT_SECONDS = 120;
+
+  // Claude Code fires this via PreToolUse command hook
+  // Accepts the full Claude Code hook stdin format:
+  //   { tool_name, tool_input, tool_use_id, session_id, cwd, transcript_path, ... }
+  app.post("/api/hook/pre-tool-use", (req, res) => {
+    const body = req.body ?? {};
+    const tool_name = body.tool_name;
+    if (!tool_name) {
+      res.status(400).json({ error: "tool_name is required" });
+      return;
+    }
+
+    const id = randomUUID();
+    const tool_input = body.tool_input ?? {};
+    const toolInputStr = typeof tool_input === "string" ? tool_input : JSON.stringify(tool_input);
+
+    // Extract workspace from cwd (last path segment)
+    const cwd = body.cwd ?? null;
+    const workspace = cwd ? cwd.split("/").pop() : (body.workspace ?? null);
+
+    createHookApproval({
+      id,
+      toolName: tool_name,
+      toolInput: toolInputStr,
+      toolUseId: body.tool_use_id ?? null,
+      cwd,
+      workspace,
+      sessionId: body.session_id ?? body.sessionId ?? null,
+    });
+
+    // Hold the connection — respond when user decides or timeout
+    const timer = setTimeout(() => {
+      pendingHookResponses.delete(id);
+      // On timeout, deny by default (safety)
+      decideHookApproval(id, "denied");
+      res.json({
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "deny",
+          reason: "Timed out waiting for dashboard approval",
+        },
+      });
+    }, HOOK_TIMEOUT_SECONDS * 1000);
+
+    pendingHookResponses.set(id, { res, timer });
+
+    // Broadcast to connected dashboards immediately
+    broadcastEvent({
+      type: "hook:pending",
+      data: { id, tool_name, tool_input: toolInputStr, workspace, cwd, session_id: body.session_id ?? null },
+    });
+  });
+
+  // Frontend calls this to list pending approvals
+  app.get("/api/hook/pending", (_req, res) => {
+    res.json(listPendingHookApprovals());
+  });
+
+  // Frontend calls this to approve or deny (with optional updatedInput for AskUserQuestion)
+  app.post("/api/hook/decide/:id", (req, res) => {
+    const { id } = req.params;
+    const { decision, updatedInput, alwaysAllow } = req.body ?? {};
+    if (decision !== "allow" && decision !== "deny") {
+      res.status(400).json({ error: "decision must be 'allow' or 'deny'" });
+      return;
+    }
+
+    const dbDecision = decision === "allow" ? "allowed" : "denied";
+    const updated = decideHookApproval(id, dbDecision);
+    if (!updated) {
+      res.status(404).json({ error: "Approval not found or already decided" });
+      return;
+    }
+
+    // Build hook response for Claude Code
+    const hookOutput: Record<string, unknown> = {
+      hookEventName: "PreToolUse",
+      permissionDecision: decision,
+    };
+    // For AskUserQuestion — relay selected answers via updatedInput
+    if (decision === "allow" && updatedInput && typeof updatedInput === "object") {
+      hookOutput.updatedInput = updatedInput;
+    }
+
+    // Respond to the held Claude Code connection
+    const held = pendingHookResponses.get(id);
+    if (held) {
+      clearTimeout(held.timer);
+      pendingHookResponses.delete(id);
+      held.res.json({ hookSpecificOutput: hookOutput });
+    }
+
+    // "Always Allow" — persist a permission rule in Claude Code settings
+    if (decision === "allow" && alwaysAllow && typeof alwaysAllow === "string") {
+      try {
+        const raw = fs.existsSync(CLAUDE_SETTINGS_PATH)
+          ? JSON.parse(fs.readFileSync(CLAUDE_SETTINGS_PATH, "utf-8"))
+          : {};
+        if (!raw.permissions) raw.permissions = {};
+        if (!Array.isArray(raw.permissions.allow)) raw.permissions.allow = [];
+        if (!raw.permissions.allow.includes(alwaysAllow)) {
+          raw.permissions.allow.push(alwaysAllow);
+          fs.writeFileSync(CLAUDE_SETTINGS_PATH, JSON.stringify(raw, null, 2));
+        }
+      } catch { /* best-effort */ }
+    }
+
+    // Broadcast decision to connected dashboards
+    broadcastEvent({ type: "hook:decided", data: { id, decision: dbDecision } });
+
+    res.json({ ok: true, id, decision: dbDecision });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Hook configuration — check/toggle PreToolUse hooks in Claude Code settings
+  // ---------------------------------------------------------------------------
+
+  const CLAUDE_SETTINGS_PATH = path.join(
+    process.env.HOME || "",
+    ".claude",
+    "settings.json",
+  );
+  const HOOK_SCRIPT_PATH = path.join(
+    process.env.HOME || "",
+    ".claude",
+    "hooks",
+    "atlasbridge-pre-tool-use.sh",
+  );
+
+  app.get("/api/hooks/status", (_req, res) => {
+    try {
+      if (!fs.existsSync(CLAUDE_SETTINGS_PATH)) {
+        res.json({ enabled: false, scriptExists: fs.existsSync(HOOK_SCRIPT_PATH) });
+        return;
+      }
+      const settings = JSON.parse(fs.readFileSync(CLAUDE_SETTINGS_PATH, "utf-8"));
+      const preToolUse = settings?.hooks?.PreToolUse ?? [];
+      const hasAtlasHook = preToolUse.some((entry: any) =>
+        entry.hooks?.some((h: any) => h.command?.includes("atlasbridge-pre-tool-use")),
+      );
+      res.json({ enabled: hasAtlasHook, scriptExists: fs.existsSync(HOOK_SCRIPT_PATH) });
+    } catch {
+      res.json({ enabled: false, scriptExists: false });
+    }
+  });
+
+  app.post("/api/hooks/toggle", (req, res) => {
+    const { enabled } = req.body ?? {};
+    try {
+      // Ensure hook script exists
+      const hooksDir = path.join(process.env.HOME || "", ".claude", "hooks");
+      if (!fs.existsSync(hooksDir)) fs.mkdirSync(hooksDir, { recursive: true });
+      if (!fs.existsSync(HOOK_SCRIPT_PATH)) {
+        fs.writeFileSync(HOOK_SCRIPT_PATH, [
+          '#!/bin/bash',
+          '# AtlasBridge PreToolUse Hook — forwards tool approvals to dashboard',
+          'DASHBOARD_URL="${ATLASBRIDGE_DASHBOARD_URL:-http://localhost:3737}"',
+          'INPUT=$(cat)',
+          'RESPONSE=$(curl -s --max-time 130 -X POST "${DASHBOARD_URL}/api/hook/pre-tool-use" -H "Content-Type: application/json" -d "$INPUT" 2>/dev/null)',
+          'if [ $? -ne 0 ] || [ -z "$RESPONSE" ]; then exit 0; fi',
+          'echo "$RESPONSE"',
+          'exit 0',
+        ].join('\n'));
+        fs.chmodSync(HOOK_SCRIPT_PATH, 0o755);
+      }
+
+      // Read or create settings
+      let settings: any = {};
+      if (fs.existsSync(CLAUDE_SETTINGS_PATH)) {
+        settings = JSON.parse(fs.readFileSync(CLAUDE_SETTINGS_PATH, "utf-8"));
+      }
+
+      if (enabled) {
+        settings.hooks = {
+          ...(settings.hooks ?? {}),
+          PreToolUse: [{
+            matcher: "Bash|Edit|Write|NotebookEdit",
+            hooks: [{ type: "command", command: HOOK_SCRIPT_PATH }],
+          }],
+        };
+      } else {
+        if (settings.hooks?.PreToolUse) {
+          delete settings.hooks.PreToolUse;
+          if (Object.keys(settings.hooks).length === 0) delete settings.hooks;
+        }
+      }
+
+      fs.writeFileSync(CLAUDE_SETTINGS_PATH, JSON.stringify(settings, null, 2));
+      res.json({ ok: true, enabled: !!enabled });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message || "Failed to toggle hooks" });
+    }
+  });
+
   // ---------------------------------------------------------------------------
   // Monitor daemon management — start/stop monitors from the dashboard
   // ---------------------------------------------------------------------------
 
   const monitorProcesses: Map<string, { proc: ChildProcess; startedAt: string; logs: string[] }> = new Map();
 
-  function pythonBin(): string {
-    // Try common locations for the Python binary with atlasbridge installed.
-    // The dashboard runs from dashboard/ so check parent directories too.
-    const cwd = process.cwd();
-    const parentDir = path.dirname(cwd);
-    const candidates = [
-      path.join(parentDir, ".venv", "bin", "python"),
-      path.join(parentDir, "venv", "bin", "python"),
-      path.join(cwd, ".venv", "bin", "python"),
-      path.join(cwd, "venv", "bin", "python"),
-    ];
+  const pythonBin = findPythonBin;
 
-    // Also try to find atlasbridge's Python via `which`
+  /** Check if a process is actually alive (works for signal-killed processes too). */
+  function isProcessAlive(pid: number | undefined): boolean {
+    if (!pid) return false;
+    try { process.kill(pid, 0); return true; } catch { return false; }
+  }
+
+  /** Check if the tracked monitor entry is still alive. */
+  function isTrackedMonitorAlive(type: string): boolean {
+    const entry = monitorProcesses.get(type);
+    return Boolean(entry && entry.proc.pid && isProcessAlive(entry.proc.pid));
+  }
+
+  /** Find orphan monitor processes not tracked in the in-memory map. */
+  function findMonitorPid(type: string): number | null {
     try {
-      const { execSync } = require("child_process");
-      const abPath = execSync("which atlasbridge", { encoding: "utf-8", timeout: 3000 }).trim();
-      if (abPath) {
-        // Read the shebang to find the Python binary
-        const shebang = fs.readFileSync(abPath, "utf-8").split("\n")[0];
-        const match = shebang.match(/^#!\s*(.+python\S*)/);
-        if (match && fs.existsSync(match[1])) {
-          candidates.unshift(match[1]);
-        }
+      const out = execSync(
+        `pgrep -f "atlasbridge monitor ${type}" 2>/dev/null || true`,
+        { encoding: "utf-8", timeout: 3000 },
+      ).trim();
+      if (out) {
+        const pids = out.split("\n").map(Number).filter(Boolean);
+        return pids[0] ?? null;
       }
-    } catch { /* which not found or not installed — continue */ }
-
-    for (const c of candidates) {
-      if (fs.existsSync(c)) return c;
-    }
-
-    // Fallback to system Python
-    return "python3";
+    } catch { /* ignore */ }
+    return null;
   }
 
   app.get("/api/monitor/daemons", (_req, res) => {
-    const result: Record<string, { running: boolean; startedAt?: string; logs: string[] }> = {};
+    const result: Record<string, { running: boolean; startedAt?: string; pid?: number; logs: string[] }> = {};
     for (const key of ["desktop", "vscode"]) {
       const entry = monitorProcesses.get(key);
-      if (entry && entry.proc.exitCode === null) {
-        result[key] = { running: true, startedAt: entry.startedAt, logs: entry.logs.slice(-20) };
+      if (isTrackedMonitorAlive(key)) {
+        result[key] = { running: true, startedAt: entry!.startedAt, pid: entry!.proc.pid, logs: entry!.logs.slice(-20) };
       } else {
-        result[key] = { running: false, logs: entry?.logs.slice(-20) ?? [] };
+        // Check for processes from a previous dashboard instance
+        const pid = findMonitorPid(key);
+        if (pid) {
+          result[key] = { running: true, pid, logs: entry?.logs.slice(-20) ?? ["(running from previous session)"] };
+        } else {
+          result[key] = { running: false, logs: entry?.logs.slice(-20) ?? [] };
+        }
       }
     }
     res.json(result);
   });
 
-  app.post("/api/monitor/daemons/:type/start", requireCsrf, (req, res) => {
+  app.post("/api/monitor/daemons/:type/start", requireCsrf, async (req, res) => {
     const type = String(req.params.type);
     if (type !== "desktop" && type !== "vscode") {
       res.status(400).json({ error: "type must be 'desktop' or 'vscode'" });
       return;
     }
 
-    const existing = monitorProcesses.get(type);
-    if (existing && existing.proc.exitCode === null) {
+    if (isTrackedMonitorAlive(type)) {
+      const existing = monitorProcesses.get(type)!;
       res.json({ status: "already_running", startedAt: existing.startedAt });
       return;
+    }
+    // Kill any leftover process before starting a fresh one
+    const stalePid = findMonitorPid(type);
+    if (stalePid) {
+      try { process.kill(stalePid, "SIGTERM"); } catch { /* ignore */ }
+      await new Promise(r => setTimeout(r, 500));
     }
 
     const py = pythonBin();
 
     // Pre-flight: verify Python can import atlasbridge.monitors
     try {
-      const { execSync } = require("child_process");
+
       const checkModule = type === "desktop"
         ? "from atlasbridge.monitors.desktop import _check_accessibility_imports; print(_check_accessibility_imports())"
         : "from atlasbridge.monitors.vscode import find_claude_sessions; print('ok')";
@@ -2508,7 +2719,7 @@ export async function registerRoutes(
       return;
     }
 
-    const dashboardUrl = `http://localhost:${req.socket.localPort ?? 5000}`;
+    const dashboardUrl = `http://localhost:${req.socket.localPort ?? 3737}`;
     const logs: string[] = [];
     logs.push(`Using Python: ${py}`);
 
@@ -2559,14 +2770,26 @@ export async function registerRoutes(
 
   app.post("/api/monitor/daemons/:type/stop", requireCsrf, (req, res) => {
     const type = String(req.params.type);
-    const entry = monitorProcesses.get(type);
-    if (!entry || entry.proc.exitCode !== null) {
-      res.json({ status: "not_running" });
+    // Try tracked process first
+    if (isTrackedMonitorAlive(type)) {
+      const entry = monitorProcesses.get(type)!;
+      entry.proc.kill("SIGTERM");
+      entry.logs.push("Stopped by dashboard");
+      res.json({ status: "stopped" });
       return;
     }
-    entry.proc.kill("SIGTERM");
-    entry.logs.push("Stopped by dashboard");
-    res.json({ status: "stopped" });
+    // Try to find and kill any running monitor process
+    const pid = findMonitorPid(type);
+    if (pid) {
+      try {
+        process.kill(pid, "SIGTERM");
+        res.json({ status: "stopped", pid });
+      } catch (err: any) {
+        res.status(500).json({ error: `Failed to stop process ${pid}: ${err.message}` });
+      }
+      return;
+    }
+    res.json({ status: "not_running" });
   });
 
   // ---------------------------------------------------------------------------
@@ -2611,6 +2834,129 @@ export async function registerRoutes(
   // ---------------------------------------------------------------------------
   registerOperatorRoutes(app);
   registerPolicyRoutes(app);
+  registerSetupRoutes(app);
+
+  // -------------------------------------------------------------------------
+  // Auto-start monitors based on config (non-blocking, best-effort)
+  // Wait for the HTTP server to be listening before starting monitors,
+  // otherwise they fail with "All connection attempts failed".
+  // -------------------------------------------------------------------------
+  if (httpServer.listening) {
+    autoStartMonitors(monitorProcesses, httpServer);
+  } else {
+    httpServer.once("listening", () => {
+      autoStartMonitors(monitorProcesses, httpServer);
+    });
+  }
 
   return httpServer;
+}
+
+/**
+ * Read config.toml and start any monitors that the user enabled.
+ * Runs once on dashboard boot — failures are logged but don't block startup.
+ */
+function autoStartMonitors(
+  monitorProcesses: Map<string, { proc: ChildProcess; startedAt: string; logs: string[] }>,
+  httpServer: Server,
+): void {
+  try {
+    const configPath = getConfigPath();
+    if (!fs.existsSync(configPath)) return;
+
+    const raw = fs.readFileSync(configPath, "utf-8");
+    const config = parseTOML(raw) as Record<string, any>;
+
+    const monitors = config.monitors as Record<string, boolean> | undefined;
+    if (!monitors) return;
+
+    // Determine the port the dashboard is actually listening on
+    const addr = httpServer.address();
+    const port = addr && typeof addr === "object" ? addr.port : 3737;
+    const dashboardUrl = `http://localhost:${port}`;
+
+    const py = findPythonBin();
+
+    for (const type of ["vscode", "desktop"] as const) {
+      if (!monitors[type]) continue;
+
+      // Skip if already running (tracked process or orphan from previous session)
+      const existing = monitorProcesses.get(type);
+      const trackedAlive = existing?.proc.pid ? (() => { try { process.kill(existing.proc.pid!, 0); return true; } catch { return false; } })() : false;
+      if (trackedAlive) continue;
+      try {
+        const pgrep = execSync(`pgrep -f "atlasbridge monitor ${type}" 2>/dev/null || true`, { encoding: "utf-8", timeout: 3000 }).trim();
+        if (pgrep) continue;
+      } catch { /* ignore */ }
+
+      // Pre-flight: verify Python can import the module (silent — don't block boot)
+      try {
+  
+        const checkModule =
+          type === "desktop"
+            ? "from atlasbridge.monitors.desktop import _check_accessibility_imports; print(_check_accessibility_imports())"
+            : "from atlasbridge.monitors.vscode import find_claude_sessions; print('ok')";
+        execSync(`${py} -c "${checkModule}"`, { encoding: "utf-8", timeout: 5000, stdio: "pipe" });
+      } catch {
+        console.log(`[auto-start] Skipping ${type} monitor — Python module not importable with ${py}`);
+        continue;
+      }
+
+      try {
+        const logs: string[] = [`[auto-start] Using Python: ${py}`];
+        const proc = spawn(py, ["-m", "atlasbridge", "monitor", type, "--dashboard-url", dashboardUrl], {
+          stdio: ["ignore", "pipe", "pipe"],
+          detached: false,
+          env: { ...process.env },
+        });
+
+        const capture = (data: Buffer) => {
+          const line = data.toString().trim();
+          if (line) {
+            logs.push(line);
+            if (logs.length > 100) logs.shift();
+          }
+        };
+        proc.stdout?.on("data", capture);
+        proc.stderr?.on("data", capture);
+        proc.on("error", (err) => logs.push(`Spawn error: ${err.message}`));
+        proc.on("exit", (code) => logs.push(`Process exited with code ${code}`));
+
+        monitorProcesses.set(type, { proc, startedAt: new Date().toISOString(), logs });
+        console.log(`[auto-start] Started ${type} monitor (PID ${proc.pid})`);
+      } catch (err: any) {
+        console.error(`[auto-start] Failed to start ${type} monitor:`, err.message);
+      }
+    }
+  } catch (err: any) {
+    console.error("[auto-start] Error reading config for monitor auto-start:", err.message);
+  }
+}
+
+/** Find a usable Python binary with atlasbridge installed. */
+function findPythonBin(): string {
+  const cwd = process.cwd();
+  const parentDir = path.dirname(cwd);
+  const candidates = [
+    path.join(parentDir, ".venv", "bin", "python"),
+    path.join(parentDir, "venv", "bin", "python"),
+    path.join(cwd, ".venv", "bin", "python"),
+    path.join(cwd, "venv", "bin", "python"),
+  ];
+
+  try {
+    const abPath = execSync("which atlasbridge", { encoding: "utf-8", timeout: 3000 }).trim();
+    if (abPath) {
+      const shebang = fs.readFileSync(abPath, "utf-8").split("\n")[0];
+      const match = shebang.match(/^#!\s*(.+python\S*)/);
+      if (match && fs.existsSync(match[1])) {
+        candidates.unshift(match[1]);
+      }
+    }
+  } catch { /* which not found — continue */ }
+
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
+  }
+  return "python3";
 }

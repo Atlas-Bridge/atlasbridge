@@ -1,8 +1,13 @@
 """VS Code / Claude Code monitor — captures conversations from Claude Code sessions.
 
-Two detection approaches:
-1. Lock file discovery: ~/.claude/ide/*.lock contains port + auth info
-2. Process detection: find running `claude` processes spawned by VS Code
+Capture approach:
+  JSONL transcript tailing — reads ~/.claude/projects/*/?.jsonl for conversation messages.
+  Only real text content is captured; tool calls, system messages, and internal
+  blocks are filtered out so the dashboard shows human-readable conversation.
+
+One dashboard session per JSONL transcript file. Multiple concurrent conversations
+in the same workspace are tracked as separate sessions, grouped by workspace_key.
+Session IDs are deterministic (uuid5) so monitor restarts reuse existing sessions.
 
 Install: pip install atlasbridge[vscode-monitor]
 """
@@ -13,8 +18,9 @@ import asyncio
 import json
 import logging
 import os
+import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC
 from pathlib import Path
 from typing import Any
@@ -24,6 +30,13 @@ import httpx
 logger = logging.getLogger(__name__)
 
 CLAUDE_IDE_DIR = Path.home() / ".claude" / "ide"
+CLAUDE_PROJECTS_DIR = Path.home() / ".claude" / "projects"
+
+# Namespace for deterministic session UUIDs
+_SESSION_NS = uuid.UUID("a1b2c3d4-e5f6-7890-abcd-ef1234567890")
+
+# JSONL files modified within this window are considered "active"
+ACTIVE_THRESHOLD_SECONDS = 300  # 5 minutes
 
 
 @dataclass
@@ -65,8 +78,6 @@ def find_claude_sessions() -> list[ClaudeSession]:
                     logger.debug("Stale lock file %s (pid %s not running)", lock_file.name, pid)
                     continue
 
-            # Accept sessions with or without a port — process-based
-            # monitoring works even without a WebSocket port
             sessions.append(
                 ClaudeSession(
                     session_file=lock_file.name,
@@ -85,7 +96,10 @@ def find_claude_sessions() -> list[ClaudeSession]:
 
 
 def find_claude_processes() -> list[dict[str, Any]]:
-    """Find running Claude Code processes via psutil."""
+    """Find running Claude Code processes via psutil.
+
+    Only used for the CLI ``monitor status`` command — NOT for session registration.
+    """
     try:
         import psutil
     except ImportError:
@@ -100,32 +114,230 @@ def find_claude_processes() -> list[dict[str, Any]]:
             cmdline = info.get("cmdline", []) or []
             cmd_str = " ".join(cmdline)
 
-            # Look for Claude Code processes
-            if "claude" in name.lower() or "claude" in cmd_str.lower():
-                # Check if parent is VS Code
-                ppid = info.get("ppid")
-                parent_name = ""
-                if ppid:
-                    try:
-                        parent = psutil.Process(ppid)
-                        parent_name = parent.name()
-                    except (psutil.NoSuchProcess, psutil.AccessDenied):
-                        pass
+            # Only match the actual Claude Code binary — not random
+            # processes that happen to have "claude" in their path
+            is_claude_binary = name.lower() == "claude" or (
+                "claude" in name.lower()
+                and any(kw in cmd_str.lower() for kw in ["claude-code", "claude_code", "@anthropic"])
+            )
+            if not is_claude_binary:
+                continue
 
-                result.append(
-                    {
-                        "pid": info["pid"],
-                        "name": name,
-                        "cmdline": cmd_str,
-                        "parent": parent_name,
-                        "is_vscode": "code" in parent_name.lower()
-                        or "electron" in parent_name.lower(),
-                    }
-                )
+            ppid = info.get("ppid")
+            parent_name = ""
+            if ppid:
+                try:
+                    parent = psutil.Process(ppid)
+                    parent_name = parent.name()
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+
+            result.append(
+                {
+                    "pid": info["pid"],
+                    "name": name,
+                    "cmdline": cmd_str,
+                    "parent": parent_name,
+                    "is_vscode": "code" in parent_name.lower()
+                    or "electron" in parent_name.lower(),
+                }
+            )
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue
 
     return result
+
+
+def _workspace_to_project_dir(workspace: str) -> str:
+    """Convert a workspace path to Claude Code's project directory name.
+
+    Claude Code stores conversations in ~/.claude/projects/<mangled-path>/
+    where the path has / replaced with - and a leading -.
+    e.g. /Users/ara/Documents/GitHub/atlasbridge → -Users-ara-Documents-GitHub-atlasbridge
+    """
+    return "-" + workspace.lstrip("/").replace("/", "-")
+
+
+def _find_active_jsonls(workspace: str | None) -> list[Path]:
+    """Find recently-active JSONL transcript files for a workspace.
+
+    Returns all top-level .jsonl files modified within ACTIVE_THRESHOLD_SECONDS,
+    sorted by mtime descending. Excludes subagent files in subdirectories.
+    Falls back to the single most recent file if none are within the threshold.
+    """
+    if not workspace or not CLAUDE_PROJECTS_DIR.exists():
+        return []
+
+    project_dir_name = _workspace_to_project_dir(workspace)
+    project_dir = CLAUDE_PROJECTS_DIR / project_dir_name
+
+    if not project_dir.exists():
+        return []
+
+    now = time.time()
+    all_jsonl: list[tuple[Path, float]] = []
+    for p in project_dir.glob("*.jsonl"):
+        # Only top-level files (skip subagent dirs)
+        if p.parent != project_dir:
+            continue
+        mtime = p.stat().st_mtime
+        all_jsonl.append((p, mtime))
+
+    if not all_jsonl:
+        return []
+
+    # Sort by mtime descending
+    all_jsonl.sort(key=lambda t: t[1], reverse=True)
+
+    active = [p for p, mt in all_jsonl if (now - mt) < ACTIVE_THRESHOLD_SECONDS]
+
+    # Fallback: if nothing within threshold, return the single most recent
+    if not active:
+        return [all_jsonl[0][0]]
+
+    return active
+
+
+def _extract_human_text(content: Any) -> str:
+    """Extract only human-readable text from Claude Code message content.
+
+    Skips tool_use blocks, tool_result blocks, and internal system content.
+    Returns empty string if there is no meaningful text to show.
+    """
+    if isinstance(content, str):
+        text = content.strip()
+        # Skip internal system blocks
+        if text.startswith(("<ide_", "<system", "<environment_details")):
+            return ""
+        return text
+
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, dict):
+                if block.get("type") == "text":
+                    text = block.get("text", "").strip()
+                    # Skip system/internal blocks embedded in text
+                    if text and not text.startswith(("<ide_", "<system", "<environment_details")):
+                        parts.append(text)
+                # Skip tool_use and tool_result entirely — not human-readable
+            elif isinstance(block, str):
+                text = block.strip()
+                if text and not text.startswith(("<ide_", "<system")):
+                    parts.append(text)
+        return "\n".join(parts)
+
+    return ""
+
+
+def _extract_tool_name(content: Any) -> str | None:
+    """Extract the tool name from tool_use blocks in message content.
+
+    Returns the name of the first tool_use block found, or None.
+    """
+    if not isinstance(content, list):
+        return None
+    for block in content:
+        if isinstance(block, dict) and block.get("type") == "tool_use":
+            name = block.get("name")
+            if name:
+                return str(name)
+    return None
+
+
+def _extract_tool_use_id(content: Any) -> str | None:
+    """Extract the id from tool_use blocks in message content."""
+    if not isinstance(content, list):
+        return None
+    for block in content:
+        if isinstance(block, dict) and block.get("type") == "tool_use":
+            tu_id = block.get("id")
+            if tu_id:
+                return str(tu_id)
+    return None
+
+
+def _extract_tool_result_id(content: Any) -> str | None:
+    """Extract the tool_use_id from tool_result blocks in message content."""
+    if not isinstance(content, list):
+        return None
+    for block in content:
+        if isinstance(block, dict) and block.get("type") == "tool_result":
+            tu_id = block.get("tool_use_id")
+            if tu_id:
+                return str(tu_id)
+    return None
+
+
+def _extract_tool_use_summary(content: Any) -> str | None:
+    """Build a human-readable summary for an assistant tool_use request.
+
+    Returns a string like "Edit: src/file.ts" or "Bash: ls -la" or None.
+    """
+    if not isinstance(content, list):
+        return None
+    for block in content:
+        if not isinstance(block, dict) or block.get("type") != "tool_use":
+            continue
+        name = block.get("name", "")
+        inp = block.get("input", {})
+        if name == "Edit":
+            fp = inp.get("file_path", "")
+            return f"Edit: {_short_path(fp)}" if fp else "Edit file"
+        if name == "Write":
+            fp = inp.get("file_path", "")
+            return f"Write: {_short_path(fp)}" if fp else "Write file"
+        if name == "Bash":
+            cmd = inp.get("command", "")
+            short = cmd[:80] + ("..." if len(cmd) > 80 else "")
+            return f"Bash: {short}" if cmd else "Run command"
+        if name in ("Read", "Glob", "Grep"):
+            return f"{name}: {inp.get('file_path', inp.get('pattern', ''))}"
+        if name == "Task":
+            desc = inp.get("description", "")
+            return f"Task: {desc}" if desc else "Launch sub-agent"
+        if name == "TodoWrite":
+            return "Update task list"
+        if name == "NotebookEdit":
+            fp = inp.get("notebook_path", "")
+            return f"NotebookEdit: {_short_path(fp)}" if fp else "Edit notebook"
+        return f"{name}"
+    return None
+
+
+def _extract_tool_result_summary(content: Any) -> tuple[str | None, bool]:
+    """Extract an approval/rejection summary from tool_result blocks.
+
+    Returns (summary_text, is_rejection).
+    """
+    if not isinstance(content, list):
+        return None, False
+    for block in content:
+        if not isinstance(block, dict) or block.get("type") != "tool_result":
+            continue
+        is_error = block.get("is_error", False)
+        text = block.get("content", "")
+        if is_error and "doesn't want to proceed" in str(text):
+            # User rejected the tool use
+            reason = ""
+            marker = "provided the following reason for the rejection:"
+            if marker in str(text):
+                reason = str(text).split(marker, 1)[1].strip()
+            return (f"Rejected: {reason}" if reason else "Rejected"), True
+        if isinstance(text, str):
+            if "has been updated successfully" in text:
+                return "Approved", False
+            if "created successfully" in text:
+                return "Approved", False
+        # Generic tool result — approved
+        return "Approved", False
+    return None, False
+
+
+def _short_path(fp: str) -> str:
+    """Shorten a file path to the last 2 segments."""
+    parts = fp.replace("\\", "/").split("/")
+    return "/".join(parts[-2:]) if len(parts) > 2 else fp
 
 
 @dataclass
@@ -133,8 +345,11 @@ class MonitoredSession:
     """Tracked session in the monitor."""
 
     session_id: str
-    key: str  # lock file name or process pid
+    key: str  # lock file name
     seq: int = 0
+    jsonl_path: Path | None = None
+    jsonl_offset: int = 0
+    seen_uuids: set[str] = field(default_factory=set)
 
 
 class VSCodeMonitor:
@@ -142,7 +357,7 @@ class VSCodeMonitor:
 
     def __init__(
         self,
-        dashboard_url: str = "http://localhost:5000",
+        dashboard_url: str = "http://localhost:3737",
         poll_interval: float = 5.0,
     ) -> None:
         self._dashboard_url = dashboard_url.rstrip("/")
@@ -152,89 +367,154 @@ class VSCodeMonitor:
         self._client = httpx.AsyncClient(timeout=10.0)
 
     async def _register_session(
-        self, key: str, vendor: str, conversation_id: str, tab_url: str
+        self, key: str, vendor: str, conversation_id: str, tab_url: str,
+        jsonl_path: Path | None = None,
+        workspace_key: str | None = None,
     ) -> MonitoredSession:
-        """Register a monitor session on the dashboard."""
-        session_id = str(uuid.uuid4())
+        """Register a monitor session on the dashboard.
+
+        Uses a deterministic UUID so restarts reuse the same session.
+        """
+        session_id = str(uuid.uuid5(_SESSION_NS, conversation_id))
         try:
+            payload: dict[str, Any] = {
+                "id": session_id,
+                "vendor": vendor,
+                "conversation_id": conversation_id,
+                "tab_url": tab_url,
+            }
+            if workspace_key:
+                payload["workspace_key"] = workspace_key
             await self._client.post(
                 f"{self._dashboard_url}/api/monitor/sessions",
-                json={
-                    "id": session_id,
-                    "vendor": vendor,
-                    "conversation_id": conversation_id,
-                    "tab_url": tab_url,
-                },
+                json=payload,
             )
             logger.info("Registered monitor session %s for %s", session_id, key)
         except Exception as exc:
             logger.error("Failed to create monitor session: %s", exc)
-        ms = MonitoredSession(session_id=session_id, key=key)
+        ms = MonitoredSession(session_id=session_id, key=key, jsonl_path=jsonl_path)
+        # Start tailing from the end — only capture NEW messages going forward
+        if jsonl_path and jsonl_path.exists():
+            ms.jsonl_offset = jsonl_path.stat().st_size
         self._sessions[key] = ms
         return ms
 
-    async def _try_websocket(self, cs: ClaudeSession, ms: MonitoredSession) -> None:
-        """Try to connect to Claude Code WebSocket and stream messages."""
-        if not cs.port:
+    async def _tail_jsonl(self, ms: MonitoredSession) -> None:
+        """Read new lines from a JSONL transcript file and send to dashboard."""
+        if not ms.jsonl_path or not ms.jsonl_path.exists():
             return
 
         try:
-            import websockets
-        except ImportError:
-            logger.debug("websockets not available — WebSocket monitoring disabled")
-            return
+            file_size = ms.jsonl_path.stat().st_size
+            if file_size <= ms.jsonl_offset:
+                return
 
-        url = f"ws://localhost:{cs.port}"
-        headers = {}
-        if cs.token:
-            headers["Authorization"] = f"Bearer {cs.token}"
+            with open(ms.jsonl_path, "r", encoding="utf-8") as f:
+                f.seek(ms.jsonl_offset)
+                new_data = f.read()
+                ms.jsonl_offset = f.tell()
 
-        try:
-            async with websockets.connect(url, additional_headers=headers) as ws:
-                logger.info("Connected to Claude Code at port %d", cs.port)
-                async for message in ws:
-                    try:
-                        data = json.loads(message)
-                        role = data.get("role", "assistant")
-                        content = data.get("content", "")
-                        if content:
-                            ms.seq += 1
-                            await self._send_message(ms.session_id, role, content, ms.seq)
-                    except (json.JSONDecodeError, KeyError):
-                        if isinstance(message, (str, bytes)):
-                            text = (
-                                message
-                                if isinstance(message, str)
-                                else message.decode("utf-8", errors="replace")
-                            )
-                            if text.strip():
-                                ms.seq += 1
-                                await self._send_message(ms.session_id, "assistant", text, ms.seq)
+            for line in new_data.strip().split("\n"):
+                if not line.strip():
+                    continue
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+
+                msg_type = entry.get("type")
+                if msg_type not in ("user", "assistant"):
+                    continue
+
+                msg_uuid = entry.get("uuid", "")
+                if msg_uuid and msg_uuid in ms.seen_uuids:
+                    continue
+                if msg_uuid:
+                    ms.seen_uuids.add(msg_uuid)
+
+                message = entry.get("message", {})
+                role = message.get("role", msg_type)
+                content_raw = message.get("content", "")
+                content = _extract_human_text(content_raw)
+
+                # Extract metadata from ALL messages first
+                permission_mode = entry.get("permissionMode")
+                tool_name = _extract_tool_name(content_raw)
+                timestamp = entry.get("timestamp", _iso_now())
+
+                if role == "assistant":
+                    if tool_name:
+                        # Assistant requested a tool — always capture as pending
+                        summary = content.strip() if content and content.strip() else (
+                            _extract_tool_use_summary(content_raw) or tool_name
+                        )
+                        tool_use_id = _extract_tool_use_id(content_raw)
+                        ms.seq += 1
+                        await self._send_message(
+                            ms.session_id, role, summary, ms.seq, timestamp,
+                            permission_mode="pending",
+                            tool_name=tool_name,
+                            tool_use_id=tool_use_id,
+                        )
+                    elif content and content.strip():
+                        ms.seq += 1
+                        await self._send_message(
+                            ms.session_id, role, content, ms.seq, timestamp,
+                            permission_mode=permission_mode,
+                        )
+                elif role == "user":
+                    # Check for tool_result FIRST — even if text content exists
+                    tool_result_id = _extract_tool_result_id(content_raw)
+                    if tool_result_id:
+                        result_summary, is_rejection = _extract_tool_result_summary(content_raw)
+                        pm = "rejected" if is_rejection else (permission_mode or "approved")
+                        ms.seq += 1
+                        await self._send_message(
+                            ms.session_id, role, result_summary or "Completed", ms.seq, timestamp,
+                            permission_mode=pm,
+                            tool_use_id=tool_result_id,
+                        )
+                    elif content and content.strip():
+                        ms.seq += 1
+                        await self._send_message(
+                            ms.session_id, role, content, ms.seq, timestamp,
+                            permission_mode=permission_mode,
+                        )
+
         except Exception as exc:
-            logger.debug("WebSocket connection to port %d failed: %s", cs.port, exc)
+            logger.debug("JSONL tail error for %s: %s", ms.jsonl_path, exc)
 
-    async def _send_message(self, session_id: str, role: str, content: str, seq: int) -> None:
+    async def _send_message(
+        self, session_id: str, role: str, content: str, seq: int,
+        captured_at: str | None = None,
+        permission_mode: str | None = None,
+        tool_name: str | None = None,
+        tool_use_id: str | None = None,
+    ) -> None:
         """Send a captured message to the dashboard."""
         try:
+            msg: dict[str, Any] = {
+                "role": role,
+                "content": content,
+                "vendor": "vscode-claude",
+                "seq": seq,
+                "captured_at": captured_at or _iso_now(),
+            }
+            if permission_mode:
+                msg["permission_mode"] = permission_mode
+            if tool_name:
+                msg["tool_name"] = tool_name
+            if tool_use_id:
+                msg["tool_use_id"] = tool_use_id
             await self._client.post(
                 f"{self._dashboard_url}/api/monitor/sessions/{session_id}/messages",
-                json={
-                    "messages": [
-                        {
-                            "role": role,
-                            "content": content,
-                            "vendor": "vscode-claude",
-                            "seq": seq,
-                            "captured_at": _iso_now(),
-                        }
-                    ]
-                },
+                json={"messages": [msg]},
             )
         except Exception as exc:
             logger.error("Failed to send monitor message: %s", exc)
 
     async def monitor_loop(self) -> None:
-        """Main loop: discover sessions, connect, capture, relay to dashboard."""
+        """Main loop: discover sessions from lock files, tail transcripts."""
         self._running = True
         logger.info(
             "VS Code monitor started (poll=%.1fs, dashboard=%s)",
@@ -244,44 +524,43 @@ class VSCodeMonitor:
 
         while self._running:
             try:
-                # 1. Discover from lock files (preferred — has workspace info)
+                # Discover sessions from lock files, then find active JSONL files
                 sessions = find_claude_sessions()
                 for cs in sessions:
-                    key = f"lock:{cs.session_file}"
-                    if key not in self._sessions:
-                        workspace = cs.workspace or cs.session_file
-                        tab_url = f"vscode://claude-code/{workspace}"
-                        conversation_id = f"claude-code-{cs.pid or cs.session_file}"
-                        ms = await self._register_session(
-                            key, "vscode-claude", conversation_id, tab_url
-                        )
-                        # Attempt WebSocket if port is available
-                        if cs.port:
-                            asyncio.create_task(self._try_websocket(cs, ms))
+                    workspace = cs.workspace or cs.session_file
+                    workspace_key = f"claude-code-{workspace}"
+                    tab_url = f"vscode://claude-code/{workspace}"
 
-                # 2. Discover from running processes (fallback)
-                lock_pids = {cs.pid for cs in sessions if cs.pid}
-                processes = find_claude_processes()
-                for proc in processes:
-                    pid = proc["pid"]
-                    # Skip if already tracked via lock file
-                    if pid in lock_pids:
-                        continue
-                    key = f"proc:{pid}"
-                    if key not in self._sessions:
-                        vscode_tag = " (VS Code)" if proc["is_vscode"] else ""
-                        logger.info(
-                            "Registering Claude process: pid=%d %s%s",
-                            pid,
-                            proc["name"],
-                            vscode_tag,
-                        )
-                        await self._register_session(
-                            key,
-                            "vscode-claude",
-                            f"claude-process-{pid}",
-                            f"process://{proc['name']}/{pid}",
-                        )
+                    active_jsonls = _find_active_jsonls(cs.workspace)
+                    for jsonl_path in active_jsonls:
+                        jsonl_uuid = jsonl_path.stem
+                        key = f"jsonl:{workspace}:{jsonl_uuid}"
+
+                        if key not in self._sessions:
+                            conversation_id = f"claude-code-{workspace}:{jsonl_uuid}"
+                            logger.info(
+                                "Found transcript for %s: %s", workspace, jsonl_path.name
+                            )
+                            await self._register_session(
+                                key, "vscode-claude", conversation_id, tab_url,
+                                jsonl_path=jsonl_path,
+                                workspace_key=workspace_key,
+                            )
+
+                    # Fallback: if no JSONL files found, register workspace-only session
+                    if not active_jsonls:
+                        key = f"lock:{cs.session_file}"
+                        if key not in self._sessions:
+                            conversation_id = f"claude-code-{workspace}"
+                            await self._register_session(
+                                key, "vscode-claude", conversation_id, tab_url,
+                                workspace_key=workspace_key,
+                            )
+
+                # Tail JSONL transcripts for all tracked sessions
+                for ms in self._sessions.values():
+                    if ms.jsonl_path:
+                        await self._tail_jsonl(ms)
 
             except Exception as exc:
                 logger.error("VS Code monitor poll error: %s", exc)
@@ -299,7 +578,7 @@ def _iso_now() -> str:
 
 
 async def run_vscode_monitor(
-    dashboard_url: str = "http://localhost:5000",
+    dashboard_url: str = "http://localhost:3737",
     poll_interval: float = 5.0,
 ) -> None:
     """Entry point for VS Code / Claude Code monitoring."""
@@ -313,9 +592,9 @@ async def run_vscode_monitor(
     print(f"VS Code monitor active — polling every {poll_interval}s")
     print(f"Dashboard: {dashboard_url}")
     print(f"Watching: {CLAUDE_IDE_DIR}")
+    print(f"Transcripts: {CLAUDE_PROJECTS_DIR}")
     print("Press Ctrl+C to stop.\n")
 
-    # Show initial discovery
     sessions = find_claude_sessions()
     if sessions:
         print(f"Found {len(sessions)} active Claude Code session(s):")
@@ -327,16 +606,13 @@ async def run_vscode_monitor(
                 parts.append(f"ide={cs.ide_name}")
             if cs.workspace:
                 parts.append(f"workspace={cs.workspace}")
+                jsonls = _find_active_jsonls(cs.workspace)
+                if jsonls:
+                    parts.append(f"transcripts={len(jsonls)}")
+                    parts.append(f"latest={jsonls[0].name}")
             print(f"  - {' '.join(parts)}")
     else:
         print("No active Claude Code lock files found. Watching for new ones...")
-
-    processes = find_claude_processes()
-    if processes:
-        print(f"\nDetected {len(processes)} Claude process(es):")
-        for p in processes:
-            vscode_tag = " (VS Code)" if p["is_vscode"] else ""
-            print(f"  - pid={p['pid']} {p['name']}{vscode_tag}")
 
     print()
 

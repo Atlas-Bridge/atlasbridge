@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import type { OverviewData, MetricInsight } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -11,9 +11,11 @@ import {
   MonitorDot, Clock, TrendingUp, Cpu, AlertTriangle,
   ShieldCheck, Activity, Brain, Shield, Gauge, X,
   ArrowUpRight, ArrowDownRight, Minus, Lightbulb,
-  CheckCircle, XCircle, ChevronRight, Zap, Target, Eye, FileCheck, Globe, Radio
+  CheckCircle, XCircle, ChevronRight, Zap, Target, Eye, FileCheck, Globe, Radio,
+  Sparkles, RotateCcw, BookOpen, ArrowRight,
 } from "lucide-react";
 import { OperatorPanel } from "@/components/operator-panel";
+import { useTutorial } from "@/hooks/useTutorial";
 
 function AnimatedRing({ value, max, size = 64, stroke = 5, color = "hsl(var(--primary))", trackColor = "hsl(var(--muted))", label, animate = true }: {
   value: number; max: number; size?: number; stroke?: number; color?: string; trackColor?: string; label?: string; animate?: boolean;
@@ -88,6 +90,57 @@ function SafetyMetricItem({ icon: IconComp, label, value, cls }: { icon: React.E
   );
 }
 
+function GettingStartedBanner() {
+  const [, navigate] = useLocation();
+  const { start: startTutorial } = useTutorial();
+  const [dismissed, setDismissed] = useState(() =>
+    localStorage.getItem("atlasbridge_getting_started_dismissed") === "true",
+  );
+
+  if (dismissed) return null;
+
+  return (
+    <Card className="border-primary/20 bg-gradient-to-r from-primary/5 via-transparent to-primary/5">
+      <CardContent className="p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-4">
+            <div className="p-2.5 rounded-xl bg-primary/10 shrink-0">
+              <Sparkles className="w-5 h-5 text-primary" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-sm font-semibold">Welcome to AtlasBridge</h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                New here? Run the setup wizard to configure your AI tools, or take the guided tour to learn how everything works.
+              </p>
+              <div className="flex items-center gap-2 pt-2 flex-wrap">
+                <Button size="sm" onClick={() => navigate("/onboarding")} className="gap-1.5 h-8">
+                  <RotateCcw className="w-3.5 h-3.5" /> Setup Wizard
+                </Button>
+                <Button size="sm" variant="outline" onClick={startTutorial} className="gap-1.5 h-8">
+                  <Sparkles className="w-3.5 h-3.5" /> Take the Tour
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => navigate("/docs")} className="gap-1.5 h-8 text-muted-foreground">
+                  <BookOpen className="w-3.5 h-3.5" /> Docs
+                </Button>
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              setDismissed(true);
+              localStorage.setItem("atlasbridge_getting_started_dismissed", "true");
+            }}
+            className="text-muted-foreground hover:text-foreground shrink-0 p-1"
+            aria-label="Dismiss getting started banner"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 type PanelId = "sessions" | "safety" | "policy" | "risk" | "operations" | "integrity" | null;
 
 function StatCard3D({ title, value, subtitle, icon: Icon, variant, onClick, active, children }: {
@@ -128,28 +181,33 @@ function StatCard3D({ title, value, subtitle, icon: Icon, variant, onClick, acti
 
 function ActiveSessionsPanel({ data }: { data: OverviewData }) {
   const running = data.activeSessions;
-  const total = 8;
   return (
     <Card className="animate-in slide-in-from-top-2 duration-300">
       <CardHeader className="pb-3">
         <CardTitle className="text-sm font-medium flex items-center gap-2"><MonitorDot className="w-4 h-4 text-primary" />Active Sessions Detail</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex items-center gap-4">
-          <AnimatedRing value={running} max={total} size={72} stroke={6} label={`${running}/${total}`} color="hsl(186, 70%, 32%)" />
+        <div className="flex items-center gap-3">
+          {running > 0 ? (
+            <CheckCircle className="w-8 h-8 text-emerald-600 dark:text-emerald-400" />
+          ) : (
+            <XCircle className="w-8 h-8 text-muted-foreground" />
+          )}
           <div>
-            <p className="text-sm font-medium">{running} of {total} sessions active</p>
-            <p className="text-xs text-muted-foreground mt-0.5">{total - running} stopped or paused</p>
+            <p className="text-sm font-medium">{running} active session{running !== 1 ? "s" : ""}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {running > 0 ? "Autopilot is running" : "No autopilot sessions running"}
+            </p>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div className="p-2.5 rounded-md bg-muted/50">
-            <p className="text-[10px] text-muted-foreground">Avg Duration</p>
-            <p className="text-sm font-medium mt-0.5">4.2h</p>
+            <p className="text-[10px] text-muted-foreground">Prompts Processed</p>
+            <p className="text-sm font-medium mt-0.5">{data.operational.throughput}</p>
           </div>
           <div className="p-2.5 rounded-md bg-muted/50">
-            <p className="text-[10px] text-muted-foreground">Tools Active</p>
-            <p className="text-sm font-medium mt-0.5">6 tools</p>
+            <p className="text-[10px] text-muted-foreground">High-Risk Events</p>
+            <p className="text-sm font-medium mt-0.5">{data.highRiskEvents}</p>
           </div>
         </div>
         {data.insights.filter(i => i.category === "operations").map(i => <InsightCard key={i.id} insight={i} />)}
@@ -176,10 +234,8 @@ function AISafetyPanel({ data }: { data: OverviewData }) {
           </div>
         </div>
         <div className="grid grid-cols-2 gap-2.5">
-          <SafetyMetricItem icon={Shield} label="Injections Blocked" value={String(s.promptInjectionBlocked)} cls="bg-red-500/10 text-red-600 dark:text-red-400" />
-          <SafetyMetricItem icon={Eye} label="Hallucination Rate" value={`${s.hallucinationRate}%`} cls="bg-amber-500/10 text-amber-600 dark:text-amber-400" />
-          <SafetyMetricItem icon={Target} label="Bias Detections" value={String(s.biasDetections)} cls="bg-purple-500/10 text-purple-600 dark:text-purple-400" />
           <SafetyMetricItem icon={Cpu} label="Human Overrides" value={`${s.humanOverrideRate}%`} cls="bg-blue-500/10 text-blue-600 dark:text-blue-400" />
+          <SafetyMetricItem icon={Shield} label="Safety Escalations" value={String(s.safetyOverrides)} cls="bg-red-500/10 text-red-600 dark:text-red-400" />
         </div>
         {data.insights.filter(i => i.category === "safety").map(i => <InsightCard key={i.id} insight={i} />)}
       </CardContent>
@@ -188,49 +244,42 @@ function AISafetyPanel({ data }: { data: OverviewData }) {
 }
 
 function PolicyPanel({ data }: { data: OverviewData }) {
-  const c = data.policyAdherence;
-  const scoreColor = c.overallScore >= 90 ? "hsl(152, 69%, 31%)" : c.overallScore >= 70 ? "hsl(38, 92%, 50%)" : "hsl(0, 84%, 60%)";
+  const hasPolicy = data.autonomyMode !== "Off";
+  const hasDecisions = data.operational.throughput > 0;
   return (
     <Card className="animate-in slide-in-from-top-2 duration-300">
       <CardHeader className="pb-3">
-        <CardTitle className="text-sm font-medium flex items-center gap-2"><Shield className="w-4 h-4 text-primary" />Policy Adherence</CardTitle>
+        <CardTitle className="text-sm font-medium flex items-center gap-2"><Shield className="w-4 h-4 text-primary" />Policy Status</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex items-center gap-5">
-          <AnimatedRing value={c.overallScore} max={100} size={80} stroke={6} label={`${c.overallScore}%`} color={scoreColor} />
-          <div className="space-y-1">
-            <p className="text-sm font-medium">Overall Score</p>
-            <p className="text-xs text-muted-foreground">Policy adherence: {c.policyAdherence}%</p>
-            <p className="text-xs text-muted-foreground">Next review: {c.nextReviewDays} days</p>
+        <div className="flex items-center gap-3">
+          {hasPolicy ? (
+            <CheckCircle className="w-8 h-8 text-emerald-600 dark:text-emerald-400" />
+          ) : (
+            <AlertTriangle className="w-8 h-8 text-amber-600 dark:text-amber-400" />
+          )}
+          <div>
+            <p className="text-sm font-medium">{hasPolicy ? "Policy Active" : "No Policy Active"}</p>
+            <p className="text-xs text-muted-foreground">
+              Mode: {data.autonomyMode}
+            </p>
           </div>
-        </div>
-        <div className="space-y-2.5">
-          <p className="text-xs font-medium text-muted-foreground">Category Scores</p>
-          {c.categoryScores.map(fw => {
-            const pct = (fw.score / fw.maxScore) * 100;
-            return (
-              <div key={fw.category} data-testid={`policy-${fw.category.toLowerCase()}`}>
-                <div className="flex items-center justify-between gap-2 mb-1">
-                  <span className="text-xs font-medium">{fw.category}</span>
-                  <span className="text-xs text-muted-foreground">{fw.score}/{fw.maxScore}</span>
-                </div>
-                <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                  <div className={`h-full rounded-full transition-all duration-1000 ${pct >= 90 ? "bg-emerald-500" : pct >= 70 ? "bg-amber-500" : "bg-red-500"}`} style={{ width: `${pct}%` }} />
-                </div>
-              </div>
-            );
-          })}
         </div>
         <div className="grid grid-cols-2 gap-2.5">
           <div className="p-2.5 rounded-md bg-muted/50">
-            <p className="text-[10px] text-muted-foreground">Open Findings</p>
-            <p className="text-sm font-semibold text-amber-600 dark:text-amber-400">{c.openFindings}</p>
+            <p className="text-[10px] text-muted-foreground">Prompts Processed</p>
+            <p className="text-sm font-semibold">{data.operational.throughput}</p>
           </div>
           <div className="p-2.5 rounded-md bg-muted/50">
-            <p className="text-[10px] text-muted-foreground">Resolved (30d)</p>
-            <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">{c.resolvedLast30d}</p>
+            <p className="text-[10px] text-muted-foreground">Escalations</p>
+            <p className="text-sm font-semibold text-amber-600 dark:text-amber-400">{data.aiSafety.safetyOverrides}</p>
           </div>
         </div>
+        {!hasDecisions && (
+          <p className="text-xs text-muted-foreground text-center py-2">
+            No autopilot decisions yet. Run an autopilot session to see policy metrics.
+          </p>
+        )}
         {data.insights.filter(i => i.category === "policy").map(i => <InsightCard key={i.id} insight={i} />)}
       </CardContent>
     </Card>
@@ -284,32 +333,36 @@ function RiskPanel({ data }: { data: OverviewData }) {
 }
 
 function OperationsPanel({ data }: { data: OverviewData }) {
-  const o = data.operational;
   return (
     <Card className="animate-in slide-in-from-top-2 duration-300">
       <CardHeader className="pb-3">
         <CardTitle className="text-sm font-medium flex items-center gap-2"><Gauge className="w-4 h-4 text-primary" />Operational Health</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex items-center gap-5">
-          <AnimatedRing value={o.uptime} max={100} size={72} stroke={6} label={`${o.uptime}%`} color="hsl(152, 69%, 31%)" />
+        <div className="flex items-center gap-3">
+          <CheckCircle className="w-8 h-8 text-emerald-600 dark:text-emerald-400" />
           <div>
-            <p className="text-sm font-medium">System Uptime</p>
-            <p className="text-xs text-muted-foreground">Error rate: {o.errorRate}%</p>
+            <p className="text-sm font-medium">System Running</p>
+            <p className="text-xs text-muted-foreground">Dashboard and runtime operational</p>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-2.5">
-          {[
-            ["Avg Response", `${o.avgResponseTime}ms`],
-            ["P95 Latency", `${o.p95Latency}ms`],
-            ["Throughput", `${o.throughput}/hr`],
-            ["Integrations", String(o.activeIntegrations)],
-          ].map(([label, val]) => (
-            <div key={String(label)} className="p-2.5 rounded-md bg-muted/50">
-              <p className="text-[10px] text-muted-foreground">{String(label)}</p>
-              <p className="text-sm font-semibold">{String(val)}</p>
-            </div>
-          ))}
+          <div className="p-2.5 rounded-md bg-muted/50">
+            <p className="text-[10px] text-muted-foreground">Prompts Processed</p>
+            <p className="text-sm font-semibold">{data.operational.throughput}</p>
+          </div>
+          <div className="p-2.5 rounded-md bg-muted/50">
+            <p className="text-[10px] text-muted-foreground">Active Sessions</p>
+            <p className="text-sm font-semibold">{data.activeSessions}</p>
+          </div>
+          <div className="p-2.5 rounded-md bg-muted/50">
+            <p className="text-[10px] text-muted-foreground">Escalation Rate</p>
+            <p className="text-sm font-semibold">{data.escalationRate}%</p>
+          </div>
+          <div className="p-2.5 rounded-md bg-muted/50">
+            <p className="text-[10px] text-muted-foreground">Integrity</p>
+            <p className="text-sm font-semibold">{data.integrityStatus}</p>
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -327,15 +380,14 @@ function IntegrityPanel({ data }: { data: OverviewData }) {
           {data.integrityStatus === "Verified" ? <CheckCircle className="w-8 h-8 text-emerald-600 dark:text-emerald-400" /> : data.integrityStatus === "Warning" ? <AlertTriangle className="w-8 h-8 text-amber-600 dark:text-amber-400" /> : <XCircle className="w-8 h-8 text-red-600 dark:text-red-400" />}
           <div>
             <p className="text-sm font-medium">{data.integrityStatus}</p>
-            <p className="text-xs text-muted-foreground">All components hash-verified</p>
+            <p className="text-xs text-muted-foreground">
+              {data.integrityStatus === "Verified" ? "Hash-chain verification passed" : data.integrityStatus === "Warning" ? "Some components need attention" : "Integrity check failed"}
+            </p>
           </div>
         </div>
-        <div className="text-xs text-muted-foreground space-y-1.5">
-          <div className="flex justify-between"><span>Policy Engine</span><Badge variant="secondary" className="text-[9px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">Verified</Badge></div>
-          <div className="flex justify-between"><span>Decision Trace Store</span><Badge variant="secondary" className="text-[9px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">Verified</Badge></div>
-          <div className="flex justify-between"><span>Prompt Resolver</span><Badge variant="secondary" className="text-[9px] bg-amber-500/10 text-amber-700 dark:text-amber-300">Warning</Badge></div>
-          <div className="flex justify-between"><span>Audit Logger</span><Badge variant="secondary" className="text-[9px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">Verified</Badge></div>
-        </div>
+        <p className="text-xs text-muted-foreground">
+          AtlasBridge uses hash-chained audit logs and decision traces to ensure tamper-proof records. Visit the <Link href="/integrity" className="text-primary underline">Integrity page</Link> for full verification details.
+        </p>
       </CardContent>
     </Card>
   );
@@ -370,12 +422,14 @@ export default function OverviewPage() {
         <p className="text-sm text-muted-foreground mt-1">System status, AI safety, and policy adherence</p>
       </div>
 
+      <GettingStartedBanner />
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        <StatCard3D title="Active Sessions" value={data.activeSessions} subtitle={`${8 - data.activeSessions} idle`} icon={MonitorDot} onClick={() => toggle("sessions")} active={activePanel === "sessions"} />
+        <StatCard3D title="Active Sessions" value={data.activeSessions} subtitle={data.activeSessions > 0 ? "Autopilot running" : "No sessions running"} icon={MonitorDot} onClick={() => toggle("sessions")} active={activePanel === "sessions"} />
         <StatCard3D title="AI Safety Score" value={`${data.aiSafety.modelTrustScore}%`} icon={Brain} variant="bg-purple-500/10 text-purple-600 dark:text-purple-400" onClick={() => toggle("safety")} active={activePanel === "safety"}>
           <TrendIndicator trend={data.aiSafety.trend} />
         </StatCard3D>
-        <StatCard3D title="Policy Score" value={`${data.policyAdherence.overallScore}%`} subtitle={`${data.policyAdherence.openFindings} open findings`} icon={Shield} variant="bg-blue-500/10 text-blue-600 dark:text-blue-400" onClick={() => toggle("policy")} active={activePanel === "policy"} />
+        <StatCard3D title="Policy Status" value={data.autonomyMode} subtitle={`${data.operational.throughput} prompts processed`} icon={Shield} variant="bg-blue-500/10 text-blue-600 dark:text-blue-400" onClick={() => toggle("policy")} active={activePanel === "policy"} />
         <StatCard3D
           title="High-Risk Events"
           value={data.highRiskEvents}
@@ -385,7 +439,7 @@ export default function OverviewPage() {
           onClick={() => toggle("risk")}
           active={activePanel === "risk"}
         />
-        <StatCard3D title="System Health" value={`${data.operational.uptime}%`} subtitle={`${data.operational.avgResponseTime}ms avg`} icon={Gauge} variant="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" onClick={() => toggle("operations")} active={activePanel === "operations"} />
+        <StatCard3D title="System Health" value="Running" subtitle={`${data.operational.throughput} prompts`} icon={Gauge} variant="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" onClick={() => toggle("operations")} active={activePanel === "operations"} />
         <StatCard3D title="Integrity Status" value={data.integrityStatus} icon={ShieldCheck} variant={integrityColor(data.integrityStatus)} onClick={() => toggle("integrity")} active={activePanel === "integrity"} />
       </div>
 
@@ -491,20 +545,6 @@ export default function OverviewPage() {
           <CardContent className="space-y-3">
             <div className="flex items-center justify-between p-2.5 rounded-md bg-muted/50">
               <div className="flex items-center gap-2">
-                <Brain className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
-                <span className="text-xs">Avg Confidence</span>
-              </div>
-              <span className="text-sm font-semibold">{(data.aiSafety.avgConfidence * 100).toFixed(0)}%</span>
-            </div>
-            <div className="flex items-center justify-between p-2.5 rounded-md bg-muted/50">
-              <div className="flex items-center gap-2">
-                <Shield className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                <span className="text-xs">Policy Adherence</span>
-              </div>
-              <span className="text-sm font-semibold">{data.policyAdherence.policyAdherence}%</span>
-            </div>
-            <div className="flex items-center justify-between p-2.5 rounded-md bg-muted/50">
-              <div className="flex items-center gap-2">
                 <Cpu className="w-3.5 h-3.5 text-primary" />
                 <span className="text-xs">Autonomy Mode</span>
               </div>
@@ -512,17 +552,31 @@ export default function OverviewPage() {
             </div>
             <div className="flex items-center justify-between p-2.5 rounded-md bg-muted/50">
               <div className="flex items-center gap-2">
-                <Clock className="w-3.5 h-3.5 text-muted-foreground" />
-                <span className="text-xs">Last Event</span>
+                <Brain className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+                <span className="text-xs">Avg Confidence</span>
               </div>
-              <span className="text-[10px] text-muted-foreground">{timeAgo(data.lastEventTimestamp)}</span>
+              <span className="text-sm font-semibold">{(data.aiSafety.avgConfidence * 100).toFixed(0)}%</span>
+            </div>
+            <div className="flex items-center justify-between p-2.5 rounded-md bg-muted/50">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                <span className="text-xs">Escalation Rate</span>
+              </div>
+              <span className="text-sm font-semibold">{data.escalationRate}%</span>
             </div>
             <div className="flex items-center justify-between p-2.5 rounded-md bg-muted/50">
               <div className="flex items-center gap-2">
                 <Zap className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-                <span className="text-xs">Throughput</span>
+                <span className="text-xs">Prompts Processed</span>
               </div>
-              <span className="text-sm font-semibold">{data.operational.throughput}/hr</span>
+              <span className="text-sm font-semibold">{data.operational.throughput}</span>
+            </div>
+            <div className="flex items-center justify-between p-2.5 rounded-md bg-muted/50">
+              <div className="flex items-center gap-2">
+                <Clock className="w-3.5 h-3.5 text-muted-foreground" />
+                <span className="text-xs">Last Event</span>
+              </div>
+              <span className="text-[10px] text-muted-foreground">{timeAgo(data.lastEventTimestamp)}</span>
             </div>
             <Link href="/evidence">
               <div className="flex items-center justify-between p-2.5 rounded-md bg-primary/5 border border-primary/10 cursor-pointer hover:bg-primary/10 transition-colors" data-testid="link-governance-evidence">

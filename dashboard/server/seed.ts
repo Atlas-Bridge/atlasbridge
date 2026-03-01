@@ -82,8 +82,8 @@ export async function seedDatabase() {
   ]);
 
   await db.insert(notifications).values([
-    { externalId: "notif-001", channel: "slack", name: "Ops Alerts Channel", enabled: true, destination: "#atlasbridge-ops-alerts", events: (["escalation.created", "session.critical", "integrity.warning"]), minSeverity: "high", lastDelivered: m(5) },
-    { externalId: "notif-002", channel: "slack", name: "Security Channel", enabled: true, destination: "#security-incidents", events: (["escalation.critical", "integrity.failed", "policy.violation"]), minSeverity: "critical", lastDelivered: h(1) },
+    { externalId: "notif-001", channel: "email", name: "Ops Alerts", enabled: true, destination: "ops-team@atlasbridge.local", events: (["escalation.created", "session.critical", "integrity.warning"]), minSeverity: "high", lastDelivered: m(5) },
+    { externalId: "notif-002", channel: "webhook", name: "Security Webhook", enabled: true, destination: "https://security.atlasbridge.local/api/alerts", events: (["escalation.critical", "integrity.failed", "policy.violation"]), minSeverity: "critical", lastDelivered: h(1) },
     { externalId: "notif-003", channel: "email", name: "Admin Digest", enabled: true, destination: "admin-team@atlasbridge.local", events: (["daily.summary", "user.created", "role.changed"]), minSeverity: "info", lastDelivered: h(6) },
     { externalId: "notif-004", channel: "pagerduty", name: "On-Call Escalation", enabled: true, destination: "service-key: [REDACTED]", events: (["escalation.critical", "session.unresponsive"]), minSeverity: "critical", lastDelivered: d(3) },
     { externalId: "notif-005", channel: "webhook", name: "SIEM Integration", enabled: true, destination: "https://siem.atlasbridge.local/api/ingest", events: (["*"]), minSeverity: "low", lastDelivered: m(1) },

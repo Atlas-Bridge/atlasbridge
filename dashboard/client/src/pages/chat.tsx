@@ -1,27 +1,23 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState, useEffect, useRef } from "react";
-import { useSearch } from "wouter";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Link } from "wouter";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { Session, TranscriptChunk } from "@shared/schema";
-import { Bot, Clock, MessageSquare, Send, User, Terminal } from "lucide-react";
+import type { Session, AgentTurn } from "@shared/schema";
+import { Bot, Send, Loader2, Play, Settings, KeyRound, User } from "lucide-react";
 
-interface PendingPrompt {
-  id: string;
-  excerpt: string;
-  prompt_type: string;
-  confidence: string;
-  created_at: string;
-  session_id: string;
+interface ProviderInfo {
+  provider: string;
+  status: string;
+  key_prefix: string | null;
 }
-
-const SESSIONS_QUERY_KEY = ["/api/sessions"];
 
 function ago(d: string): string {
   const diff = Date.now() - new Date(d).getTime();
@@ -30,360 +26,352 @@ function ago(d: string): string {
   return `${Math.floor(diff / 3600000)}h ago`;
 }
 
-function chunkStyle(role: string): string {
-  switch (role) {
-    case "user":
-      return "bg-blue-500/5 border-l-2 border-blue-500/30";
-    case "operator":
-      return "bg-amber-500/5 border-l-2 border-amber-500/30";
-    default:
-      return "bg-muted/30";
-  }
-}
-
-function chunkIcon(role: string) {
-  switch (role) {
-    case "user":
-      return <User className="w-3 h-3 text-blue-500" />;
-    case "operator":
-      return <MessageSquare className="w-3 h-3 text-amber-500" />;
-    default:
-      return <Bot className="w-3 h-3 text-muted-foreground" />;
-  }
-}
-
-function chunkLabel(role: string): string {
-  switch (role) {
-    case "user":
-      return "Reply";
-    case "operator":
-      return "Operator";
-    default:
-      return "Agent";
-  }
-}
+const PROVIDER_LABELS: Record<string, string> = {
+  anthropic: "Anthropic (Claude)",
+  openai: "OpenAI (GPT)",
+  google: "Google (Gemini)",
+};
 
 export default function ChatPage() {
   const { toast } = useToast();
-  const searchString = useSearch();
   const [selectedSession, setSelectedSession] = useState<string>("");
-  const [replyValues, setReplyValues] = useState<Record<string, string>>({});
-  const [messageText, setMessageText] = useState("");
-  const [transcriptChunks, setTranscriptChunks] = useState<TranscriptChunk[]>([]);
-  const [lastSeq, setLastSeq] = useState(0);
-  const transcriptEndRef = useRef<HTMLDivElement>(null);
+  const [message, setMessage] = useState("");
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  const { data: sessions, isLoading: sessionsLoading } = useQuery<Session[]>({
-    queryKey: SESSIONS_QUERY_KEY,
+  // Check configured providers
+  const { data: providers, isLoading: providersLoading } = useQuery<ProviderInfo[]>({
+    queryKey: ["/api/providers"],
+    refetchInterval: 30_000,
+  });
+
+  const configuredProviders = (providers ?? []).filter(
+    (p) => p.status === "validated" || p.status === "configured",
+  );
+
+  // Fetch agent sessions
+  const { data: sessions } = useQuery<Session[]>({
+    queryKey: ["/api/sessions"],
     refetchInterval: 5_000,
   });
 
-  const activeSessions = (sessions ?? []).filter((s) => s.status === "running");
+  const agentSessions = (sessions ?? []).filter((s) => s.tool?.startsWith("agent"));
+  const activeAgentSessions = agentSessions.filter((s) => s.status === "running");
 
-  // Auto-select session from URL param (e.g. /chat?sessionId=abc123)
+  // Auto-select most recent active agent session
   useEffect(() => {
-    const params = new URLSearchParams(searchString);
-    const sid = params.get("sessionId");
-    if (sid && !selectedSession && activeSessions.length > 0) {
-      const match = activeSessions.find((s) => s.id === sid || s.id.startsWith(sid));
-      if (match) setSelectedSession(match.id);
+    if (!selectedSession && activeAgentSessions.length > 0) {
+      setSelectedSession(activeAgentSessions[0].id);
     }
-  }, [searchString, activeSessions, selectedSession]);
+  }, [activeAgentSessions, selectedSession]);
 
-  // Reset transcript when session changes
-  useEffect(() => {
-    setTranscriptChunks([]);
-    setLastSeq(0);
-    setMessageText("");
-  }, [selectedSession]);
-
-  // Poll for new transcript chunks
-  const { data: newChunks } = useQuery<TranscriptChunk[]>({
-    queryKey: ["/api/sessions", selectedSession, "transcript", lastSeq],
-    queryFn: () =>
-      apiRequest(
-        "GET",
-        `/api/sessions/${encodeURIComponent(selectedSession)}/transcript?after_seq=${lastSeq}`,
-      ).then((r) => r.json()),
+  // Fetch conversation turns for selected session
+  const { data: turns } = useQuery<AgentTurn[]>({
+    queryKey: [`/api/agent/sessions/${selectedSession}/turns`],
+    refetchInterval: 2_000,
     enabled: Boolean(selectedSession),
-    refetchInterval: 2_500,
   });
 
+  // Auto-scroll on new turns
   useEffect(() => {
-    if (newChunks && newChunks.length > 0) {
-      setTranscriptChunks((prev) => [...prev, ...newChunks]);
-      setLastSeq(newChunks[newChunks.length - 1].seq);
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [newChunks]);
+  }, [turns?.length]);
 
-  // Auto-scroll transcript
-  useEffect(() => {
-    transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [transcriptChunks]);
-
-  const promptsQueryKey = ["/api/chat/prompts", selectedSession];
-  const { data: prompts, isLoading: promptsLoading } = useQuery<PendingPrompt[]>({
-    queryKey: promptsQueryKey,
-    queryFn: () =>
-      apiRequest("GET", `/api/chat/prompts?session_id=${encodeURIComponent(selectedSession)}`)
-        .then((r) => r.json()),
-    enabled: Boolean(selectedSession),
-    refetchInterval: 3_000,
-  });
-
-  const replyMutation = useMutation({
-    mutationFn: (vars: { prompt_id: string; value: string }) =>
-      apiRequest("POST", "/api/chat/reply", {
-        session_id: selectedSession,
-        prompt_id: vars.prompt_id,
-        value: vars.value,
-      }),
-    onSuccess: (_data, vars) => {
-      toast({ title: "Reply sent" });
-      setReplyValues((p) => { const n = { ...p }; delete n[vars.prompt_id]; return n; });
-      queryClient.invalidateQueries({ queryKey: promptsQueryKey });
+  // Start a new agent session
+  const startMutation = useMutation({
+    mutationFn: async (provider: string) => {
+      const resp = await apiRequest("POST", "/api/agent/start", { provider });
+      const ct = resp.headers.get("content-type") || "";
+      if (!ct.includes("application/json")) {
+        throw new Error("Server returned unexpected response.");
+      }
+      const data = await resp.json();
+      if (!data.session_id) {
+        throw new Error(data.error || "Failed to start agent session.");
+      }
+      return data as { ok: boolean; session_id: string };
     },
-    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onSuccess: (data) => {
+      setSelectedSession(data.session_id);
+      queryClient.invalidateQueries({ queryKey: ["/api/sessions"] });
+    },
+    onError: (e: Error) =>
+      toast({ title: "Failed to start chat", description: e.message, variant: "destructive" }),
   });
 
-  const messageMutation = useMutation({
+  // Send a message
+  const sendMutation = useMutation({
     mutationFn: (text: string) =>
-      apiRequest("POST", `/api/sessions/${encodeURIComponent(selectedSession)}/message`, { text }),
-    onSuccess: (_data, text) => {
-      // Optimistic: immediately show the operator message in the transcript
-      const optimisticChunk: TranscriptChunk = {
-        id: Date.now(),
-        seq: lastSeq + 0.5, // fractional seq so it sorts before next real chunk
-        session_id: selectedSession,
-        role: "operator",
-        content: text,
-        created_at: new Date().toISOString(),
-        prompt_id: null,
-      };
-      setTranscriptChunks((prev) => [...prev, optimisticChunk]);
-      toast({ title: "Message sent" });
-      setMessageText("");
+      apiRequest("POST", `/api/agent/sessions/${selectedSession}/message`, { text }),
+    onSuccess: () => {
+      setMessage("");
+      queryClient.invalidateQueries({ queryKey: [`/api/agent/sessions/${selectedSession}/turns`] });
     },
-    onError: (e: Error) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onError: (e: Error) =>
+      toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
-  const handleReply = (promptId: string) => {
-    const value = replyValues[promptId]?.trim();
-    if (!value) return;
-    replyMutation.mutate({ prompt_id: promptId, value });
+  const handleSend = () => {
+    const text = message.trim();
+    if (!text || !selectedSession) return;
+    sendMutation.mutate(text);
   };
 
-  const handleSendMessage = () => {
-    const text = messageText.trim();
-    if (!text) return;
-    messageMutation.mutate(text);
+  const handleStartChat = (provider: string) => {
+    if (startMutation.isPending) return;
+    startMutation.mutate(provider);
   };
 
-  const confidenceBadgeCls = (conf: string) => {
-    switch (conf.toLowerCase()) {
-      case "high": return "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
-      case "medium": return "bg-amber-500/10 text-amber-700 dark:text-amber-300";
-      default: return "bg-red-500/10 text-red-700 dark:text-red-300";
-    }
-  };
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight flex items-center gap-2">
-          <Bot className="w-5 h-5 text-muted-foreground" />
-          Chat
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Live session transcript and prompt relay.
-        </p>
+  // Loading state
+  if (providersLoading) {
+    return (
+      <div className="space-y-6">
+        <ChatHeader />
+        <Skeleton className="h-[400px] w-full" />
       </div>
+    );
+  }
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-medium">Active session</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {sessionsLoading ? (
-            <Skeleton className="h-9 w-full" />
-          ) : activeSessions.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No active sessions. Start one with{" "}
-              <code className="text-xs bg-muted px-1.5 py-0.5 rounded">atlasbridge run claude</code>
-              {" "}or from the Sessions page.
-            </p>
-          ) : (
+  // No providers configured — show setup prompt
+  if (configuredProviders.length === 0) {
+    return (
+      <div className="space-y-6">
+        <ChatHeader />
+        <Card>
+          <CardContent className="py-12">
+            <div className="text-center space-y-4 max-w-md mx-auto">
+              <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mx-auto">
+                <KeyRound className="w-6 h-6 text-muted-foreground" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold">Configure an AI provider</h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  To chat with an AI agent, add an API key for at least one provider.
+                </p>
+              </div>
+              <div className="space-y-2 text-left">
+                {["anthropic", "openai", "google"].map((p) => (
+                  <div
+                    key={p}
+                    className="flex items-center justify-between border rounded-lg px-4 py-3"
+                  >
+                    <div>
+                      <span className="text-sm font-medium">{PROVIDER_LABELS[p]}</span>
+                      <p className="text-xs text-muted-foreground">Not configured</p>
+                    </div>
+                    <Badge variant="outline" className="text-[10px]">
+                      missing
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+              <Link href="/settings">
+                <Button className="mt-2" data-testid="button-configure-providers">
+                  <Settings className="w-4 h-4 mr-2" />
+                  Go to Settings
+                </Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Providers configured but no active session — offer to start one
+  if (!selectedSession) {
+    return (
+      <div className="space-y-6">
+        <ChatHeader />
+        <Card>
+          <CardContent className="py-12">
+            <div className="text-center space-y-4 max-w-md mx-auto">
+              <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mx-auto">
+                <Bot className="w-6 h-6 text-muted-foreground" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold">Start a conversation</h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Choose an AI provider to begin chatting.
+                </p>
+              </div>
+              <div className="space-y-2">
+                {configuredProviders.map((p) => (
+                  <Button
+                    key={p.provider}
+                    variant="outline"
+                    className="w-full justify-between h-auto py-3"
+                    onClick={() => handleStartChat(p.provider)}
+                    disabled={startMutation.isPending}
+                    data-testid={`button-start-${p.provider}`}
+                  >
+                    <div className="text-left">
+                      <span className="text-sm font-medium">
+                        {PROVIDER_LABELS[p.provider] || p.provider}
+                      </span>
+                      {p.key_prefix && (
+                        <p className="text-xs text-muted-foreground font-mono mt-0.5">
+                          {p.key_prefix}...
+                        </p>
+                      )}
+                    </div>
+                    {startMutation.isPending ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Play className="w-4 h-4" />
+                    )}
+                  </Button>
+                ))}
+              </div>
+              {agentSessions.length > 0 && (
+                <div className="pt-2">
+                  <p className="text-xs text-muted-foreground mb-2">Or resume an existing session:</p>
+                  <Select value="" onValueChange={setSelectedSession}>
+                    <SelectTrigger data-testid="select-resume-session">
+                      <SelectValue placeholder="Select a session..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {agentSessions.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          <span className="font-mono text-xs">{s.id.slice(0, 8)}</span>
+                          <span className="ml-2 text-muted-foreground">{s.status}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Active chat session
+  return (
+    <div className="space-y-4" data-testid="chat-page">
+      <div className="flex items-center justify-between gap-4">
+        <ChatHeader />
+        <div className="flex items-center gap-2">
+          {activeAgentSessions.length > 1 && (
             <Select value={selectedSession} onValueChange={setSelectedSession}>
-              <SelectTrigger data-testid="select-chat-session">
-                <SelectValue placeholder="Select a session…" />
+              <SelectTrigger className="w-[180px] h-8 text-xs" data-testid="select-chat-session">
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {activeSessions.map((s) => (
+                {activeAgentSessions.map((s) => (
                   <SelectItem key={s.id} value={s.id}>
-                    <span className="font-mono text-xs">{s.id.slice(0, 8)}</span>
-                    <span className="ml-2 text-muted-foreground">{s.tool}</span>
+                    <span className="font-mono">{s.id.slice(0, 8)}</span>
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           )}
-        </CardContent>
-      </Card>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs gap-1"
+            onClick={() => setSelectedSession("")}
+            data-testid="button-new-chat"
+          >
+            New Chat
+          </Button>
+        </div>
+      </div>
 
-      {selectedSession && (
-        <>
-          {/* Live Transcript */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <Terminal className="w-4 h-4" />
-                Live Transcript
-                {transcriptChunks.length > 0 && (
-                  <Badge variant="secondary" className="text-[10px] ml-auto">
-                    {transcriptChunks.length} chunks
-                  </Badge>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div
-                className="max-h-[400px] overflow-y-auto"
-                data-testid="transcript-container"
-              >
-                {transcriptChunks.length === 0 ? (
-                  <div className="p-6 text-center text-sm text-muted-foreground">
-                    Waiting for session output...
-                  </div>
-                ) : (
-                  <div className="divide-y">
-                    {transcriptChunks.map((chunk) => (
-                      <div
-                        key={chunk.seq}
-                        className={`px-4 py-2 ${chunkStyle(chunk.role)}`}
-                      >
-                        <div className="flex items-center gap-1.5 mb-1">
-                          {chunkIcon(chunk.role)}
-                          <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                            {chunkLabel(chunk.role)}
-                          </span>
-                          <span className="text-[10px] text-muted-foreground ml-auto">
-                            {ago(chunk.created_at)}
-                          </span>
-                        </div>
-                        <pre className="text-xs font-mono whitespace-pre-wrap break-words leading-relaxed text-foreground/90">
-                          {chunk.content}
-                        </pre>
-                      </div>
-                    ))}
-                    <div ref={transcriptEndRef} />
-                  </div>
-                )}
+      <Card className="flex flex-col" style={{ minHeight: "70vh" }}>
+        <ScrollArea className="flex-1 px-4" ref={scrollRef}>
+          <div className="space-y-4 py-4" data-testid="chat-messages">
+            {(!turns || turns.length === 0) ? (
+              <div className="text-center py-16 text-sm text-muted-foreground">
+                <Bot className="w-8 h-8 mx-auto mb-3 opacity-30" />
+                Send a message to start the conversation.
               </div>
+            ) : (
+              turns.map((turn) => (
+                <ChatBubble key={turn.id} turn={turn} />
+              ))
+            )}
+          </div>
+        </ScrollArea>
 
-              {/* Operator message input */}
-              <div className="flex gap-2 p-3 border-t" data-testid="message-input-bar">
-                <Input
-                  placeholder="Send a message to the agent…"
-                  value={messageText}
-                  onChange={(e) => setMessageText(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
-                  disabled={messageMutation.isPending}
-                  data-testid="input-message"
-                  className="font-mono text-sm"
-                />
-                <Button
-                  size="sm"
-                  onClick={handleSendMessage}
-                  disabled={!messageText.trim() || messageMutation.isPending}
-                  data-testid="button-send-message"
-                >
-                  <Send className="w-3.5 h-3.5 mr-1" />
-                  {messageMutation.isPending ? "Sending…" : "Send"}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Pending Prompts */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium">Pending prompts</CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              {promptsLoading ? (
-                <div className="p-4 space-y-3">
-                  <Skeleton className="h-20 w-full" />
-                  <Skeleton className="h-20 w-full" />
-                </div>
-              ) : !prompts || prompts.length === 0 ? (
-                <div
-                  className="p-6 text-center text-sm text-muted-foreground"
-                  data-testid="text-no-prompts"
-                >
-                  No pending prompts. The agent will appear here when it needs a decision.
-                </div>
+        <div className="p-4 border-t shrink-0">
+          <div className="flex gap-2">
+            <Input
+              placeholder="Type a message..."
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
+              disabled={sendMutation.isPending}
+              data-testid="input-chat-message"
+              className="text-sm"
+            />
+            <Button
+              onClick={handleSend}
+              disabled={!message.trim() || sendMutation.isPending}
+              data-testid="button-chat-send"
+            >
+              {sendMutation.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
-                <div className="divide-y" data-testid="prompt-list">
-                  {prompts.map((prompt) => (
-                    <div
-                      key={prompt.id}
-                      className="p-4 space-y-3"
-                      data-testid={`prompt-row-${prompt.id}`}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <Badge variant="secondary" className="text-[10px] font-mono">
-                            {prompt.prompt_type}
-                          </Badge>
-                          <Badge
-                            variant="secondary"
-                            className={`text-[10px] ${confidenceBadgeCls(prompt.confidence)}`}
-                          >
-                            {prompt.confidence}
-                          </Badge>
-                          <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                            <Clock className="w-3 h-3" />
-                            {ago(prompt.created_at)}
-                          </span>
-                        </div>
-                        <code className="text-[10px] text-muted-foreground font-mono shrink-0">
-                          {prompt.id.slice(0, 8)}
-                        </code>
-                      </div>
-
-                      <pre className="text-sm font-mono bg-muted/50 rounded p-3 whitespace-pre-wrap break-words leading-relaxed">
-                        {prompt.excerpt || "(no excerpt)"}
-                      </pre>
-
-                      <div className="flex gap-2">
-                        <Input
-                          placeholder="Type your reply…"
-                          value={replyValues[prompt.id] ?? ""}
-                          onChange={(e) =>
-                            setReplyValues((p) => ({ ...p, [prompt.id]: e.target.value }))
-                          }
-                          onKeyDown={(e) => e.key === "Enter" && handleReply(prompt.id)}
-                          data-testid={`input-reply-${prompt.id}`}
-                          className="font-mono text-sm"
-                        />
-                        <Button
-                          size="sm"
-                          onClick={() => handleReply(prompt.id)}
-                          disabled={!replyValues[prompt.id]?.trim() || replyMutation.isPending}
-                          data-testid={`button-reply-${prompt.id}`}
-                        >
-                          <Send className="w-3.5 h-3.5 mr-1" />
-                          {replyMutation.isPending ? "Sending…" : "Send"}
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <Send className="w-4 h-4" />
               )}
-            </CardContent>
-          </Card>
-        </>
-      )}
+            </Button>
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function ChatHeader() {
+  return (
+    <div>
+      <h1 className="text-xl font-semibold tracking-tight flex items-center gap-2">
+        <Bot className="w-5 h-5 text-muted-foreground" />
+        Chat
+      </h1>
+      <p className="text-sm text-muted-foreground mt-1">
+        Talk to an AI agent powered by your configured provider.
+      </p>
+    </div>
+  );
+}
+
+function ChatBubble({ turn }: { turn: AgentTurn }) {
+  const isUser = turn.role === "user";
+  return (
+    <div
+      className={`flex ${isUser ? "justify-end" : "justify-start"}`}
+      data-testid={`chat-turn-${turn.id}`}
+    >
+      <div className={`max-w-[80%] space-y-1`}>
+        <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+          {isUser ? (
+            <User className="w-3 h-3" />
+          ) : (
+            <Bot className="w-3 h-3" />
+          )}
+          <span className="font-medium">{isUser ? "You" : "Agent"}</span>
+          <span>{ago(turn.created_at)}</span>
+        </div>
+        <div
+          className={`rounded-lg px-4 py-2.5 text-sm whitespace-pre-wrap break-words leading-relaxed ${
+            isUser
+              ? "bg-primary text-primary-foreground"
+              : "bg-muted/50 border"
+          }`}
+        >
+          {turn.content || (
+            <span className="flex items-center gap-2 text-muted-foreground italic">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              Thinking...
+            </span>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

@@ -28,11 +28,13 @@ app.use(
 app.use(express.urlencoded({ extended: false, limit: "32kb" }));
 app.use(setCsrfCookie);
 
-// Content-type enforcement for API mutation endpoints
+// Content-type enforcement for API mutation endpoints (skip for empty-body requests)
 app.use("/api", (req: Request, res: Response, next: NextFunction) => {
   if (["POST", "PUT", "PATCH"].includes(req.method)) {
     const ct = req.headers["content-type"] ?? "";
-    if (!ct.startsWith("application/json")) {
+    const contentLength = parseInt(req.headers["content-length"] ?? "0", 10);
+    // Allow empty-body POSTs (e.g. start/stop actions) — only enforce for requests with a body
+    if (contentLength > 0 && !ct.startsWith("application/json")) {
       res.status(415).json({ error: "Unsupported Media Type — application/json required" });
       return;
     }
@@ -77,7 +79,10 @@ app.use((req, res, next) => {
   next();
 });
 
-(async () => {
+export async function startServer(
+  overridePort?: number,
+  overrideHost?: string,
+): Promise<void> {
   // Ensure config directory exists for dashboard.db
   ensureDir(getAtlasBridgeDir());
 
@@ -111,9 +116,16 @@ app.use((req, res, next) => {
     await setupVite(httpServer, app);
   }
 
-  const host = process.env.HOST || "127.0.0.1";
-  const port = parseInt(process.env.PORT || "3737", 10);
+  const host = overrideHost || process.env.HOST || "127.0.0.1";
+  const port = overridePort || parseInt(process.env.PORT || "3737", 10);
   httpServer.listen({ port, host }, () => {
     log(`serving on http://${host}:${port}`);
   });
-})();
+}
+
+export { httpServer, app };
+
+// Auto-start when running standalone (not inside Electron)
+if (!process.env.ATLASBRIDGE_ELECTRON) {
+  startServer();
+}

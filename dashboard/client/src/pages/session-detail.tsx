@@ -1,13 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { useParams, Link } from "wouter";
-import type { SessionDetail } from "@shared/schema";
+import type { SessionDetail, MonitorMessage } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { riskBg, statusColor, decisionColor, formatTimestamp, timeAgo, sanitizeText } from "@/lib/utils";
-import { ArrowLeft, Info, ChevronDown, Code } from "lucide-react";
+import { ArrowLeft, Info, ChevronDown, Code, CheckCircle2, XCircle, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { useState } from "react";
 
 export default function SessionDetailPage() {
@@ -17,6 +18,21 @@ export default function SessionDetailPage() {
   const { data, isLoading, error } = useQuery<SessionDetail>({
     queryKey: ["/api/sessions", params.id],
   });
+
+  // Fetch monitor messages (approval/tool prompts from VS Code monitor)
+  const { data: monitorData } = useQuery<{ messages: MonitorMessage[]; total: number }>({
+    queryKey: ["/api/monitor/messages", "session-detail"],
+    queryFn: async () => {
+      const res = await fetch("/api/monitor/messages?limit=200");
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
+    refetchInterval: 5000,
+  });
+
+  const monitorPrompts = (monitorData?.messages ?? []).filter(
+    (m) => m.permission_mode || m.tool_name,
+  );
 
   if (isLoading) {
     return (
@@ -111,7 +127,9 @@ export default function SessionDetailPage() {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-medium">Prompts ({data.prompts.length})</CardTitle>
+          <CardTitle className="text-sm font-medium">
+            Prompts ({data.prompts.length > 0 ? data.prompts.length : monitorPrompts.length})
+          </CardTitle>
         </CardHeader>
         {data.prompts.length > 0 ? (
           <div className="overflow-x-auto">
@@ -148,6 +166,12 @@ export default function SessionDetailPage() {
               </tbody>
             </table>
           </div>
+        ) : monitorPrompts.length > 0 ? (
+          <CardContent className="space-y-2 pt-0">
+            {monitorPrompts.map((msg) => (
+              <MonitorPromptRow key={msg.id} msg={msg} />
+            ))}
+          </CardContent>
         ) : (
           <CardContent>
             <p className="text-sm text-muted-foreground">No prompts in this session</p>
@@ -199,4 +223,89 @@ export default function SessionDetailPage() {
       </Collapsible>
     </div>
   );
+}
+
+function MonitorPromptRow({ msg }: { msg: MonitorMessage }) {
+  const isApproval = msg.permission_mode === "approved" || msg.permission_mode === "rejected";
+  const isTool = !!msg.tool_name;
+
+  if (isApproval) {
+    const approved = msg.permission_mode === "approved";
+    return (
+      <div
+        className={cn(
+          "flex items-center gap-3 px-3 py-2.5 rounded-lg border",
+          approved
+            ? "bg-emerald-500/5 border-emerald-500/20"
+            : "bg-red-500/5 border-red-500/20",
+        )}
+        data-testid={`monitor-prompt-${msg.id}`}
+      >
+        <div
+          className={cn(
+            "w-7 h-7 rounded-full flex items-center justify-center shrink-0",
+            approved ? "bg-emerald-500/10" : "bg-red-500/10",
+          )}
+        >
+          {approved ? (
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+          ) : (
+            <XCircle className="w-3.5 h-3.5 text-red-600 dark:text-red-400" />
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <span
+            className={cn(
+              "text-xs font-medium",
+              approved
+                ? "text-emerald-700 dark:text-emerald-300"
+                : "text-red-700 dark:text-red-300",
+            )}
+          >
+            {approved ? "Approved" : "Rejected"}
+          </span>
+          {msg.tool_name && (
+            <Badge
+              variant="secondary"
+              className="text-[10px] gap-0.5 px-1.5 py-0 ml-2"
+            >
+              <Wrench className="w-2.5 h-2.5" />
+              {msg.tool_name}
+            </Badge>
+          )}
+        </div>
+        <span className="text-[11px] text-muted-foreground shrink-0">
+          {formatTimestamp(msg.captured_at)}
+        </span>
+      </div>
+    );
+  }
+
+  if (isTool) {
+    return (
+      <div
+        className="flex items-center gap-3 px-3 py-2.5 rounded-lg border bg-orange-500/5 border-orange-500/20"
+        data-testid={`monitor-prompt-${msg.id}`}
+      >
+        <div className="w-7 h-7 rounded-full bg-orange-500/10 flex items-center justify-center shrink-0">
+          <Wrench className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <span className="text-xs font-medium">Tool Request</span>
+          <Badge
+            variant="secondary"
+            className="text-[10px] gap-0.5 px-1.5 py-0 ml-2 bg-orange-500/10 text-orange-700 dark:text-orange-300"
+          >
+            <Wrench className="w-2.5 h-2.5" />
+            {msg.tool_name}
+          </Badge>
+        </div>
+        <span className="text-[11px] text-muted-foreground shrink-0">
+          {formatTimestamp(msg.captured_at)}
+        </span>
+      </div>
+    );
+  }
+
+  return null;
 }

@@ -368,7 +368,7 @@ export type MfaStatus = "enabled" | "disabled" | "enforced";
 export type ApiKeyStatus = "active" | "revoked" | "expired";
 export type SsoProvider = "saml" | "oidc" | "ldap" | "none";
 export type AuditCategory = "access_control" | "data_integrity" | "change_management" | "incident_response" | "risk_assessment" | "monitoring";
-export type NotificationChannel = "slack" | "email" | "webhook" | "pagerduty" | "opsgenie" | "teams";
+export type NotificationChannel = "email" | "webhook" | "pagerduty" | "opsgenie";
 
 export interface OrgProfile {
   id: string;
@@ -584,6 +584,17 @@ export interface MonitorSession {
   status: "active" | "ended";
   created_at: string;
   ended_at: string | null;
+  workspace_key: string | null;
+}
+
+export interface WorkspaceGroup {
+  workspace_key: string;
+  workspace_name: string;
+  sessions: MonitorSessionWithCounts[];
+  total_messages: number;
+  total_pending: number;
+  total_approvals: number;
+  last_activity: string | null;
 }
 
 export interface MonitorMessage {
@@ -595,6 +606,33 @@ export interface MonitorMessage {
   seq: number;
   captured_at: string;
   created_at: string;
+  permission_mode: string | null;
+  tool_name: string | null;
+  tool_use_id: string | null;
+}
+
+export interface MonitorSessionWithCounts extends MonitorSession {
+  message_count: number;
+  last_message_at: string | null;
+  approval_count: number;
+  pending_count: number;
+}
+
+// ---------------------------------------------------------------------------
+// Hook approval types (PreToolUse hook → dashboard approval flow)
+// ---------------------------------------------------------------------------
+
+export interface HookApproval {
+  id: string;
+  tool_name: string;
+  tool_input: string;
+  tool_use_id: string | null;
+  cwd: string | null;
+  workspace: string | null;
+  session_id: string | null;
+  status: "pending" | "allowed" | "denied";
+  created_at: string;
+  decided_at: string | null;
 }
 
 // ---------------------------------------------------------------------------

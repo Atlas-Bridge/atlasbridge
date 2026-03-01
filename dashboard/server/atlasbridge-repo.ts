@@ -49,6 +49,48 @@ let _cachedVersion: string | null = null;
 
 function getInstalledVersion(): string {
   if (_cachedVersion) return _cachedVersion;
+
+  // Strategy 1: Read __version__ directly from source (fastest, no Python needed)
+  const cwd = process.cwd();
+  const parentDir = path.dirname(cwd);
+  const initPaths = [
+    path.join(parentDir, "src", "atlasbridge", "__init__.py"),
+    path.join(cwd, "src", "atlasbridge", "__init__.py"),
+    path.join(parentDir, "src", "atlasbridge", "__init__.py"),
+  ];
+  for (const initPath of initPaths) {
+    try {
+      if (fs.existsSync(initPath)) {
+        const content = fs.readFileSync(initPath, "utf-8");
+        const match = content.match(/__version__\s*=\s*["']([^"']+)["']/);
+        if (match) {
+          _cachedVersion = match[1];
+          return _cachedVersion;
+        }
+      }
+    } catch { /* continue */ }
+  }
+
+  // Strategy 2: Try venv-aware Python (handles editable installs)
+  const venvCandidates = [
+    path.join(parentDir, ".venv", "bin", "python"),
+    path.join(parentDir, "venv", "bin", "python"),
+    path.join(cwd, ".venv", "bin", "python"),
+    path.join(cwd, "venv", "bin", "python"),
+  ];
+  for (const pyBin of venvCandidates) {
+    try {
+      if (fs.existsSync(pyBin)) {
+        _cachedVersion = execSync(
+          `${pyBin} -c 'import atlasbridge; print(atlasbridge.__version__)'`,
+          { timeout: 5000, encoding: "utf-8" },
+        ).trim();
+        return _cachedVersion;
+      }
+    } catch { /* continue */ }
+  }
+
+  // Strategy 3: Bare python3 fallback
   try {
     _cachedVersion = execSync("python3 -c 'import atlasbridge; print(atlasbridge.__version__)'", {
       timeout: 5000,

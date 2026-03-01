@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { MonitorSession, MonitorMessage } from "@shared/schema";
-import { Activity, Globe, Monitor, Code2, User, Bot, X, Play, Square, Loader2, Radio, MessageSquare, Layers } from "lucide-react";
+import { Activity, Globe, Monitor, Code2, User, Bot, X, Play, Square, Loader2, Radio, MessageSquare, Layers, AlertCircle } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 const VENDOR_META: Record<string, { label: string; color: string; icon: typeof Globe }> = {
   chatgpt:          { label: "ChatGPT",         color: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300", icon: Globe },
@@ -40,19 +41,46 @@ interface DaemonStatus {
 // ---------------------------------------------------------------------------
 
 function MonitorControls() {
-  const { data: daemons, isLoading } = useQuery<Record<string, DaemonStatus>>({
+  const { toast } = useToast();
+  const { data: daemons } = useQuery<Record<string, DaemonStatus>>({
     queryKey: ["/api/monitor/daemons"],
     refetchInterval: 3_000,
   });
 
   const startMutation = useMutation({
-    mutationFn: (type: string) => apiRequest("POST", `/api/monitor/daemons/${type}/start`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/monitor/daemons"] }),
+    mutationFn: async (type: string) => {
+      const res = await apiRequest("POST", `/api/monitor/daemons/${type}/start`);
+      return res.json();
+    },
+    onSuccess: (_data, type) => {
+      toast({ title: `${type === "vscode" ? "VS Code" : "Desktop"} monitor started` });
+      queryClient.invalidateQueries({ queryKey: ["/api/monitor/daemons"] });
+    },
+    onError: (err: Error, type) => {
+      toast({
+        title: `Failed to start ${type === "vscode" ? "VS Code" : "Desktop"} monitor`,
+        description: err.message,
+        variant: "destructive",
+      });
+    },
   });
 
   const stopMutation = useMutation({
-    mutationFn: (type: string) => apiRequest("POST", `/api/monitor/daemons/${type}/stop`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/monitor/daemons"] }),
+    mutationFn: async (type: string) => {
+      const res = await apiRequest("POST", `/api/monitor/daemons/${type}/stop`);
+      return res.json();
+    },
+    onSuccess: (_data, type) => {
+      toast({ title: `${type === "vscode" ? "VS Code" : "Desktop"} monitor stopped` });
+      queryClient.invalidateQueries({ queryKey: ["/api/monitor/daemons"] });
+    },
+    onError: (err: Error, type) => {
+      toast({
+        title: `Failed to stop ${type === "vscode" ? "VS Code" : "Desktop"} monitor`,
+        description: err.message,
+        variant: "destructive",
+      });
+    },
   });
 
   const monitors = [
@@ -84,6 +112,7 @@ function MonitorControls() {
           const running = status?.running ?? false;
           const Icon = m.icon;
           const isPending = startMutation.isPending || stopMutation.isPending;
+          const hasError = status?.logs?.some(l => l.includes("error") || l.includes("exited with code"));
 
           return (
             <div
@@ -105,6 +134,9 @@ function MonitorControls() {
                       since {ago(status.startedAt)}
                     </span>
                   )}
+                  {hasError && (
+                    <AlertCircle className="w-3 h-3 text-amber-500" />
+                  )}
                 </div>
                 <p className="text-[11px] text-muted-foreground mt-0.5">{m.description}</p>
                 {status?.logs && status.logs.length > 0 && (
@@ -113,36 +145,36 @@ function MonitorControls() {
                   </pre>
                 )}
               </div>
-              {running ? (
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  onClick={() => stopMutation.mutate(m.type)}
-                  disabled={isPending}
-                  className="shrink-0"
-                >
-                  {isPending ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Square className="w-3.5 h-3.5 mr-1" />
-                  )}
-                  Stop
-                </Button>
-              ) : (
-                <Button
-                  size="sm"
-                  onClick={() => startMutation.mutate(m.type)}
-                  disabled={isPending}
-                  className="shrink-0"
-                >
-                  {isPending ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Play className="w-3.5 h-3.5 mr-1" />
-                  )}
-                  Start
-                </Button>
-              )}
+              <div className="flex gap-1 shrink-0">
+                {running ? (
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => stopMutation.mutate(m.type)}
+                    disabled={isPending}
+                  >
+                    {stopMutation.isPending ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Square className="w-3.5 h-3.5 mr-1" />
+                    )}
+                    Stop
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    onClick={() => startMutation.mutate(m.type)}
+                    disabled={isPending}
+                  >
+                    {startMutation.isPending ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Play className="w-3.5 h-3.5 mr-1" />
+                    )}
+                    Start
+                  </Button>
+                )}
+              </div>
             </div>
           );
         })}

@@ -15,7 +15,7 @@ def monitor_group() -> None:
 @monitor_group.command("desktop")
 @click.option(
     "--dashboard-url",
-    default="http://localhost:5000",
+    default="http://localhost:3737",
     help="Dashboard URL for relaying captured data.",
 )
 @click.option(
@@ -34,7 +34,7 @@ def desktop_cmd(dashboard_url: str, poll_interval: float) -> None:
 @monitor_group.command("vscode")
 @click.option(
     "--dashboard-url",
-    default="http://localhost:5000",
+    default="http://localhost:3737",
     help="Dashboard URL for relaying captured data.",
 )
 @click.option(
